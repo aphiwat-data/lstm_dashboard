@@ -1,0 +1,32 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadCanonicalArtifactsOnly",
+      "Comment": "Read-only, and only these three specific objects -- never the raw Bronze files, never silver's writer path, never the training-only Keras/.pkl artifacts this function doesn't use.",
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": [
+        "arn:aws:s3:::gold-lstm-forecast/silver/xauusd_daily_clean.parquet",
+        "arn:aws:s3:::gold-lstm-forecast/gold/xauusd_daily/features/lstm_model.tflite",
+        "arn:aws:s3:::gold-lstm-forecast/gold/xauusd_daily/features/scaler_params.json"
+      ]
+    },
+    {
+      "Sid": "ReadWriteOnlyItsOwnIsolatedOutputPaths",
+      "Comment": "The only locations this function is allowed to write to -- its own streaming log and the forecast cache. No write access to silver/, no write access to the training gold/ features parquet or model/scaler artifacts, no delete permission anywhere.",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": [
+        "arn:aws:s3:::gold-lstm-forecast/bronze/streaming/*",
+        "arn:aws:s3:::gold-lstm-forecast/gold/xauusd_daily/predictions/*"
+      ]
+    },
+    {
+      "Sid": "OwnCloudWatchLogGroupOnly",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:ap-southeast-2:*:log-group:/aws/lambda/gold-lstm-forecast-daily-refresh:*"
+    }
+  ]
+}

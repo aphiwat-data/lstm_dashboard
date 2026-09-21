@@ -1,0 +1,21 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# AWS credentials — never commit these
+.aws/
+*.pem
+credentials
+config
+
+# Local data / model artifacts pulled from S3 (source of truth is S3, not git)
+*.npy
+*.pkl
+*.keras
+*.parquet
+
+# OS / editor cruft
+.DS_Store
+.vscode/

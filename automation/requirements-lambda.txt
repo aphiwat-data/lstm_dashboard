@@ -1,0 +1,17 @@
+# Dependencies for the daily inference-refresh Lambda container image.
+# boto3 is NOT listed here — it ships preinstalled in AWS's Lambda Python
+# base images, so pinning it here would only risk it drifting out of sync
+# with what the base image actually provides.
+
+# Primary choice — small (a few MB), fast cold start, no training/autodiff
+# code the Lambda never uses.
+tflite-runtime==2.14.0
+
+# --- FALLBACK (see Dockerfile) ---------------------------------------------
+# If the line above fails to find a compatible wheel during `docker build`,
+# comment it out and uncomment this instead. lambda_function.py already
+# handles either case (see load_model_and_scalers()) — no code change needed.
+# tensorflow-cpu>=2.15,<2.17
+
+pandas>=2.0,<2.2
+numpy>=1.24,<2.0
