@@ -31,6 +31,7 @@ FEATURES   = ["close", "return", "ma7", "ma14", "ma30", "ma60", "volatility_7", 
 TARGET     = "target"
 SEQ_LEN    = 60
 SPLIT_DATE = "2024-12-31"
+RETRAIN_EVERY_DAYS = 7  # matches notebook 05's walk-forward RETRAIN_EVERY (simulated trading days)
 
 FEATURE_LABELS = {
     "return": "Daily Return",
@@ -97,6 +98,15 @@ def load_all():
     return df, feature_scaler, target_scaler, wf_pred, wf_actual, test_dates, model
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_model_last_retrained():
+    """S3 LastModified of the trained model object — a proxy for when notebook 05
+    last actually retrained (vs. just data being refreshed by 01-04)."""
+    meta = wr.s3.describe_objects(path=f"{DATA_PATH}/lstm_model.keras")
+    last_modified = list(meta.values())[0]["LastModified"]
+    return pd.Timestamp(last_modified).tz_localize(None)
+
+
 def compute_baselines(df, feature_scaler, target_scaler):
     """Recomputes Naive / AR(5) / Linear Regression exactly as notebook 06 does,
     so the dashboard never drifts from the report's own evaluation logic."""
@@ -150,6 +160,17 @@ def forecast_next_day(df, feature_scaler, target_scaler, model):
     return float(target_scaler.inverse_transform([[pred_scaled]])[0][0])
 
 
+def forecast_interval(point_forecast, wf_actual, wf_pred, lower_pct=5, upper_pct=95):
+    """Empirical interval around a point forecast, built from the walk-forward
+    error distribution (actual - predicted) rather than assuming errors are
+    normally distributed — appropriate given the documented under-prediction
+    skew during the 2025-2026 surge (see Model Evaluation / Methodology)."""
+    residuals = np.array(wf_actual) - np.array(wf_pred)
+    lower = point_forecast + np.percentile(residuals, lower_pct)
+    upper = point_forecast + np.percentile(residuals, upper_pct)
+    return lower, upper
+
+
 # ---------------------------------------------------------------------------
 # Load + compute
 # ---------------------------------------------------------------------------
@@ -169,9 +190,13 @@ model_names = ["Naive Persistence", "AR(5) Baseline", "Linear Regression", "LSTM
 latest_row    = df.sort_values("date").iloc[-1]
 next_day_pred = forecast_next_day(df, feature_scaler, target_scaler, model)
 delta         = next_day_pred - latest_row["close"]
+forecast_lo, forecast_hi = forecast_interval(next_day_pred, wf_actual, wf_pred)
 
 dates_wf     = pd.to_datetime(test_dates[-len(wf_pred):])
 pred_error   = wf_actual - wf_pred  # positive = model under-predicted, negative = over-predicted
+
+model_last_retrained = get_model_last_retrained()
+days_since_retrain    = (pd.Timestamp.now(tz="UTC").tz_localize(None) - model_last_retrained).days
 
 # 30-day rolling volatility, computed on the fly for the dashboard view (the
 # model itself trains on the 7-day volatility_7 feature — see Feature Explorer)
@@ -191,7 +216,23 @@ with st.sidebar:
     st.markdown("**Train / Test Split**")
     st.text(f"Chronological split: {SPLIT_DATE}\nScalers fit on train only\n(leakage prevention)")
     st.markdown("**Model**")
-    st.text(f"2-layer LSTM (64, 32 units)\nInput window: {SEQ_LEN} days\nWalk-forward retrain: every 7 days\n365-day rolling training window")
+    st.text(f"2-layer LSTM (64, 32 units)\nInput window: {SEQ_LEN} days\nWalk-forward retrain: every {RETRAIN_EVERY_DAYS} days\n365-day rolling training window")
+
+    st.markdown("**Model Freshness**")
+    st.text(
+        f"Last retrained: {model_last_retrained.date()}\n"
+        f"{days_since_retrain} day(s) since last retrain"
+    )
+    if days_since_retrain > RETRAIN_EVERY_DAYS:
+        st.warning(
+            f"Overdue for retrain by {days_since_retrain - RETRAIN_EVERY_DAYS} day(s) "
+            f"(cadence: every {RETRAIN_EVERY_DAYS} days). This is about the model "
+            f"itself going stale — separate from whether the underlying price data "
+            f"(above) is up to date.",
+            icon="⚠️",
+        )
+    else:
+        st.caption(f"Within the {RETRAIN_EVERY_DAYS}-day retrain cadence.")
     st.divider()
     st.caption(
         "Baseline models (Naive, AR(5), Linear Regression) are recomputed "
@@ -208,6 +249,7 @@ st.caption(f"LSTM time-series model · pipeline data current as of {latest_row['
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Latest Close", f"${latest_row['close']:,.2f}")
 c2.metric("Next-Day Forecast", f"${next_day_pred:,.2f}", f"{delta:+,.2f}")
+c2.caption(f"90% range: ${forecast_lo:,.2f} – ${forecast_hi:,.2f}")
 c3.metric("LSTM Directional Accuracy", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
 c4.metric("LSTM MAE (test period)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
 
@@ -341,6 +383,34 @@ with tab_eval:
 
     st.divider()
 
+    st.subheader("Metrics for a Selected Period")
+    st.caption(
+        "Narrow the LSTM's own metrics to a sub-window of the test period — "
+        "e.g. isolate the 2025–2026 surge to see how much it drives the "
+        "headline MAE/RMSE above, versus quieter stretches."
+    )
+    range_min, range_max = dates_wf.min().date(), dates_wf.max().date()
+    range_pick = st.date_input(
+        "Date range", value=(range_min, range_max),
+        min_value=range_min, max_value=range_max,
+    )
+    if isinstance(range_pick, tuple) and len(range_pick) == 2:
+        r_start, r_end = pd.Timestamp(range_pick[0]), pd.Timestamp(range_pick[1])
+        range_mask = np.asarray((dates_wf >= r_start) & (dates_wf <= r_end))
+        if range_mask.sum() >= 2:
+            r_actual, r_pred = wf_actual[range_mask], wf_pred[range_mask]
+            r_metrics = get_metrics(r_actual, r_pred)
+            r_dir_acc = directional_accuracy(r_actual, r_pred)
+            rc1, rc2, rc3, rc4 = st.columns(4)
+            rc1.metric("Days in range", f"{int(range_mask.sum()):,}")
+            rc2.metric("MAE", f"${r_metrics['MAE']:,.2f}")
+            rc3.metric("RMSE", f"${r_metrics['RMSE']:,.2f}")
+            rc4.metric("Directional Accuracy", f"{r_dir_acc:.1f}%")
+        else:
+            st.caption("Select a range with at least 2 days to compute metrics.")
+
+    st.divider()
+
     st.subheader("Model Comparison")
     st.caption(
         "All four models are evaluated on the identical chronological test "
@@ -383,6 +453,24 @@ with tab_eval:
         "Directional Accuracy (%)": {m: round(dir_acc[m], 2) for m in model_names},
     })
     st.dataframe(metrics_table, use_container_width=True)
+
+    dl1, dl2 = st.columns(2)
+    dl1.download_button(
+        "Download metrics table (CSV)",
+        data=metrics_table.to_csv().encode("utf-8"),
+        file_name="model_comparison_metrics.csv",
+        mime="text/csv",
+    )
+    wf_export = pd.DataFrame({
+        "date": dates_wf, "actual": wf_actual, "lstm_predicted": wf_pred,
+        "error": pred_error,
+    })
+    dl2.download_button(
+        "Download actual vs. predicted (CSV)",
+        data=wf_export.to_csv(index=False).encode("utf-8"),
+        file_name="lstm_walk_forward_actual_vs_predicted.csv",
+        mime="text/csv",
+    )
 
     st.markdown(
         "**Interpretation.** The three baselines post lower MAE/RMSE than the "
