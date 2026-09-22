@@ -9,7 +9,9 @@ Run locally:
 """
 import tempfile
 import pickle
+import json
 
+import boto3
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -32,6 +34,7 @@ TARGET     = "target"
 SEQ_LEN    = 60
 SPLIT_DATE = "2024-12-31"
 RETRAIN_EVERY_DAYS = 7  # matches notebook 05's walk-forward RETRAIN_EVERY (simulated trading days)
+FORECAST_KEY = "gold/xauusd_daily/predictions/latest_forecast.json"  # written by automation/lambda_function.py
 
 FEATURE_LABELS = {
     "return": "Daily Return",
@@ -105,6 +108,19 @@ def get_model_last_retrained():
     meta = wr.s3.describe_objects(path=f"{DATA_PATH}/lstm_model.keras")
     last_modified = list(meta.values())[0]["LastModified"]
     return pd.Timestamp(last_modified).tz_localize(None)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_lambda_forecast():
+    """Reads the daily inference-only forecast written by the Lambda automation
+    (automation/lambda_function.py), if it has ever run. Returns None rather
+    than raising when the object doesn't exist yet — this feature is additive
+    and the dashboard's own on-the-fly forecast above still works without it."""
+    try:
+        obj = boto3.client("s3").get_object(Bucket=S3_BUCKET, Key=FORECAST_KEY)
+        return json.loads(obj["Body"].read())
+    except Exception:
+        return None
 
 
 def compute_baselines(df, feature_scaler, target_scaler):
@@ -197,6 +213,7 @@ pred_error   = wf_actual - wf_pred  # positive = model under-predicted, negative
 
 model_last_retrained = get_model_last_retrained()
 days_since_retrain    = (pd.Timestamp.now(tz="UTC").tz_localize(None) - model_last_retrained).days
+lambda_forecast       = get_lambda_forecast()
 
 # 30-day rolling volatility, computed on the fly for the dashboard view (the
 # model itself trains on the 7-day volatility_7 feature — see Feature Explorer)
@@ -258,6 +275,39 @@ st.info(
     "Prediction Error panel in the Model Evaluation tab). Treat the forecast "
     "above as a directional signal rather than a precise price target."
 )
+
+with st.expander("Daily automation forecast (Lambda inference-refresh)", expanded=False):
+    st.caption(
+        "The KPI above is computed fresh on every page load from the canonical "
+        "Gold-layer data and model in S3. Separately, a scheduled Lambda "
+        "(`automation/lambda_function.py`) runs once daily to keep a forecast "
+        "ready between full pipeline re-runs — shown here for comparison."
+    )
+    if lambda_forecast is None:
+        st.caption(
+            "No automation output found yet at "
+            f"`s3://{S3_BUCKET}/{FORECAST_KEY}` — either the Lambda hasn't been "
+            "deployed/run yet, or it hasn't found a new trading day to process. "
+            "This is expected until it's set up; the KPI above is unaffected."
+        )
+    else:
+        generated_at = pd.Timestamp(lambda_forecast["generated_at"]).tz_localize(None)
+        age_hours = (pd.Timestamp.now(tz="UTC").tz_localize(None) - generated_at).total_seconds() / 3600
+        lc1, lc2, lc3 = st.columns(3)
+        lc1.metric("Automation forecast (as of " + lambda_forecast["as_of_date"] + ")",
+                   f"${lambda_forecast['predicted_next_close']:,.2f}",
+                   f"{lambda_forecast['delta']:+,.2f}")
+        lc2.metric("Agrees with on-the-fly forecast?",
+                   "Yes" if abs(lambda_forecast["predicted_next_close"] - next_day_pred) < 1.0 else "Differs")
+        lc3.metric("Generated", f"{age_hours:.1f}h ago")
+        if age_hours > 48:
+            st.warning(
+                "This automation output is over 48 hours old — the scheduled "
+                "Lambda may not be running (check EventBridge Scheduler / Lambda "
+                "logs in AWS). Not necessarily an error on a weekend/market "
+                "holiday, when no new close posts.",
+                icon="⚠️",
+            )
 
 tab_overview, tab_eval, tab_vol, tab_method = st.tabs([
     "Overview", "Model Evaluation", "Volatility & Features", "Methodology",
