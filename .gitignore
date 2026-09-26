@@ -18,6 +18,7 @@ config
 
 # Hourly pipeline raw/processed data (re-creatable from Dukascopy; keep out of git)
 hourly/data/
+daily/data/
 hourly/node_modules/
 hourly/package-lock.json
 

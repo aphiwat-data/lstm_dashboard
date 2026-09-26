@@ -1,0 +1,67 @@
+{
+  "rows_raw": 5606,
+  "duplicate_dates": 0,
+  "invalid_ohlc_rows": 347,
+  "invalid_ohlc_share_by_year": {
+    "2004": 0.333,
+    "2005": 0.262,
+    "2006": 0.336,
+    "2007": 0.282,
+    "2008": 0.174,
+    "2009": 0.036,
+    "2010": 0.02,
+    "2011": 0.079
+  },
+  "nonpositive_close_rows": 0,
+  "zero_volume_share": 0.0282,
+  "gaps_gt_5_days": [],
+  "extreme_1day_moves": [
+    {
+      "date": "2006-06-13",
+      "logret": -0.0758
+    },
+    {
+      "date": "2008-09-17",
+      "logret": 0.0864
+    },
+    {
+      "date": "2009-03-19",
+      "logret": 0.0754
+    },
+    {
+      "date": "2013-04-15",
+      "logret": -0.0982
+    },
+    {
+      "date": "2026-01-30",
+      "logret": -0.1141
+    }
+  ],
+  "rows_clean": 5606,
+  "start": "2004-06-01",
+  "end": "2026-09-21",
+  "coverage_warnings": [],
+  "dataset": {
+    "rows": 5506,
+    "start": "2004-08-26",
+    "end": "2026-09-18",
+    "n_features": 16,
+    "per_split": {
+      "test": {
+        "rows": 424,
+        "share_up": 0.559,
+        "share_up_h5": 0.6071
+      },
+      "train": {
+        "rows": 4835,
+        "share_up": 0.5257,
+        "share_up_h5": 0.5523
+      },
+      "val": {
+        "rows": 247,
+        "share_up": 0.5789,
+        "share_up_h5": 0.6397
+      }
+    }
+  }
+}

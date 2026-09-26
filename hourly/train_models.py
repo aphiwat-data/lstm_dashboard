@@ -12,6 +12,7 @@ Protocol (fixed before running):
   * bar to beat for direction is the always-up rate of that split/horizon (gold trends up), not 50%
 
 Usage: python train_models.py --data data/processed_gold/xauusd_h1_features.parquet --horizon 4 --seeds 2 --epochs 10
+Daily set: python train_models.py --data ../daily/data/processed/xauusd_d1_features.parquet --rnn lstm --window 20 --horizon 1 --tag _lstm_w20
 """
 from __future__ import annotations
 
@@ -84,16 +85,16 @@ def price_report(g: pd.DataFrame, h: int, pred_ret: np.ndarray | None, p_up: np.
     return out
 
 
-def windows(x: np.ndarray, window: int = WINDOW) -> np.ndarray:
+def windows(x: np.ndarray, window: int) -> np.ndarray:
     return np.lib.stride_tricks.sliding_window_view(x, (window, x.shape[1]))[:, 0].astype(np.float32)
 
 
-def build_gru(n_feat: int, seed: int):
+def build_rnn(n_feat: int, seed: int, window: int, cell: str = "gru", units: int = 64):
     from tensorflow import keras
 
     keras.utils.set_random_seed(seed)
-    inp = keras.Input(shape=(WINDOW, n_feat))
-    h = keras.layers.GRU(64)(inp)
+    inp = keras.Input(shape=(window, n_feat))
+    h = (keras.layers.GRU if cell == "gru" else keras.layers.LSTM)(units)(inp)
     h = keras.layers.Dropout(0.2)(h)
     h = keras.layers.Dense(32, activation="relu")(h)
     outputs = {"ret": keras.layers.Dense(1, name="ret")(h), "dir": keras.layers.Dense(1, activation="sigmoid", name="dir")(h)}
@@ -109,31 +110,42 @@ def build_gru(n_feat: int, seed: int):
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, required=True)
-    ap.add_argument("--horizon", type=int, default=1, choices=[1, 4, 24])
+    ap.add_argument("--horizon", type=int, default=1, help="label horizon in bars (columns y_ret_h{h} / y_dir_h{h} must exist for h > 1)")
+    ap.add_argument("--window", type=int, default=WINDOW, help="RNN input window in bars")
+    ap.add_argument("--rnn", choices=["gru", "lstm"], default="gru")
+    ap.add_argument("--units", type=int, default=64)
+    ap.add_argument("--momentum-feature", default=None, help="feature whose sign is the momentum rule (default: closest f_ret_k to the horizon)")
+    ap.add_argument("--train-start", default=None, help="drop training rows before this date (sensitivity to old/noisy history)")
+    ap.add_argument("--tag", default="", help="suffix for the output file name")
     ap.add_argument("--seeds", type=int, default=2)
     ap.add_argument("--epochs", type=int, default=10)
     ap.add_argument("--skip-gru", action="store_true")
     args = ap.parse_args()
-    h = args.horizon
+    h, W = args.horizon, args.window
     ycol, dcol, _ = target_cols(h)
 
     df = pd.read_parquet(args.data)
     feats = [c for c in df.columns if c.startswith("f_")]
     split = {s: g for s, g in df.groupby("meta_split")}
-    valid = {s: (split[s][[ycol, dcol]].notna().all(axis=1)).to_numpy()[WINDOW - 1:] for s in split}  # rows scored/trained (no NaN label)
-    ev = {s: split[s].iloc[WINDOW - 1:][valid[s]] for s in ("val", "test")}
-    tr = split["train"].iloc[WINDOW - 1:][valid["train"]]
+    if args.train_start:
+        split["train"] = split["train"].loc[args.train_start:]
+    valid = {s: (split[s][[ycol, dcol]].notna().all(axis=1)).to_numpy()[W - 1:] for s in split}  # rows scored/trained (no NaN label)
+    ev = {s: split[s].iloc[W - 1:][valid[s]] for s in ("val", "test")}
+    tr = split["train"].iloc[W - 1:][valid["train"]]
 
     ret_sd, drift = float(tr[ycol].std()), float(tr[ycol].mean())
-    results: dict = {"horizon_bars": h, "window": WINDOW, "n_features": len(feats), "train_ret_sd": ret_sd, "train_mean_ret": drift, "val": {}, "test": {}}
-    results["typical_span_hours"] = float(split["test"][f"meta_span_h{h}"].median()) if h > 1 else 1.0
+    results: dict = {"horizon_bars": h, "window": W, "rnn": args.rnn, "units": args.units, "train_start": args.train_start, "n_train_rows": int(len(tr)),
+                     "n_features": len(feats), "train_ret_sd": ret_sd, "train_mean_ret": drift, "val": {}, "test": {}}
+    span_col = f"meta_span_h{h}"
+    results["typical_span_hours"] = float(split["test"][span_col].median()) if span_col in df.columns else None
 
     def record(name: str, preds: dict[str, tuple[np.ndarray | None, np.ndarray | None]]) -> None:
         for s in ("val", "test"):
             results[s][name] = price_report(ev[s], h, *preds[s])
 
     record("drift_only", {s: (np.full(len(ev[s]), drift), None) for s in ("val", "test")})
-    mom = {s: (ev[s][MOMENTUM_FEATURE[h]] > 0).astype(float).to_numpy() * 0.998 + 0.001 for s in ("val", "test")}
+    mom_feat = args.momentum_feature or MOMENTUM_FEATURE.get(h, "f_ret_1")
+    mom = {s: (ev[s][mom_feat] > 0).astype(float).to_numpy() * 0.998 + 0.001 for s in ("val", "test")}
     record("momentum_rule", {s: (None, mom[s]) for s in ("val", "test")})
     record("reversal_rule", {s: (None, 1 - mom[s]) for s in ("val", "test")})
 
@@ -151,14 +163,14 @@ def main() -> None:
     if not args.skip_gru:
         mu, sd = split["train"][feats].mean(), split["train"][feats].std().replace(0, 1)
         prep = lambda g: np.clip(((g[feats] - mu) / sd).fillna(0.0).to_numpy(), -10, 10)
-        Xw = {s: windows(prep(split[s])) for s in ("train", "val", "test")}
-        yr = {s: (split[s][ycol].to_numpy()[WINDOW - 1:] / ret_sd).astype(np.float32) for s in Xw}
-        yd = {s: split[s][dcol].to_numpy()[WINDOW - 1:].astype(np.float32) for s in Xw}
+        Xw = {s: windows(prep(split[s]), W) for s in ("train", "val", "test")}
+        yr = {s: (split[s][ycol].to_numpy()[W - 1:] / ret_sd).astype(np.float32) for s in Xw}
+        yd = {s: split[s][dcol].to_numpy()[W - 1:].astype(np.float32) for s in Xw}
         from tensorflow import keras
 
         seed_preds = {s: [] for s in ("val", "test")}
         for seed in range(args.seeds):
-            model = build_gru(len(feats), seed)
+            model = build_rnn(len(feats), seed, W, args.rnn, args.units)
             t0 = time.time()
             model.fit(
                 Xw["train"][valid["train"]], {"ret": yr["train"][valid["train"]], "dir": yd["train"][valid["train"]]},
@@ -170,14 +182,15 @@ def main() -> None:
             for s in ("val", "test"):
                 out = model.predict(Xw[s][valid[s]], batch_size=1024, verbose=0)
                 seed_preds[s].append((out["ret"].ravel() * ret_sd, out["dir"].ravel()))
-            record(f"gru_seed{seed}", {s: seed_preds[s][-1] for s in ("val", "test")})
-        record("gru_ensemble", {s: (np.mean([p[0] for p in seed_preds[s]], axis=0), np.mean([p[1] for p in seed_preds[s]], axis=0)) for s in ("val", "test")})
+            record(f"{args.rnn}_seed{seed}", {s: seed_preds[s][-1] for s in ("val", "test")})
+        record(f"{args.rnn}_ensemble", {s: (np.mean([p[0] for p in seed_preds[s]], axis=0), np.mean([p[1] for p in seed_preds[s]], axis=0)) for s in ("val", "test")})
 
     nan = float("nan")
     for s in ("val", "test"):
         n = len(ev[s])
         r0 = results[s]["drift_only"]
-        print(f"\n== HORIZON {h} bars (~{results['typical_span_hours']:.0f}h) | {s.upper()} (n={n:,}, n_eff={n // h:,}; naive MAE ${r0['naive_mae_usd']:.2f}) ==")
+        span = f" (~{results['typical_span_hours']:.0f}h)" if results["typical_span_hours"] else ""
+        print(f"\n== HORIZON {h} bars{span} | window {W} {args.rnn} | train rows {len(tr):,} | {s.upper()} (n={n:,}, n_eff={n // h:,}; naive MAE ${r0['naive_mae_usd']:.2f}) ==")
         print(f"{'model':15s} {'MAE$':>7s} {'skill':>7s} {'DM p':>6s} {'IC':>7s} {'IC p':>6s} | {'acc(sign)':>9s} {'acc(head)':>9s} {'always-up':>9s} {'95% CI (n_eff)':>16s} {'p':>6s} {'AUC':>6s}")
         for name, r in results[s].items():
             sg, hd = r.get("direction_from_sign"), r.get("direction_from_head")
@@ -186,7 +199,7 @@ def main() -> None:
             print(f"{name:15s} {r.get('mae_usd', nan):7.2f} {r.get('mae_skill_vs_naive', nan):+7.4f} {r.get('dm_p_vs_naive', nan):6.3f} {r.get('ic_spearman', nan):+7.4f} {r.get('ic_p', nan):6.3f} | "
                   f"{(sg['acc'] if sg else nan):9.4f} {(hd['acc'] if hd else nan):9.4f} {d['always_up_acc']:9.4f} {ci:>16s} {d['p_vs_always_up']:6.3f} {(hd.get('auc', nan) if hd else nan):6.3f}")
 
-    out = args.data.with_name(f"model_results_h{h}.json")
+    out = args.data.with_name(f"model_results{args.tag}_h{h}.json")
     out.write_text(json.dumps(results, indent=2, default=float))
     print(f"\nsaved {out}")
 
