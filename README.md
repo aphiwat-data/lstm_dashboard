@@ -13,6 +13,145 @@ For the full chronological story of every AWS/code error hit and how it
 was fixed (useful for "what problems did you encounter" in the defense),
 see **[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)**.
 
+> **Update (September 2026): the evaluation results in §8.1–§8.4 are superseded.** On review, the original
+> pipeline's very large LSTM error (MAE ≈ \$640) was a scale problem, not a market effect, and its "best
+> directional accuracy" did not survive comparison with the trivial "always up" rule. Read the
+> **[Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned)** first; the corrected numbers are in §8.0.
+
+---
+
+## Project Journey: what we tried, what broke, what we learned
+
+The advisor asked how the work actually went, including the wrong turns. This section is that honest timeline.
+Earlier AWS/notebook errors are logged in [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md); later phases are
+also visible in the commit history.
+
+### At a glance
+
+| Question | Answer today |
+|---|---|
+| Does the LSTM beat a trivial baseline at next-day direction? | **No.** Daily: 51.9% vs "always up" 55.9% (test 2025-01-09 to 2026-09-18, n=424). |
+| Does hourly data help (1, 4 and 24 bars ahead)? | **No.** Accuracy about 50–54% vs "always up" 51.5% / 52.9% / 55.1%; AUC 0.50–0.52. |
+| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence.** Even the trivial rule scores 51–56%; a result near 70% would point to a leak or a metric artifact. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
+| Is the price forecast usable? | It matches a no-change forecast (daily MAE \$47.42 vs \$47.27). Read it as "about today's close, within the interval". |
+| What was the big bug? | A price-level target and price-level inputs with train-only scalers: once gold left the training range in 2025-26, MAE reached ≈ \$640. Fixed with a return target and scale-free features. |
+
+### Phase 1: build the pipeline (§5-§7)
+Medallion data lake on S3 (Bronze/Silver/Gold), six notebooks on SageMaker, a walk-forward LSTM predicting the next-day
+close *price*, three baselines, a Streamlit dashboard and a designed (not yet deployed) daily Lambda. The problems met on
+the way (IAM permissions, instance credits, leakage, evaluation-window mistakes) are in `docs/TROUBLESHOOTING.md`.
+
+### Phase 2: publish and deploy (September 2026)
+- Pushed the repo to GitHub (public). The AWS account belongs to a friend, so its account ID is deliberately not
+  written in any tracked file.
+- Streamlit Community Cloud first failed with "Error installing requirements": the platform used Python 3.14, which has
+  no TensorFlow wheel. Adding `runtime.txt` and `.python-version` had no effect in our case; what worked was deleting the
+  app and re-creating it with Python 3.11 selected in the deploy dialog.
+- Next came `NoCredentialsError` (the dashboard reads S3): fixed by adding AWS credentials in the app's Secrets, never in git.
+- A slip worth remembering: the IAM user `Auto` was deleted (the user page's Delete button removes the whole user, not one
+  access key) and re-created, and a secret access key is shown only once. Read destructive buttons twice.
+
+### Phase 3: dashboard extensions
+Added, without removing anything: a model-freshness indicator, an empirical 90% forecast range, CSV downloads, a
+date-range metrics picker and a panel comparing with the Lambda's daily forecast. Lesson from the picker: a 4-day range
+showed 100% directional accuracy, which is only three comparisons, i.e. small-sample luck, not leakage.
+
+### Phase 4: attempt to deploy the automation (still open)
+`automation/deploy.sh` attached three managed policies to `Auto` (Lambda, ECR and EventBridge Scheduler full access) and
+created the ECR repository `gold-lstm-forecast-daily-refresh`, then the Docker build failed with I/O errors because the
+Mac's disk was 98% full (249 MB free); after freeing space Docker Desktop's engine still did not become healthy after a
+restart. The Lambda and schedule were never created. The policies and the ECR repository still exist, so either finish the deployment or clean them up (§12).
+
+### Phase 5: advisor feedback: hourly data and a ~70% target (hourly/)
+- Data: Dukascopy XAU/USD hourly bars, 2004 to 2026 (free, spot price). Two data traps: the downloader silently saved
+  *partial* files when the feed answered HTTP 429 (rate limit), which we caught by comparing row counts and replaced with a
+  verified monthly downloader plus coverage checks in the builder; and about a third of the rows were market-closed bars
+  with zero volume (36% in the sample month we inspected), which are dropped.
+- Pipeline: features use only past bars, labels look 1, 4 or 24 bars ahead, chronological split with an embargo. Tests edit
+  future prices and assert that past features do not change, and a mutation check shows the tests fail when a look-ahead
+  feature is injected.
+- Rules fixed before running: compare with the "always up" rate (gold trends up, so it is 51.5% / 52.9% / 55.1% at 1 / 4 /
+  24 bars, not 50%); confidence intervals use n / horizon because neighbouring labels overlap; a label-shuffle control.
+- Models: drift, momentum rule, ridge, gradient boosting (regressor and classifier) and a two-head GRU. Result (test 2025+, bid prices):
+
+| Horizon | Always up | Best model accuracy | AUC range | n_eff |
+|---|---|---|---|---|
+| 1 bar | 51.5% | 51.4% (gru_ensemble) | 0.517–0.518 | 10,197 |
+| 4 bars | 52.9% | 51.5% (hist_gb_reg) | 0.495–0.500 | 2,548 |
+| 24 bars | 55.1% | 53.7% (hist_gb_reg) | 0.497–0.520 | 424 |
+
+### Phase 6: chasing an apparent 60% (bid-ask artifact)
+Gradient boosting reached 56-60% on its most confident 5-10% of predictions, concentrated in the hours around the daily
+market break. The spread widens 2-3x there (about 2.4 bp normally, 4.8-5.3 bp at 20-21 UTC) and a bid-only price falls as
+it widens, so the "signal" is not tradable. Downloading ask prices and using mid = (bid + ask) / 2: the top-5% edge over
+"always up" went from +6.7 pt (bid) to +0.2 pt (mid) on the test split, while validation was mixed, so we report it as
+"largely an artifact", not proven. Re-running every model on mid prices gave the same conclusion:
+
+| Horizon | Always up | Best model accuracy | AUC range | n_eff |
+|---|---|---|---|---|
+| 1 bar | 51.7% | 51.6% (hist_gb_reg) | 0.514–0.516 | 9,780 |
+| 4 bars | 53.2% | 51.1% (hist_gb_reg) | 0.495–0.499 | 2,444 |
+| 24 bars | 55.8% | 54.2% (hist_gb_clf) | 0.510–0.520 | 406 |
+
+We also had to retract our own earlier statement that this edge "replicates on validation and test". (Four months of ask data
+are missing because of rate limiting, so bid-vs-mid comparisons use the bars present in both feeds.)
+
+### Phase 7: fixing the daily pipeline properly (daily/)
+- The earlier "fixed" claim for the daily MAE was wrong: it only held for the last three weeks of the test period; over the
+  full period the LSTM's MAE was still ≈ \$639 against ≈ \$51 for trivial baselines.
+- **Root cause:** notebooks 03-05 predict `close.shift(-1)` (a price level) from price-level inputs (close, MA7/14/30/60, USD
+  momentum), scaled with statistics from the training period. In 2025-26 gold traded far above that range, so inputs and
+  targets left what the scalers and the model had seen. Walk-forward retraining adapted the weights but not the fixed scalers.
+- **Data audit:** 6.2% of daily rows had inconsistent OHLC (almost all in 2004-2011) and the Silver `_1w`/`_1m` columns hold
+  the period's final values, i.e. future information on mid-period days (the original model did not use them).
+- **Fix:** every feature is a return, ratio or oscillator computed from `close`; the target is the next-day log-return
+  converted back to a price; scalers are re-fit in every walk-forward window. A test multiplies all prices by a constant and
+  asserts no feature changes.
+- **Also wrong before:** the old "directional accuracy" compared day-to-day changes of the predictions with those of the
+  actual prices; the standard definition compares the sign of the predicted return with the sign of the actual return.
+- Result (walk-forward, retrain every 7 days on 365 days, test 2025-01-09 to 2026-09-18):
+
+| Model | MAE (USD) | MAE skill vs no-change | Direction accuracy | vs always-up (pt) | p vs always-up |
+|---|---|---|---|---|---|
+| No-change (naive) | 47.27 | 0 | – | – | – |
+| Rolling drift (= always up) | 46.96 | +0.0065 | 55.9% | +0.0 | 1.000 |
+| Ridge | 48.43 | -0.0245 | 49.5% | -6.4 | 0.009 |
+| HistGB regressor | 51.43 | -0.0879 | 50.2% | -5.7 | 0.021 |
+| HistGB classifier | – | – | 53.5% | -2.4 | 0.329 |
+| **LSTM (walk-forward)** | 47.42 | -0.0031 | 51.9% | -4.0 | 0.097 |
+| Momentum rule | – | – | 45.0% | -10.8 | 0.000 |
+
+  The LSTM's price error is at the no-change level (Diebold-Mariano p = 0.51) and its direction accuracy
+  (51.9%, 95% CI 47.1-56.6%) is not distinguishable from
+  always-up. Six static-training variants (window 20 or 60 days, 1- and 5-day horizons, training from 2012) agree; see `daily/results/`.
+- The dashboard now leads with this corrected evaluation; the original views are kept in an expander for the record. While
+  checking the page in a browser we also found that pairs of dollar signs in markdown text are rendered as LaTeX (garbled
+  captions), a bug no automated test had caught.
+
+### Lessons learned
+1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
+2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
+   use n / horizon when labels overlap.
+3. Tests must be able to fail: inject a leak on purpose and check the test catches it.
+4. A too-good result is a bug until its mechanism is explained (here: bid-ask spread around the daily break).
+5. Verify inputs, not just models: silent partial downloads, invalid OHLC rows, columns that contain the future.
+6. "Fixed" means re-checking the full period, not the latest weeks.
+7. Look at the rendered page: some bugs are invisible to headless tests.
+
+### Where things live
+| Path | What |
+|---|---|
+| `notebooks/`, `automation/` | Original daily pipeline and the (not yet deployed) Lambda |
+| `daily/` | Corrected daily dataset builder, tests, walk-forward evaluation; `results/` feeds the dashboard |
+| `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check; `results/summary_hourly_findings.png` is the one-page summary |
+| `dashboard/app.py` | Streamlit app (deployed on Streamlit Community Cloud) |
+| `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
+
+### Status and next steps
+Open items are tracked in §12. The main ones: finish or clean up the Lambda deployment (and convert it to the return-target
+model), replace the thesis Table 3.2 with the corrected table in §8.0, and, if time allows, test cross-asset and economic-calendar
+features. Given the evidence above, the honest write-up is a well-instrumented negative result rather than a 70% claim.
+
 ---
 
 ## 0. Front Matter (from the proposal)
@@ -57,7 +196,7 @@ gold-lstm-forecast/
 │   ├── 05_LSTM_Training.ipynb
 │   └── 06_Model_Evaluation.ipynb
 ├── dashboard/
-│   ├── app.py                   ← Streamlit dashboard (local, connects to S3) — work in progress, see §10
+│   ├── app.py                   ← Streamlit dashboard (deployed on Streamlit Community Cloud; reads S3 + daily/results) — see §10
 │   └── requirements.txt
 ├── automation/                  ← daily inference-refresh Lambda — see §11 and automation/README.md
 │   ├── README.md                ← full design rationale + deploy/teardown steps
@@ -66,6 +205,15 @@ gold-lstm-forecast/
 │   ├── Dockerfile, requirements-lambda.txt
 │   ├── deploy.sh                ← idempotent: ECR + Lambda + EventBridge Scheduler
 │   └── iam_*.json, scheduler_*.json  ← least-privilege policies for the Lambda's own role
+├── daily/                       ← corrected daily pipeline (Sep 2026) — see Journey and §8.0
+│   ├── build_daily_dataset.py   ← scale-free features + log-return targets from the Silver table
+│   ├── test_no_lookahead_daily.py
+│   ├── walk_forward.py          ← walk-forward LSTM (retrain every 7 days, 365-day window) + baselines + tomorrow's forecast
+│   └── results/                 ← metrics JSON, predictions CSV, latest_forecast.json (read by the dashboard)
+├── hourly/                      ← hourly XAU/USD experiments (Dukascopy) — see Journey, phases 5-6
+│   ├── download_dukascopy.py, build_hourly_dataset.py, test_no_lookahead.py
+│   ├── baseline.py, train_models.py, spread_artifact_check.py, make_summary_figure.py
+│   └── results/                 ← metrics JSON + summary_hourly_findings.png
 └── .gitignore                   ← excludes venv/, .aws/, and pulled *.npy/*.pkl/*.keras/*.parquet artifacts
 ```
 
@@ -304,6 +452,11 @@ earlier dates to train and later dates to test.
 
 ### 03_Feature_Engineering.ipynb
 
+> **Update (Sep 2026):** the price-level features and the price target defined here (`close`, MA7/14/30/60, USD momentum,
+> `target = close.shift(-1)`) are the root cause of the scale problem described in the Journey. The corrected, scale-free
+> version is `daily/build_daily_dataset.py`. The `_1w`/`_1m` columns carried in Silver contain future information for
+> mid-period days and must not be used as features.
+
 **What**: loads Silver (sorted chronologically), engineers 7 features from
 `close` alone, defines the supervised-learning `target`, and writes the
 result to Gold as Parquet.
@@ -385,6 +538,10 @@ Config: `SEQ_LEN = 60`, `FEATURES = ['close','return','ma7','ma14','ma30','ma60'
    `SEQ_LEN-1`, not `SEQ_LEN`.
 
 ### 05_LSTM_Training.ipynb — model architecture & walk-forward retraining
+
+> **Update (Sep 2026):** predicting a price level with scalers fixed on the training period is what made the LSTM's error
+> explode in 2025-26 (MAE ≈ \$640). The corrected walk-forward (same retrain-every-7-days / 365-day scheme, return target,
+> scalers re-fit per window) is `daily/walk_forward.py`.
 
 **Architecture**: `LSTM(64, return_sequences=True) → Dropout(0.1) →
 LSTM(32) → Dropout(0.1) → Dense(1)`. Adam optimizer.
@@ -506,7 +663,34 @@ evaluation-window alignment changed.
 
 ## 8. Model Evaluation — Results, Interpretation, §3.7 Write-up
 
-### 8.1 Results
+> **Superseded (September 2026).** §8.1-§8.4 describe the original price-level pipeline. Its LSTM error (MAE ≈ \$640) came
+> from a scale problem and its "best directional accuracy" was measured with a non-standard metric and without the
+> always-up baseline. Use §8.0 for current numbers; the original text is kept for the record.
+
+### 8.0 Corrected results (walk-forward on returns, September 2026)
+
+Same walk-forward scheme as notebook 05 (retrain every 7 trading days on the latest 365 days), but predicting the
+next-day log-return from scale-free features with scalers re-fit in every window (`daily/walk_forward.py`). Test period
+2025-01-09 to 2026-09-18 (424 days); all models are scored on the same days. Gold rose on
+55.9% of these days, so "always up" scores 55.9%.
+
+| Model | MAE (USD) | MAE skill vs no-change | Direction accuracy | vs always-up (pt) | p vs always-up |
+|---|---|---|---|---|---|
+| No-change (naive) | 47.27 | 0 | – | – | – |
+| Rolling drift (= always up) | 46.96 | +0.0065 | 55.9% | +0.0 | 1.000 |
+| Ridge | 48.43 | -0.0245 | 49.5% | -6.4 | 0.009 |
+| HistGB regressor | 51.43 | -0.0879 | 50.2% | -5.7 | 0.021 |
+| HistGB classifier | – | – | 53.5% | -2.4 | 0.329 |
+| **LSTM (walk-forward)** | 47.42 | -0.0031 | 51.9% | -4.0 | 0.097 |
+| Momentum rule | – | – | 45.0% | -10.8 | 0.000 |
+
+**Interpretation.** The corrected LSTM's price error is essentially the no-change level and its direction accuracy is not
+distinguishable from always-up (95% CI 47.1-56.6%, AUC 0.45). With 424 test days the interval is about ±5 points, so small
+edges cannot be detected either way. Hourly experiments (Journey, phases 5-6) reach the same conclusion. The earlier "central
+finding" (worst MAE but best directional accuracy) was produced by the price-level scale problem and a non-standard
+direction metric. Raw results: `daily/results/`, `hourly/results/`.
+
+### 8.1 Original results (superseded)
 
 | Model | MAE (USD) | RMSE (USD) | Directional Accuracy |
 |---|---|---|---|
@@ -515,7 +699,7 @@ evaluation-window alignment changed.
 | Linear Regression | ~51.2 | ~74.1 | ~43.9% |
 | **LSTM Walk-Forward** | ~641.0 | ~776.6 | **~51.5%** |
 
-### 8.2 Interpretation
+### 8.2 Interpretation (original, superseded)
 
 The LSTM has by far the worst absolute-error metrics (MAE/RMSE) but the
 best directional accuracy, and is the only model to beat 50% (random
@@ -539,7 +723,7 @@ alone would incorrectly rank the naive baseline as "best," when it in fact
 has no real predictive skill in the sense that matters for a forecasting
 system.
 
-### 8.3 What the proposal already gets right (don't rewrite this part)
+### 8.3 What the proposal already gets right (original, superseded: the narrative must now change)
 
 The proposal's own §3.7 narrative text (already written in the current
 `.docx`/PDF) already states this same interpretation correctly, including
@@ -549,7 +733,7 @@ current proposal is the numeric MAE/RMSE table** (§3.7.3 describes the
 comparison narratively and via Figure 3.10, but never tabulates the
 numbers) — that's the one addition needed, not a rewrite.
 
-### 8.4 Draft table + caption text to insert into §3.7.3
+### 8.4 Draft table + caption text to insert into §3.7.3 (original: do NOT paste, use §8.0)
 
 Ready to paste in as a table right after the existing §3.7.3 narrative
 paragraph, and to use verbatim as the Figure 3.10 caption if useful:
@@ -606,6 +790,11 @@ brief:
 ---
 
 ## 10. Streamlit Dashboard (local, ad-hoc — not a persistent server)
+
+> **Update (Sep 2026):** the dashboard is also deployed on Streamlit Community Cloud (Python 3.11; AWS credentials in the
+> app's Secrets, never in git). The KPIs and the Model Evaluation tab now lead with the corrected evaluation read from
+> `daily/results/`; the original views live in an expander ("Original pipeline"). The layout description below covers the
+> original design and the views kept in that expander.
 
 **STATUS: still open to further iteration**, but now a complete, polished,
 English-only pass covering all four components the proposal's §3.8
@@ -854,8 +1043,9 @@ that discipline matters most), and teardown instructions are all in
 1. **Update the thesis proposal Word document** (source `.docx`, not
    accessible from this session — PDF-only):
    - Fix the Figure 3.9/3.10 caption swap noted earlier in the project.
-   - Insert the numeric Table 3.2 from §8.4 above (the narrative text is
-     already correct — this is purely an addition).
+   - Replace the interpretation and Table 3.2 with the corrected results in
+     §8.0 (the original §8.4 table and the "worst MAE but best direction"
+     narrative are superseded: they came from the scale problem).
    - Correct §3.1 to reflect the actual compute used (Deviation #1, §3),
      or add a footnote explaining the substitution.
    - Correct §3.2/§3.3 to stop describing 4H-specific collection/cleaning
@@ -870,9 +1060,10 @@ that discipline matters most), and teardown instructions are all in
      this project.
    - Fix the "ARIMA" terminology slip elsewhere in Chapter 4 (AR(5) is a
      linear-regression autoregressive model, not a fitted ARIMA(p,d,q)).
-2. **Recompute R²** for the corrected LSTM walk-forward predictions (§8.4
-   TODO) before citing any R² figure — the ~0.87 figure in circulation
-   predates the AR(5)/early-stopping fixes and hasn't been re-verified.
+2. **Do not cite the old R² (~0.87).** It predates both the AR(5)/early-stopping
+   fixes and the scale correction (Journey, phase 7). If an R² is still wanted,
+   compute it on returns from `daily/results/wf_predictions.csv`; expect it to be
+   near zero.
 3. **Re-verify the exact row counts** in §2.2/§6 (5,491 Silver rows, 5,431
    Gold rows, 4,887/544 train/test) against a fresh run if the dataset has
    grown since (new trading days keep appending via `yfinance`).
@@ -892,15 +1083,35 @@ that discipline matters most), and teardown instructions are all in
    live AWS account — run `convert_and_export.py` + `deploy.sh`, confirm a
    real invocation writes a correct `latest_forecast.json`, then let it run
    for at least one real trading-day rollover before demoing it as "live"
-   rather than "designed and ready."
-9. **Port the Silver-based (not Gold-based) forecast-window fix** found
-   while building §11 into `dashboard/app.py`'s `forecast_next_day()`, so
-   the dashboard's own Next-Day Forecast KPI stops being one day stale.
+   rather than "designed and ready." **Status (Sep 2026):** the attempt stopped at
+   the Docker build (disk full); the ECR repository and three extra managed
+   policies on `Auto` already exist (Journey, phase 4). The Lambda still runs
+   the original price-level model and must be rebuilt around the return-target
+   model before it is worth deploying.
+9. ~~Port the Silver-based forecast-window fix into the dashboard's
+   Next-Day Forecast.~~ **Done (Sep 2026):** the corrected daily forecast
+   (`daily/walk_forward.py`) builds its features from the Silver table, so it
+   includes the newest day, and the KPI reads `daily/results/latest_forecast.json`.
 10. Optional/future, once §11 is live and trusted: automate *absorbing*
     `bronze/streaming/xauusd_daily_incremental.csv` back into the canonical
     Bronze/Silver/Gold files, and add a second, much-less-frequent
     (e.g. weekly) scheduled job that re-runs full walk-forward retraining
     — see `automation/README.md` §9 for why this is scoped out for now.
+
+11. **Clean up or finish the partial AWS deployment** (Journey, phase 4): the ECR
+    repository `gold-lstm-forecast-daily-refresh` and the policies
+    `AWSLambda_FullAccess`, `AmazonEC2ContainerRegistryFullAccess`,
+    `AmazonEventBridgeSchedulerFullAccess` attached to `Auto` are standing changes
+    on the friend's account; detach/delete them if the automation is dropped.
+12. **Refresh the corrected daily results** after new data arrives:
+    `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
+    (commands in the script docstrings), commit `daily/results/`.
+13. Optional: cross-asset (silver, EURUSD, S&P 500) and economic-calendar features
+    for the hourly work; re-download the four missing ask months
+    (2014-04, 2015-07, 2016-08, 2026-09) once Dukascopy's rate limit allows.
+14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
+    coverage) and present the corrected results (§8.0) with the always-up
+    baseline shown next to every accuracy figure.
 
 ---
 
