@@ -16,6 +16,11 @@ config
 *.keras
 *.parquet
 
+# Hourly pipeline raw/processed data (re-creatable from Dukascopy; keep out of git)
+hourly/data/
+hourly/node_modules/
+hourly/package-lock.json
+
 # OS / editor cruft
 .DS_Store
 .vscode/

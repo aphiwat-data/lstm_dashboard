@@ -1,0 +1,8 @@
+{
+  "name": "gold-lstm-hourly-data",
+  "private": true,
+  "description": "Downloader dependency for the hourly XAU/USD pipeline (see download_dukascopy.py)",
+  "dependencies": {
+    "dukascopy-node": "1.50.0"
+  }
+}

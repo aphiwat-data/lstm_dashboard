@@ -1,0 +1,7 @@
+# Versions used to produce hourly/results/*.json (Python 3.12)
+pandas==3.0.2
+numpy==1.26.4
+scikit-learn==1.9.1
+scipy==1.17.1
+pyarrow==23.0.1
+tensorflow==2.21.0

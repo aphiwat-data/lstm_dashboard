@@ -1,0 +1,86 @@
+{
+  "xauusd": {
+    "instrument": "xauusd",
+    "rows_raw": 137374,
+    "duplicate_timestamps": 0,
+    "invalid_ohlc_rows": 0,
+    "zero_volume_rows": 0,
+    "gaps_gt_1h": 3604,
+    "gap_length_hours_counts": {
+      "2.0": 2317,
+      "50.0": 1090,
+      "4.0": 30,
+      "6.0": 29,
+      "51.0": 26,
+      "74.0": 25,
+      "5.0": 23,
+      "49.0": 19
+    },
+    "largest_gaps": [
+      {
+        "before": "2015-12-27 23:00:00+00:00",
+        "hours": 77.0
+      },
+      {
+        "before": "2020-12-27 23:00:00+00:00",
+        "hours": 77.0
+      },
+      {
+        "before": "2020-04-12 22:00:00+00:00",
+        "hours": 74.0
+      },
+      {
+        "before": "2024-03-31 22:00:00+00:00",
+        "hours": 74.0
+      },
+      {
+        "before": "2022-04-17 22:00:00+00:00",
+        "hours": 74.0
+      }
+    ],
+    "extreme_1bar_moves_gt_5pct": [
+      {
+        "bar_open": "2008-09-18 19:00:00+00:00",
+        "logret": -0.0552
+      },
+      {
+        "bar_open": "2026-01-29 15:00:00+00:00",
+        "logret": -0.0589
+      }
+    ],
+    "rows_clean": 137374,
+    "start": "2004-01-01 00:00:00+00:00",
+    "end": "2026-09-25 10:00:00+00:00",
+    "coverage_warnings": []
+  },
+  "dataset": {
+    "rows": 136773,
+    "start": "2004-01-08 01:00:00+00:00",
+    "end": "2026-09-25 09:00:00+00:00",
+    "n_features": 21,
+    "per_split": {
+      "test": {
+        "rows": 10244,
+        "share_up": 0.5147,
+        "share_up_h4": 0.5291,
+        "share_up_h24": 0.5493,
+        "targets_spanning_market_gap": 0.0436
+      },
+      "train": {
+        "rows": 120642,
+        "share_up": 0.5047,
+        "share_up_h4": 0.5107,
+        "share_up_h24": 0.5264,
+        "targets_spanning_market_gap": 0.0239
+      },
+      "val": {
+        "rows": 5887,
+        "share_up": 0.5264,
+        "share_up_h4": 0.5433,
+        "share_up_h24": 0.5685,
+        "targets_spanning_market_gap": 0.0433
+      }
+    },
+    "feature_nan_share": {}
+  }
+}
