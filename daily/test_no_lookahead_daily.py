@@ -2,8 +2,9 @@
 import numpy as np
 import pandas as pd
 
-from build_daily_dataset import (CPI_DATES, FOMC_DATES, HORIZONS, MACRO_TICKERS, align_macro,
-                                  make_calendar_features, make_features, make_macro_features, make_targets)
+from build_daily_dataset import (COT_PUBLICATION_LAG_DAYS, CPI_DATES, FOMC_DATES, HORIZONS, MACRO_TICKERS,
+                                  _parse_cot_rows, align_macro, make_calendar_features, make_cot_features,
+                                  make_features, make_macro_features, make_targets)
 
 
 def _synthetic_days(n=1500, seed=0):
@@ -134,6 +135,40 @@ def test_fomc_cpi_dates_are_fixed_and_disjoint_from_lookahead():
     assert len(CPI_DATES) == len(set(CPI_DATES))
 
 
+def test_cot_publication_lag_shifts_index_forward():
+    # a report "as of" a Tuesday must not appear at that Tuesday's own date -- it isn't published until
+    # COT_PUBLICATION_LAG_DAYS later, so using the as-of date directly would leak future information.
+    rows = [
+        {"report_date_as_yyyy_mm_dd": "2024-01-02T00:00:00.000", "open_interest_all": "100",
+         "noncomm_positions_long_all": "60", "noncomm_positions_short_all": "40"},
+        {"report_date_as_yyyy_mm_dd": "2024-01-09T00:00:00.000", "open_interest_all": "100",
+         "noncomm_positions_long_all": "50", "noncomm_positions_short_all": "50"},
+    ]
+    out = _parse_cot_rows(rows)
+    assert list(out.index) == [pd.Timestamp("2024-01-02") + pd.Timedelta(days=COT_PUBLICATION_LAG_DAYS),
+                                pd.Timestamp("2024-01-09") + pd.Timedelta(days=COT_PUBLICATION_LAG_DAYS)]
+    assert out["cot_net_pct"].tolist() == [0.2, 0.0]
+
+
+def test_cot_features_are_causal():
+    d = _synthetic_days(n=1500, seed=8)
+    rng = np.random.default_rng(9)
+    weekly = pd.bdate_range("2014-11-01", periods=600, freq="7D")
+    cot = pd.DataFrame({"cot_net_pct": rng.uniform(-0.3, 0.3, len(weekly))}, index=weekly)
+    cut_date = weekly[300]
+    aligned = align_macro(d.index, cot)
+    base = make_cot_features(aligned)
+
+    cot2 = cot.copy()
+    corrupt_pos = weekly.get_indexer([cut_date])[0]
+    cot2.iloc[corrupt_pos:, 0] = rng.uniform(-0.3, 0.3, len(cot2) - corrupt_pos)
+    new = make_cot_features(align_macro(d.index, cot2))
+
+    unaffected = d.index[d.index < cut_date]
+    cols = [c for c in base.columns if c.startswith("f_")]
+    pd.testing.assert_frame_equal(base.loc[unaffected, cols], new.loc[unaffected, cols], check_exact=False, rtol=1e-12, atol=1e-12)
+
+
 if __name__ == "__main__":
     test_features_and_targets_are_causal()
     test_features_are_scale_free()
@@ -143,4 +178,6 @@ if __name__ == "__main__":
     test_days_since_nfp_is_causal_and_resets()
     test_fomc_and_cpi_days_match_known_dates()
     test_fomc_cpi_dates_are_fixed_and_disjoint_from_lookahead()
-    print("OK: no look-ahead, features are scale-free (price + macro + calendar)")
+    test_cot_publication_lag_shifts_index_forward()
+    test_cot_features_are_causal()
+    print("OK: no look-ahead, features are scale-free (price + macro + calendar + COT)")

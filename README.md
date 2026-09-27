@@ -192,6 +192,21 @@ added skill would do. HistGB and ridge simply got worse — plausible overfittin
 either.** Combined with Phase 8, every lever tried on this dataset — more model types, ensembling, and now
 non-price inputs — lands at the same AUC ~0.50 ceiling.
 
+**Addendum 3 (COT positioning added, final)**: also added CFTC Commitment of Traders data — gold's weekly
+net non-commercial (speculator) position as a share of open interest, plus its 52-week z-score and 4-/12-week
+changes — sourced live from CFTC's own Socrata API (`publicreporting.cftc.gov`, dataset `6dca-aqww`, no
+scraping or bot-blocking involved), 1,238 weekly records back to 2003. The report covers positions "as of"
+Tuesday but isn't published until the following Friday, so the feature's availability date is shifted +3 days
+before alignment — the one new causality risk this feature introduced, now covered by its own test. Result:
+LSTM AUC **dropped** to 0.491 (from 0.516 without COT), accuracy 55.2%, p vs. always-up = 0.769 — adding a
+5th feature source made things slightly worse, not better, consistent with added dimensionality diluting the
+365-day training window rather than contributing real signal. Full results in `daily/results/with_cot/`.
+
+**This closes the feature-search line of investigation.** Five independent attempts — ensembling (Phase 8),
+cross-asset/macro, NFP, FOMC+CPI, and COT positioning (Phase 9) — all land in the same AUC 0.45-0.52 band with
+no p-value ever clearing 0.05. The result is reported as a well-instrumented negative result rather than
+pursued further.
+
 **Addendum 1**: also added an NFP (US Non-Farm Payrolls) release-day calendar feature (`--calendar` flag,
 `f_nfp_day`/`f_days_since_nfp` in `daily/build_daily_dataset.py`) on top of the six macro series above — a
 deterministic "first Friday of the month" rule, since `bls.gov` blocks automated access and no other source
@@ -1195,13 +1210,14 @@ that discipline matters most), and teardown instructions are all in
 12. **Refresh the corrected daily results** after new data arrives:
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
     (commands in the script docstrings), commit `daily/results/`.
-13. **Daily-pipeline cross-asset + calendar features: done (Phase 9, both addenda), still null** — DXY,
-    silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates from federalreserve.gov) and CPI (271 dates
-    from bls.gov) all added to the daily model; best result so far is LSTM AUC 0.516, p vs. always-up = 0.304
-    — closer than every other variant but still not significant. The hourly-specific version of cross-asset
-    features (silver, EURUSD, S&P 500 as hourly bars) remains untested, optional if there's time;
-    re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once Dukascopy's rate limit
-    allows.
+13. **Daily-pipeline cross-asset + calendar + COT features: closed, done (Phase 9, all addenda), null** —
+    DXY, silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates), CPI (271 dates) and CFTC Commitment of
+    Traders positioning all added to the daily model; best single result is LSTM AUC 0.516 (macro+NFP+FOMC+CPI,
+    without COT), p vs. always-up = 0.304 — closer than every other variant but never significant; adding COT
+    on top made it worse (AUC 0.491). This line of investigation is considered closed. The hourly-specific
+    version of cross-asset features (silver, EURUSD, S&P 500 as hourly bars) remains untested, optional if
+    there's time; re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
+    Dukascopy's rate limit allows.
 14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
     coverage) and present the corrected results (§8.0) with the always-up
     baseline shown next to every accuracy figure.

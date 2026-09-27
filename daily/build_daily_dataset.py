@@ -41,6 +41,61 @@ MACRO_TICKERS = {
 }
 
 
+COT_API = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"  # CFTC Legacy COT (Socrata), public, no auth
+COT_MARKET = "GOLD - COMMODITY EXCHANGE INC."
+COT_PUBLICATION_LAG_DAYS = 3  # report is "as of" Tuesday but not released until the following Friday
+
+
+def _parse_cot_rows(rows: list[dict]) -> pd.DataFrame:
+    """Pure transform, unit-testable without a network call. Index is the AVAILABILITY date (report date
+    + COT_PUBLICATION_LAG_DAYS), not the report's own "as of" date -- the report covers positions as of
+    Tuesday but the CFTC does not publish it until the following Friday, so using the Tuesday date
+    directly would leak 3 days of future information into the alignment."""
+    df = pd.DataFrame(rows)
+    report_date = pd.to_datetime(df["report_date_as_yyyy_mm_dd"]).dt.tz_localize(None)
+    oi = df["open_interest_all"].astype(float).to_numpy()
+    long_ = df["noncomm_positions_long_all"].astype(float).to_numpy()
+    short_ = df["noncomm_positions_short_all"].astype(float).to_numpy()
+    avail_date = (report_date + pd.Timedelta(days=COT_PUBLICATION_LAG_DAYS)).to_numpy()
+    out = pd.DataFrame({"cot_net_pct": (long_ - short_) / oi}, index=pd.DatetimeIndex(avail_date))
+    return out[~out.index.duplicated(keep="last")].sort_index()
+
+
+def fetch_cot(cache: Path | None = None) -> pd.DataFrame:
+    """Weekly CFTC Commitments of Traders positioning for COMEX gold: net non-commercial (speculator)
+    position as a share of open interest, the standard sentiment/positioning proxy."""
+    if cache is not None and cache.exists():
+        return pd.read_parquet(cache)
+    import requests
+
+    params = {
+        "$where": f"market_and_exchange_names='{COT_MARKET}'",
+        "$select": "report_date_as_yyyy_mm_dd,open_interest_all,noncomm_positions_long_all,noncomm_positions_short_all",
+        "$order": "report_date_as_yyyy_mm_dd ASC",
+        "$limit": 5000,
+    }
+    rows = requests.get(COT_API, params=params, timeout=30).json()
+    out = _parse_cot_rows(rows)
+    if cache is not None:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        out.to_parquet(cache)
+    return out
+
+
+def make_cot_features(aligned: pd.DataFrame) -> pd.DataFrame:
+    """The net-positioning ratio is already bounded/stationary (never a raw unbounded level), so unlike the
+    price-based macro features this one IS used at its own level, plus a rolling z-score (extreme
+    positioning is the classic contrarian-signal framing) and short/medium-term changes."""
+    f = pd.DataFrame(index=aligned.index)
+    s = aligned["cot_net_pct"]
+    f["f_cot_net_pct"] = s
+    roll = s.rolling(260, min_periods=52)  # ~52 trading weeks
+    f["f_cot_net_z_52w"] = (s - roll.mean()) / roll.std()
+    f["f_cot_net_chg_4w"] = s.diff(20)   # ~4 trading weeks
+    f["f_cot_net_chg_12w"] = s.diff(60)  # ~12 trading weeks
+    return f
+
+
 def load_silver(src: str) -> pd.DataFrame:
     if src.startswith("s3://"):
         import boto3
@@ -284,7 +339,8 @@ def assign_splits(index: pd.DatetimeIndex) -> pd.Series:
     return s
 
 
-def build(src: str, use_macro: bool = False, macro_cache: Path | None = None, use_calendar: bool = False) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+def build(src: str, use_macro: bool = False, macro_cache: Path | None = None, use_calendar: bool = False,
+          use_cot: bool = False, cot_cache: Path | None = None) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """Returns (labelled dataset, report, latest feature rows). The latest rows include the newest day, whose
     next-day label does not exist yet, so a forecast for tomorrow can be made from them."""
     d, rep = clean_and_report(load_silver(src))
@@ -299,6 +355,12 @@ def build(src: str, use_macro: bool = False, macro_cache: Path | None = None, us
     if use_calendar:
         feats_all = feats_all.join(make_calendar_features(d.index))
         rep["calendar"]["note"] = "NFP (first-Friday-of-month rule) + FOMC/CPI from fixed historical date lists (federalreserve.gov, bls.gov)"
+    rep["cot"] = {"enabled": use_cot}
+    if use_cot:
+        cot_raw = fetch_cot(cot_cache)
+        aligned_cot = align_macro(d.index, cot_raw)  # same as-of backward join as macro/cross-asset data
+        feats_all = feats_all.join(make_cot_features(aligned_cot))
+        rep["cot"]["source"] = "CFTC Legacy COT report (Socrata 6dca-aqww), gold non-commercial net % of open interest"
     feat = [c for c in feats_all.columns if c.startswith("f_")]
     latest = feats_all.dropna(subset=feat).join(d["close"].rename("meta_close")).tail(120)
     df = feats_all.join(make_targets(d))
@@ -322,9 +384,12 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=Path("data/processed"))
     ap.add_argument("--macro", action="store_true", help="add cross-asset/macro features (DXY, silver, SPX, VIX, 10Y yield, TIP)")
     ap.add_argument("--macro-cache", type=Path, default=Path("data/macro_cache.parquet"))
-    ap.add_argument("--calendar", action="store_true", help="add NFP release-day calendar features")
+    ap.add_argument("--calendar", action="store_true", help="add NFP/FOMC/CPI release-day calendar features")
+    ap.add_argument("--cot", action="store_true", help="add CFTC Commitment of Traders (gold positioning) features")
+    ap.add_argument("--cot-cache", type=Path, default=Path("data/cot_cache.parquet"))
     args = ap.parse_args()
-    df, rep, latest = build(args.silver, use_macro=args.macro, macro_cache=args.macro_cache if args.macro else None, use_calendar=args.calendar)
+    df, rep, latest = build(args.silver, use_macro=args.macro, macro_cache=args.macro_cache if args.macro else None,
+                             use_calendar=args.calendar, use_cot=args.cot, cot_cache=args.cot_cache if args.cot else None)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(args.out_dir / "xauusd_d1_features.parquet")
     latest.to_parquet(args.out_dir / "xauusd_d1_latest_features.parquet")
