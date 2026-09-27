@@ -106,6 +106,22 @@ def align_macro(gold_index: pd.DatetimeIndex, macro: pd.DataFrame) -> pd.DataFra
     return out
 
 
+def make_calendar_features(index: pd.DatetimeIndex) -> pd.DataFrame:
+    """NFP (US Non-Farm Payrolls) release-day proxy: BLS releases NFP on the first Friday of each month
+    (a well-documented, deterministic convention, with rare historical exceptions e.g. government-shutdown
+    delays that this rule does not special-case). CPI and FOMC dummies are deliberately NOT included here:
+    bls.gov blocks automated access and no other source of the exact historical release-date list could be
+    verified reliably enough to trust in a research dataset, so they're left as a documented gap (README
+    §12) rather than a guessed reconstruction."""
+    f = pd.DataFrame(index=index)
+    is_first_friday = (index.dayofweek == 4) & (index.day <= 7)
+    f["f_nfp_day"] = is_first_friday.astype(float)
+    pos = np.arange(len(index), dtype=float)
+    last_nfp_pos = pd.Series(np.where(is_first_friday, pos, np.nan), index=index).ffill().to_numpy()
+    f["f_days_since_nfp"] = pos - last_nfp_pos  # NaN until the first NFP day in the sample; causal (backward-only)
+    return f
+
+
 def make_macro_features(aligned: pd.DataFrame, gold_close: pd.Series) -> pd.DataFrame:
     """Same convention as make_features: every column is a return/ratio/z-score (never a raw level), computed
     only from `aligned` rows <= t, so it's causal and scale-free the same way the price-only features are."""
@@ -171,7 +187,7 @@ def assign_splits(index: pd.DatetimeIndex) -> pd.Series:
     return s
 
 
-def build(src: str, use_macro: bool = False, macro_cache: Path | None = None) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+def build(src: str, use_macro: bool = False, macro_cache: Path | None = None, use_calendar: bool = False) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """Returns (labelled dataset, report, latest feature rows). The latest rows include the newest day, whose
     next-day label does not exist yet, so a forecast for tomorrow can be made from them."""
     d, rep = clean_and_report(load_silver(src))
@@ -182,6 +198,10 @@ def build(src: str, use_macro: bool = False, macro_cache: Path | None = None) ->
         aligned = align_macro(d.index, macro_raw)
         feats_all = feats_all.join(make_macro_features(aligned, d["close"]))
         rep["macro"]["tickers"] = MACRO_TICKERS
+    rep["calendar"] = {"enabled": use_calendar}
+    if use_calendar:
+        feats_all = feats_all.join(make_calendar_features(d.index))
+        rep["calendar"]["note"] = "NFP (first-Friday-of-month) only; CPI/FOMC skipped, no reliable historical source (README §12)"
     feat = [c for c in feats_all.columns if c.startswith("f_")]
     latest = feats_all.dropna(subset=feat).join(d["close"].rename("meta_close")).tail(120)
     df = feats_all.join(make_targets(d))
@@ -205,8 +225,9 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=Path("data/processed"))
     ap.add_argument("--macro", action="store_true", help="add cross-asset/macro features (DXY, silver, SPX, VIX, 10Y yield, TIP)")
     ap.add_argument("--macro-cache", type=Path, default=Path("data/macro_cache.parquet"))
+    ap.add_argument("--calendar", action="store_true", help="add NFP release-day calendar features")
     args = ap.parse_args()
-    df, rep, latest = build(args.silver, use_macro=args.macro, macro_cache=args.macro_cache if args.macro else None)
+    df, rep, latest = build(args.silver, use_macro=args.macro, macro_cache=args.macro_cache if args.macro else None, use_calendar=args.calendar)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(args.out_dir / "xauusd_d1_features.parquet")
     latest.to_parquet(args.out_dir / "xauusd_d1_latest_features.parquet")

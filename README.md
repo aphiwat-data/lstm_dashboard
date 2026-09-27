@@ -192,6 +192,13 @@ added skill would do. HistGB and ridge simply got worse — plausible overfittin
 either.** Combined with Phase 8, every lever tried on this dataset — more model types, ensembling, and now
 non-price inputs — lands at the same AUC ~0.50 ceiling.
 
+**Addendum**: also added an NFP (US Non-Farm Payrolls) release-day calendar feature (`--calendar` flag,
+`f_nfp_day`/`f_days_since_nfp` in `daily/build_daily_dataset.py`) on top of the six macro series above — a
+deterministic "first Friday of the month" rule, since `bls.gov` blocks automated access and no other source
+of the exact historical CPI/FOMC release-date list could be verified reliably enough to trust in a research
+dataset (those two remain untested for that reason, not by choice). Result: still null (LSTM AUC 0.504,
+HistGB classifier AUC 0.496 vs. chance) — full results in `daily/results/with_macro_calendar/`.
+
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
 2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
@@ -1172,11 +1179,12 @@ that discipline matters most), and teardown instructions are all in
 12. **Refresh the corrected daily results** after new data arrives:
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
     (commands in the script docstrings), commit `daily/results/`.
-13. **Daily-pipeline cross-asset features: done (Phase 9), still null** — DXY, silver, S&P 500, VIX, 10Y
-    yield and TIP added to the daily model; AUC stayed at ~0.50. The hourly-specific version of this
-    (silver, EURUSD, S&P 500 as hourly bars) and economic-calendar dummies (FOMC/CPI/NFP) remain untested,
-    optional if there's time; re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09)
-    once Dukascopy's rate limit allows.
+13. **Daily-pipeline cross-asset + NFP calendar features: done (Phase 9), still null** — DXY, silver, S&P
+    500, VIX, 10Y yield, TIP, and an NFP release-day dummy added to the daily model; AUC stayed at ~0.50.
+    CPI/FOMC dummies remain untested — `bls.gov` blocks automated access and no other historical release-date
+    source could be verified reliably enough to trust. The hourly-specific version of cross-asset features
+    (silver, EURUSD, S&P 500 as hourly bars) also remains untested, optional if there's time; re-download the
+    four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once Dukascopy's rate limit allows.
 14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
     coverage) and present the corrected results (§8.0) with the always-up
     baseline shown next to every accuracy figure.

@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from build_daily_dataset import HORIZONS, MACRO_TICKERS, align_macro, make_features, make_macro_features, make_targets
+from build_daily_dataset import HORIZONS, MACRO_TICKERS, align_macro, make_calendar_features, make_features, make_macro_features, make_targets
 
 
 def _synthetic_days(n=1500, seed=0):
@@ -93,9 +93,32 @@ def test_macro_features_are_scale_free():
     pd.testing.assert_frame_equal(a[cols], b[cols], check_exact=False, rtol=1e-9, atol=1e-9)
 
 
+def test_nfp_day_matches_known_dates():
+    idx = pd.bdate_range("2025-01-01", "2025-12-31")
+    f = make_calendar_features(idx)
+    known_first_fridays = ["2025-01-03", "2025-02-07", "2025-03-07", "2025-06-06", "2025-08-01", "2025-12-05"]
+    for d in known_first_fridays:
+        assert f.loc[d, "f_nfp_day"] == 1.0, d
+    assert f["f_nfp_day"].sum() == 12  # exactly one per month
+
+
+def test_days_since_nfp_is_causal_and_resets():
+    idx = pd.bdate_range("2025-01-01", "2025-03-31")
+    f = make_calendar_features(idx)
+    d = f["f_days_since_nfp"]
+    assert d.loc["2025-01-03"] == 0.0  # NFP day itself
+    assert d.loc["2025-01-06"] == 1.0  # next trading day, one bar past NFP
+    # corrupting the far future must not change days-since on an earlier date (pure function of the date itself)
+    idx2 = pd.bdate_range("2025-01-01", "2025-12-31")  # extend the tail; earlier rows must be identical
+    f2 = make_calendar_features(idx2)
+    pd.testing.assert_series_equal(f["f_days_since_nfp"], f2["f_days_since_nfp"].loc[f.index])
+
+
 if __name__ == "__main__":
     test_features_and_targets_are_causal()
     test_features_are_scale_free()
     test_macro_alignment_and_features_are_causal()
     test_macro_features_are_scale_free()
-    print("OK: no look-ahead, features are scale-free (price + macro)")
+    test_nfp_day_matches_known_dates()
+    test_days_since_nfp_is_causal_and_resets()
+    print("OK: no look-ahead, features are scale-free (price + macro + calendar)")
