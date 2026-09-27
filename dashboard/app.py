@@ -299,43 +299,56 @@ with st.sidebar:
         )
 
 # ---------------------------------------------------------------------------
-# Header + KPI row (always visible, above the tabs)
+# Header + hero forecast (always visible, above the tabs) — the forecast is
+# the project's headline output, so it gets a dedicated, visually dominant
+# gauge rather than sharing equal billing with the secondary KPIs.
 # ---------------------------------------------------------------------------
 st.title("Next-Day Gold Price Forecasting")
+
+
+def render_hero_forecast(latest_close: float, pred_close: float, lo: float, hi: float, as_of: str) -> None:
+    up = pred_close >= latest_close
+    fig_hero = go.Figure(go.Indicator(
+        mode="number+delta+gauge",
+        value=pred_close,
+        number={"prefix": "$", "valueformat": ",.2f", "font": {"size": 34}},
+        delta={"reference": latest_close, "valueformat": ",.2f", "increasing": {"color": "#3DBE6C"}, "decreasing": {"color": "#E34948"}},
+        domain={"x": [0.05, 0.97], "y": [0.1, 0.9]},
+        gauge={
+            "shape": "bullet", "axis": {"range": [lo, hi], "tickprefix": "$", "tickfont": {"size": 11}},
+            "bar": {"color": COLORS["LSTM Walk-Forward"], "thickness": 0.5},
+            "steps": [{"range": [lo, hi], "color": "rgba(42,120,214,0.12)"}],
+            "threshold": {"line": {"color": "#8a8a86", "width": 2}, "thickness": 0.9, "value": latest_close},
+        },
+    ))
+    fig_hero.update_layout(height=200, margin=dict(t=10, b=10, l=10, r=90))
+    st.plotly_chart(fig_hero, use_container_width=True, config={"displayModeBar": False})
+    st.caption(
+        f"{'▲' if up else '▼'} vs. today's close **\\${latest_close:,.2f}** · 90% range **\\${lo:,.2f} – \\${hi:,.2f}** "
+        f"(gray line = today's close) · as of {as_of}"
+    )
+
+
 if v2 is not None:
     lf, m2 = v2["latest_forecast"], v2["models"]
     up2, l2 = m2["drift"]["direction_from_sign"]["always_up_acc"], m2["lstm"]
     acc2 = l2["direction_from_head"]["acc"]
-    st.caption(f"LSTM time-series model (walk-forward, return target) · data through {lf['as_of_date']} · forecast generated {lf['generated_at'][:10]}")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Latest Close", f"${lf['latest_close']:,.2f}")
-    c2.metric("Next-Day Forecast", f"${lf['predicted_next_close']:,.2f}", f"{lf['predicted_next_close'] - lf['latest_close']:+,.2f}")
-    c2.caption(f"90% range: \\${lf['interval_90_close'][0]:,.2f} – \\${lf['interval_90_close'][1]:,.2f}")
-    c3.metric("LSTM Direction Accuracy (test)", f"{acc2:.1%}", f"{(acc2 - up2) * 100:+.1f} pt vs always-up ({up2:.1%})")
-    c4.metric("LSTM MAE (test)", f"${l2['mae_usd']:,.2f}", f"{l2['mae_usd'] - l2['naive_mae_usd']:+.2f} vs no-change", delta_color="inverse")
-
-    st.info(
-        "On daily data the LSTM cannot be told apart from 'always up' or from a no-change forecast (see Model "
-        "Evaluation), so read the forecast as roughly today's close within the range shown, not as a trading "
-        "signal. The much larger errors of the original price-level pipeline came from a scale problem and are "
-        "kept for the record under Model Evaluation > Original pipeline."
+    render_hero_forecast(lf["latest_close"], lf["predicted_next_close"], *lf["interval_90_close"], lf["as_of_date"])
+    st.caption(
+        "Read this as roughly today's close within the range shown, not a trading signal — the LSTM cannot be "
+        "told apart from 'always up' on this data (see Model Evaluation)."
     )
+
+    c1, c2 = st.columns(2)
+    c1.metric("LSTM Direction Accuracy (test)", f"{acc2:.1%}", f"{(acc2 - up2) * 100:+.1f} pt vs always-up ({up2:.1%})")
+    c2.metric("LSTM MAE (test)", f"${l2['mae_usd']:,.2f}", f"{l2['mae_usd'] - l2['naive_mae_usd']:+.2f} vs no-change", delta_color="inverse")
 else:
-    st.caption(f"LSTM time-series model · pipeline data current as of {latest_row['date'].date()}")
+    render_hero_forecast(latest_row["close"], next_day_pred, forecast_lo, forecast_hi, str(latest_row["date"].date()))
+    st.caption("Treat this as a directional signal, not a precise price target — the model under-predicts sharp upward moves (Model Evaluation).")
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Latest Close", f"${latest_row['close']:,.2f}")
-    c2.metric("Next-Day Forecast", f"${next_day_pred:,.2f}", f"{delta:+,.2f}")
-    c2.caption(f"90% range: \\${forecast_lo:,.2f} – \\${forecast_hi:,.2f}")
-    c3.metric("LSTM Directional Accuracy", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
-    c4.metric("LSTM MAE (test period)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
-
-    st.info(
-        "The model tends to under-predict during sharp upward price moves (see the "
-        "Prediction Error panel in the Model Evaluation tab). Treat the forecast "
-        "above as a directional signal rather than a precise price target."
-    )
+    c1, c2 = st.columns(2)
+    c1.metric("LSTM Directional Accuracy", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
+    c2.metric("LSTM MAE (test period)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
 
 with st.expander("Daily automation forecast (Lambda inference-refresh)", expanded=False):
     st.caption("Note: this automation runs the ORIGINAL price-level model; it has not been updated to the corrected return-target model.")
@@ -777,154 +790,91 @@ with tab_vol:
 # ---------------------------------------------------------------------------
 with tab_method:
     st.subheader("Methodology")
+    st.caption("Why the pipeline is built this way — click any item to expand.")
 
-    if v2 is not None:
-        st.markdown("**What changed after the review (v2), and why**")
-        st.write(
-            "The original notebooks predicted the next-day close PRICE from price-level inputs (close, moving averages, USD momentum) "
-            "scaled with statistics from the training period. Gold rose far above that range in 2025-26, so inputs and targets left the "
-            "range the scalers and the model had seen, and the LSTM's error exploded (MAE about \\$639 vs about \\$51 for trivial baselines). "
-            "The fix: every feature is a return, ratio or oscillator (a test multiplies all prices by a constant and checks that no feature "
-            "changes; another edits future prices and checks that past features do not), the target is the next-day log-return converted "
-            "back to a price, and the scalers are re-fit inside every walk-forward window."
-        )
-        st.write(
-            "Evaluation was also tightened: results are compared with the 'always up' rate (gold trended up, so that rule already scores "
-            "above 50%), reported with 95% confidence intervals, and price errors are tested against a no-change forecast (Diebold-Mariano). "
-            "The old directional-accuracy metric compared day-to-day changes of the predictions with those of the actual prices; the new one "
-            "compares the sign of the predicted return with the sign of the actual next-day return. Static-training variants (window 20 or 60 "
-            "days, 1- and 5-day horizons, training from 2012) and hourly-data experiments (1, 4 and 24 bars, bid and mid prices) reach the same "
-            "conclusion; their results are in the repository (daily/results, hourly/results)."
-        )
-        st.write(
-            "**Also tested and still null**: adding cross-asset/macro features (US Dollar Index, silver, S&P 500, VIX, the 10-year "
-            "Treasury yield, and the TIP ETF as a real-yield proxy) to the daily model, on the theory that gold's own price history might "
-            "simply be exhausted as a signal source. It was: the LSTM's raw accuracy moved from 51.9% to 55.7% (versus 55.9% always-up), "
-            "but its AUC stayed at chance (0.452 to 0.501) and it became *less* distinguishable from the always-up rule (p = 0.097 to 0.922), "
-            "not more — checking the predictions directly shows the model still predicts 'up' on 86-89% of days regardless of the macro "
-            "inputs, so the closer accuracy number is the same trend-mimicking behavior, not new skill. HistGB and ridge got worse with the "
-            "extra features. Full comparison in `daily/results/with_macro/`."
-        )
-        st.divider()
-        st.caption(
-            "The sections below describe the original pipeline (60-day window, scalers fit on the training period, price-level target) "
-            "and are kept for the record; the changes in v2 are summarized above."
-        )
-
-    st.markdown("**Why trading volume isn't a model feature, even though it's in the raw data**")
-    if "volume" in df.columns:
-        vol = pd.to_numeric(df["volume"], errors="coerce")
-        n_total = len(vol)
-        n_unreliable = int((vol.isna() | (vol <= 0)).sum())
-        pct_unreliable = n_unreliable / n_total * 100
-        st.write(
-            f"Volume is part of the raw OHLCV data `yfinance` returns and it "
-            f"survives into this Gold-layer table untouched, but "
-            f"**{pct_unreliable:.1f}% of trading days ({n_unreliable:,} of "
-            f"{n_total:,}) show zero or missing volume** — long, multi-year "
-            f"stretches with essentially nothing reported, punctuated by "
-            f"isolated spikes (chart below). This is a known characteristic "
-            f"of Yahoo Finance's continuous-futures volume reporting for "
-            f"GC=F specifically — inconsistent across contract rolls and "
-            f"much of the older history — not a defect introduced by this "
-            f"pipeline's own cleaning. It's also a concrete example of why a "
-            f"missing-value check alone isn't sufficient: `isnull().sum()` "
-            f"only counts nulls, and would report this column as far "
-            f"healthier than it actually is if most of the gaps are stored "
-            f"as literal zeros rather than nulls — the problem only becomes "
-            f"visible by plotting the distribution, which is exactly why "
-            f"`03_Feature_Engineering.ipynb` derives every feature from "
-            f"`close` alone (§ Feature Engineering in the main README) "
-            f"rather than including volume."
-        )
-        fig_volq = go.Figure(go.Bar(
-            x=df["date"], y=vol, marker_color=COLORS["volume"],
-            marker_line_width=0,
-        ))
-        fig_volq.update_layout(
-            height=300, margin=dict(t=10, b=10),
-            yaxis_title="Volume", xaxis=dict(rangeslider=dict(visible=True)),
-        )
-        st.plotly_chart(fig_volq, use_container_width=True)
-    else:
-        st.info(
-            "The `volume` column isn't present in this Gold-layer table — "
-            "it was excluded from feature engineering regardless (every "
-            "engineered feature derives from `close` alone; see the main "
-            "README's Feature Engineering section for the full reasoning)."
-        )
-
-    st.markdown("**Why a chronological split, not a random one**")
-    st.write(
-        f"The dataset is split at {SPLIT_DATE} — every row on or before that "
-        "date is training data, everything after is test data. A random "
-        "shuffle-then-split would let the model train on days that occur "
-        "*after* a test day it is being evaluated on, silently inflating "
-        "accuracy. This is a textbook instance of data leakage in time-series "
-        "modeling, and a chronological split is the direct fix."
-    )
-
-    st.markdown("**Why the scalers are fit on the training set only**")
-    st.write(
-        "Both the feature scaler and the target scaler are `StandardScaler` "
-        "instances fit exclusively on the training partition, then applied "
-        "unchanged to the test partition. Fitting on the combined or full "
-        "dataset would leak the test set's own mean and variance into "
-        "preprocessing — a subtler, easy-to-miss form of the same leakage "
-        "problem the chronological split addresses."
-    )
-
-    st.markdown("**Why a 60-day sliding window**")
-    st.write(
-        f"Each training sample is built from the prior {SEQ_LEN} days of "
-        "engineered features to predict the next day's close. Sixty days "
-        "gives the model roughly a quarter of trading history per "
-        "prediction — enough for the slower-moving features (the 30- and "
-        "60-day moving averages) to carry meaningful signal within the "
-        "window itself."
-    )
-
-    st.markdown("**Why walk-forward retraining instead of training once**")
-    st.write(
-        "The test period reaches gold prices well above anything seen "
-        "during training. A model trained once on historical data has no "
-        "basis for predicting price behavior at levels it never observed. "
-        "Walk-forward retraining re-fits the model every 7 simulated "
-        "trading days on the most recent 365-day window, letting it "
-        "gradually absorb new price levels as they actually occur, rather "
-        "than staying frozen at whatever it learned once."
-    )
-
-    st.markdown("**Why Directional Accuracy is reported alongside MAE/RMSE**")
-    st.write(
-        "MAE and RMSE measure error magnitude in price terms, but say "
-        "nothing about whether the model calls the right direction. A model "
-        "can score well on MAE simply because prices rarely move much "
-        "day-to-day, while being no better than a coin flip at predicting "
-        "up-vs-down. Directional Accuracy exposes that distinction directly "
-        "— see Model Evaluation for how sharply the two metrics disagree "
-        "on which model is actually \"better\"."
-    )
-
-    st.markdown("**Known limitation**")
     if v2 is not None:
         lstm2 = v2["models"]["lstm"]
-        st.write(
-            "No forecasting edge was found. After correcting the scale problem the LSTM's price error is at the no-change level and its "
-            f"direction accuracy ({lstm2['direction_from_head']['acc']:.1%}) is not distinguishable from always-up "
-            f"({v2['models']['drift']['direction_from_sign']['always_up_acc']:.1%}). With {v2['protocol']['n_test']} test days the confidence "
-            "interval is wide (about +/-5 points), features come from price alone (no macro or news data), and one instrument was tested, so "
-            "the forecast should be read as 'about today's close within the interval shown', not as a trading signal. The earlier claim that "
-            "the model under-predicts the 2025-26 rally while calling direction better than the baselines came from the price-level scale "
-            "problem and from a non-standard direction metric."
+        st.markdown(
+            f"**Bottom line:** no forecasting edge was found. The LSTM's direction accuracy "
+            f"({lstm2['direction_from_head']['acc']:.1%}) is not distinguishable from the trivial "
+            f"'always up' rule ({v2['models']['drift']['direction_from_sign']['always_up_acc']:.1%}). "
+            "Read the forecast as roughly today's close, not a trading signal."
         )
-    else:
+
+        with st.expander("What changed after the review, and why"):
+            st.write(
+                "The original notebooks predicted the next-day close PRICE from price-level inputs, scaled with training-period "
+                "statistics. Gold rose far above that range in 2025-26, so the LSTM's error exploded (MAE about \\$639 vs \\$51 for "
+                "trivial baselines). Fix: every feature is a return/ratio/oscillator, the target is a log-return, and scalers are "
+                "re-fit inside every walk-forward window."
+            )
+            st.write(
+                "Evaluation was also tightened: results are compared against the 'always up' rate (gold trended up, so that rule "
+                "already scores above 50%) with 95% confidence intervals, and price errors are tested against a no-change forecast "
+                "(Diebold-Mariano)."
+            )
+
+        with st.expander("Also tested, still null: macro, calendar and positioning features"):
+            st.caption(
+                "Five independent additions to the LSTM, identical test period and protocol throughout. AUC never leaves the "
+                "0.45-0.52 band and no p-value clears 0.05 — checked directly, the model predicts 'up' on 85-89% of days "
+                "regardless of which features it gets, which is why accuracy moves while AUC does not."
+            )
+            phase9 = pd.DataFrame([
+                {"Feature set": "Price history only", "Direction Acc.": "51.9%", "AUC": 0.452, "p vs always-up": 0.097},
+                {"Feature set": "+ cross-asset/macro (6 series)", "Direction Acc.": "55.7%", "AUC": 0.501, "p vs always-up": 0.922},
+                {"Feature set": "+ NFP calendar", "Direction Acc.": "55.2%", "AUC": 0.504, "p vs always-up": 0.769},
+                {"Feature set": "+ FOMC + CPI calendar", "Direction Acc.": "58.5%", "AUC": 0.516, "p vs always-up": 0.304},
+                {"Feature set": "+ CFTC COT positioning", "Direction Acc.": "55.2%", "AUC": 0.491, "p vs always-up": 0.769},
+            ]).set_index("Feature set")
+            st.dataframe(phase9, use_container_width=True)
+            st.caption("Full results: `daily/results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/`, `with_cot/`.")
+
+        st.caption("Sections below describe the original pipeline (60-day window, price-level target), kept for the record.")
+
+    with st.expander("Why trading volume isn't a model feature"):
+        if "volume" in df.columns:
+            vol = pd.to_numeric(df["volume"], errors="coerce")
+            n_total = len(vol)
+            n_unreliable = int((vol.isna() | (vol <= 0)).sum())
+            pct_unreliable = n_unreliable / n_total * 100
+            st.write(
+                f"**{pct_unreliable:.1f}% of trading days ({n_unreliable:,} of {n_total:,}) show zero or missing volume** — a known "
+                "gap in Yahoo Finance's continuous-futures volume reporting for GC=F, not a defect in this pipeline. Every engineered "
+                "feature is derived from `close` alone instead."
+            )
+            fig_volq = go.Figure(go.Bar(x=df["date"], y=vol, marker_color=COLORS["volume"], marker_line_width=0))
+            fig_volq.update_layout(height=280, margin=dict(t=10, b=10), yaxis_title="Volume", xaxis=dict(rangeslider=dict(visible=True)))
+            st.plotly_chart(fig_volq, use_container_width=True)
+        else:
+            st.caption("The `volume` column isn't present in this table — excluded from feature engineering regardless.")
+
+    with st.expander("Why a chronological split, not a random one"):
         st.write(
-            "The LSTM produces smoother predictions than the actual series and "
-            "systematically under-predicts the magnitude of sudden upward "
-            "moves during the 2025–2026 rally (visualized in the Prediction "
-            "Error panel, Model Evaluation tab). It still calls direction "
-            "correctly more often than the baselines or random chance — it "
-            "understates *how much* the price will move, not *whether* it will "
-            "rise."
+            f"Split at {SPLIT_DATE}: everything before is training, everything after is test. A random shuffle would let the model "
+            "train on days *after* a test day it's evaluated on — a textbook data leak."
+        )
+
+    with st.expander("Why the scalers are fit on the training set only"):
+        st.write(
+            "Both scalers are fit exclusively on the training partition. Fitting on the full dataset would leak the test set's own "
+            "mean/variance into preprocessing — a subtler form of the same leakage the chronological split prevents."
+        )
+
+    with st.expander("Why a 60-day sliding window"):
+        st.write(
+            f"Each sample uses the prior {SEQ_LEN} days of features — enough for the slower moving averages (30-, 60-day) to carry "
+            "meaningful signal within the window itself."
+        )
+
+    with st.expander("Why walk-forward retraining instead of training once"):
+        st.write(
+            "The test period reaches gold prices never seen in training. Retraining every 7 days on the latest 365-day window lets "
+            "the model absorb new price levels as they occur, instead of staying frozen."
+        )
+
+    with st.expander("Why Directional Accuracy is reported alongside MAE/RMSE"):
+        st.write(
+            "MAE/RMSE measure error magnitude but say nothing about calling direction — a model can score well on MAE simply "
+            "because prices rarely move much day-to-day, while being no better than a coin flip on up-vs-down."
         )
