@@ -32,7 +32,7 @@ also visible in the commit history.
 |---|---|
 | Does the LSTM beat a trivial baseline at next-day direction? | **No.** Daily: 51.9% vs "always up" 55.9% (test 2025-01-09 to 2026-09-18, n=424). |
 | Does hourly data help (1, 4 and 24 bars ahead)? | **No.** Accuracy about 50–54% vs "always up" 51.5% / 52.9% / 55.1%; AUC 0.50–0.52. |
-| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, and not by combining models.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52; ensembling them cannot manufacture a signal that none of them has. "Always up" alone reaches 56% at 1 day, 65.8% at 20 days and 74.2% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
+| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, not by combining models, and not by adding macro/cross-asset inputs.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52 on price history alone; adding DXY/silver/S&P 500/VIX/yields/TIP (Phase 9) still lands at AUC ~0.50. Ensembling or feeding in more inputs cannot manufacture a signal that none of them has. "Always up" alone reaches 56% at 1 day, 65.8% at 20 days and 74.2% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
 | Is the price forecast usable? | It matches a no-change forecast (daily MAE \$47.42 vs \$47.27). Read it as "about today's close, within the interval". |
 | What was the big bug? | A price-level target and price-level inputs with train-only scalers: once gold left the training range in 2025-26, MAE reached ≈ \$640. Fixed with a return target and scale-free features. |
 
@@ -157,12 +157,48 @@ pinned down before it is a meaningful target.
   NFP), the US dollar index, bond yields, COT positioning — and hourly cross-asset features (§12). Expected
   effect size is small; there is no basis in what we have tried to expect it to reach 70%.
 
+### Phase 9: testing cross-asset/macro features (daily) — still null
+
+Phase 8 named the untested lever ("inputs outside price history... expected effect size is small; no basis
+to expect it to reach 70%") and left it open. Tested it directly: added six cross-asset/macro series to the
+daily pipeline via `yfinance` — US Dollar Index (`DX-Y.NYB`), silver (`SI=F`), S&P 500 (`^GSPC`), VIX
+(`^VIX`), the 10-year Treasury yield (`^TNX`), and the TIP ETF (`TIP`, an inverse real-yield proxy) — each
+turned into 18 new return/change/z-score features (never raw levels, same convention as the price-only
+features), as-of aligned onto gold's own trading calendar so a macro market's holiday can only look
+backward, never leak a future value. Causality and scale-invariance are covered by two new tests in
+`daily/test_no_lookahead_daily.py` (`test_macro_alignment_and_features_are_causal`,
+`test_macro_features_are_scale_free`), same style as the existing price-feature tests. Code:
+`daily/build_daily_dataset.py --macro`; full before/after results in `daily/results/` vs.
+`daily/results/with_macro/`.
+
+Re-ran the identical walk-forward protocol (retrain every 7 days on the last 365, same test window
+2025-01-09 to 2026-09-18, n=424) on the exact same rows, features-added-only:
+
+| Model | Acc (price-only → +macro) | AUC (price-only → +macro) | p vs always-up (price-only → +macro) |
+|---|---|---|---|
+| LSTM | 51.9% → **55.7%** | 0.452 → 0.501 | 0.097 → **0.922** |
+| HistGB classifier | 53.5% → 50.5% | 0.500 → 0.489 | 0.329 → 0.028 |
+| Ridge | 49.5% → 48.8% | – | 0.009 → 0.004 |
+
+The LSTM's accuracy number moved closer to the 55.9% always-up rate, which looks like an improvement until
+the mechanism is checked directly (Lessons #4 below): its predicted-`p_up` distribution shows it still
+predicts "up" on 86-89% of test days regardless of whether macro inputs are present (baseline 89.4%, +macro
+85.6%), and the test period itself is 55.9% up days — so a model that mostly says "up" scores well on
+accuracy in a trending window by construction, independent of any real signal. AUC (which doesn't reward
+guessing the majority class) stayed at chance in both versions, and the p-value against the trivial
+always-up rule got *less* significant (0.097 → 0.922) rather than more, which is the opposite of what real
+added skill would do. HistGB and ridge simply got worse — plausible overfitting from 34 features against a
+365-day retraining window. **Conclusion: no evidence of real skill gained from macro/cross-asset features
+either.** Combined with Phase 8, every lever tried on this dataset — more model types, ensembling, and now
+non-price inputs — lands at the same AUC ~0.50 ceiling.
+
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
 2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
    use n / horizon when labels overlap.
 3. Tests must be able to fail: inject a leak on purpose and check the test catches it.
-4. A too-good result is a bug until its mechanism is explained (here: bid-ask spread around the daily break).
+4. A too-good result is a bug until its mechanism is explained (here: bid-ask spread around the daily break;
+   also Phase 9's accuracy-without-AUC gain, explained by the model mostly predicting the majority class).
 5. Verify inputs, not just models: silent partial downloads, invalid OHLC rows, columns that contain the future.
 6. "Fixed" means re-checking the full period, not the latest weeks.
 7. Look at the rendered page: some bugs are invisible to headless tests.
@@ -171,15 +207,16 @@ pinned down before it is a meaningful target.
 | Path | What |
 |---|---|
 | `notebooks/`, `automation/` | Original daily pipeline and the (not yet deployed) Lambda |
-| `daily/` | Corrected daily dataset builder, tests, walk-forward evaluation; `results/` feeds the dashboard |
+| `daily/` | Corrected daily dataset builder, tests, walk-forward evaluation; `results/` feeds the dashboard, `results/with_macro/` is the Phase 9 cross-asset run |
 | `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check; `results/summary_hourly_findings.png` is the one-page summary |
 | `dashboard/app.py` | Streamlit app (deployed on Streamlit Community Cloud) |
 | `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
 
 ### Status and next steps
 Open items are tracked in §12. The main ones: finish or clean up the Lambda deployment (and convert it to the return-target
-model), replace the thesis Table 3.2 with the corrected table in §8.0, and, if time allows, test cross-asset and economic-calendar
-features. Given the evidence above, the honest write-up is a well-instrumented negative result rather than a 70% claim.
+model) and replace the thesis Table 3.2 with the corrected table in §8.0. Cross-asset features are now tested (Phase 9,
+still null); economic-calendar dummies (FOMC/CPI/NFP) remain untested if there's time, but given the evidence above —
+every lever tried lands at AUC ~0.50 — the honest write-up is a well-instrumented negative result rather than a 70% claim.
 
 ---
 
@@ -1135,9 +1172,11 @@ that discipline matters most), and teardown instructions are all in
 12. **Refresh the corrected daily results** after new data arrives:
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
     (commands in the script docstrings), commit `daily/results/`.
-13. Optional: cross-asset (silver, EURUSD, S&P 500) and economic-calendar features
-    for the hourly work; re-download the four missing ask months
-    (2014-04, 2015-07, 2016-08, 2026-09) once Dukascopy's rate limit allows.
+13. **Daily-pipeline cross-asset features: done (Phase 9), still null** — DXY, silver, S&P 500, VIX, 10Y
+    yield and TIP added to the daily model; AUC stayed at ~0.50. The hourly-specific version of this
+    (silver, EURUSD, S&P 500 as hourly bars) and economic-calendar dummies (FOMC/CPI/NFP) remain untested,
+    optional if there's time; re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09)
+    once Dukascopy's rate limit allows.
 14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
     coverage) and present the corrected results (§8.0) with the always-up
     baseline shown next to every accuracy figure.

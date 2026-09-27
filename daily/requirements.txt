@@ -1,0 +1,3 @@
+# Shares the sklearn/pandas/numpy/tensorflow stack pinned in hourly/requirements.txt
+# (walk_forward.py imports directly from hourly/). Only new dependency here:
+yfinance>=1.7  # --macro only: DXY/silver/S&P 500/VIX/10Y yield/TIP for build_daily_dataset.py (Phase 9)

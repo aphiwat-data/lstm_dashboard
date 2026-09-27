@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 
-from build_daily_dataset import HORIZONS, make_features, make_targets
+from build_daily_dataset import HORIZONS, MACRO_TICKERS, align_macro, make_features, make_macro_features, make_targets
 
 
 def _synthetic_days(n=1500, seed=0):
@@ -46,7 +46,56 @@ def test_features_are_scale_free():
     pd.testing.assert_frame_equal(a[cols], b[cols], check_exact=False, rtol=1e-9, atol=1e-9)  # multiplying prices must not change any feature
 
 
+def _synthetic_macro(seed=3):
+    # A different, sparser calendar than gold's (e.g. a bond-market holiday gold still trades on) is the whole
+    # point: it's what actually exercises the as-of backward-join logic, not a calendar that happens to match.
+    rng = np.random.default_rng(seed)
+    idx = pd.bdate_range("2014-12-01", periods=1400)[::2]  # every other business day: deliberately sparse/offset
+    macro = pd.DataFrame(index=idx)
+    for name in MACRO_TICKERS:
+        level = 50 + np.cumsum(rng.normal(0, 0.3, len(idx)))
+        macro[name] = np.abs(level) + 1.0  # keep strictly positive (some features take log())
+    return macro
+
+
+def test_macro_alignment_and_features_are_causal():
+    d = _synthetic_days(n=1500, seed=4)
+    macro = _synthetic_macro()
+    cut_date = macro.index[300]  # corrupt macro rows from this date onward only
+    aligned = align_macro(d.index, macro)
+    base_mf = make_macro_features(aligned, d["close"])
+
+    macro2 = macro.copy()
+    corrupt_pos = macro.index.get_indexer([cut_date])[0]
+    for name in MACRO_TICKERS:
+        rng = np.random.default_rng(5)
+        macro2.iloc[corrupt_pos:, macro2.columns.get_loc(name)] *= rng.uniform(0.3, 3.0, len(macro2) - corrupt_pos)
+    aligned2 = align_macro(d.index, macro2)
+    new_mf = make_macro_features(aligned2, d["close"])
+
+    unaffected = d.index[d.index < cut_date]  # gold days whose as-of macro row is strictly before the corruption
+    cols = [c for c in base_mf.columns if c.startswith("f_")]
+    pd.testing.assert_frame_equal(base_mf.loc[unaffected, cols], new_mf.loc[unaffected, cols], check_exact=False, rtol=1e-12, atol=1e-12)
+    affected = d.index[d.index >= macro.index[corrupt_pos + 20]]  # well past the corruption, rolling windows included
+    assert not np.allclose(base_mf.loc[affected, cols].to_numpy(), new_mf.loc[affected, cols].to_numpy(), equal_nan=True)
+
+
+def test_macro_features_are_scale_free():
+    d = _synthetic_days(n=1500, seed=6)
+    macro = _synthetic_macro(seed=7)
+    aligned = align_macro(d.index, macro)
+    a = make_macro_features(aligned, d["close"])
+    scaled = macro.copy()
+    for name in ("dxy", "silver", "spx", "tip"):  # ret_n features use log(), so must be scale-invariant; yield10y/vix use diff(), not scale-invariant by design (already stationary in their native units)
+        scaled[name] = scaled[name] * 2.9
+    b = make_macro_features(align_macro(d.index, scaled), d["close"] * 2.9)
+    cols = [c for c in a.columns if any(c.startswith(f"f_{name}_ret") for name in ("dxy", "silver", "spx", "tip")) or c == "f_gold_silver_ratio_ret_20"]
+    pd.testing.assert_frame_equal(a[cols], b[cols], check_exact=False, rtol=1e-9, atol=1e-9)
+
+
 if __name__ == "__main__":
     test_features_and_targets_are_causal()
     test_features_are_scale_free()
-    print("OK: no look-ahead, features are scale-free")
+    test_macro_alignment_and_features_are_causal()
+    test_macro_features_are_scale_free()
+    print("OK: no look-ahead, features are scale-free (price + macro)")

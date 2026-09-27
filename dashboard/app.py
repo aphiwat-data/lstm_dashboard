@@ -796,6 +796,15 @@ with tab_method:
             "days, 1- and 5-day horizons, training from 2012) and hourly-data experiments (1, 4 and 24 bars, bid and mid prices) reach the same "
             "conclusion; their results are in the repository (daily/results, hourly/results)."
         )
+        st.write(
+            "**Also tested and still null**: adding cross-asset/macro features (US Dollar Index, silver, S&P 500, VIX, the 10-year "
+            "Treasury yield, and the TIP ETF as a real-yield proxy) to the daily model, on the theory that gold's own price history might "
+            "simply be exhausted as a signal source. It was: the LSTM's raw accuracy moved from 51.9% to 55.7% (versus 55.9% always-up), "
+            "but its AUC stayed at chance (0.452 to 0.501) and it became *less* distinguishable from the always-up rule (p = 0.097 to 0.922), "
+            "not more — checking the predictions directly shows the model still predicts 'up' on 86-89% of days regardless of the macro "
+            "inputs, so the closer accuracy number is the same trend-mimicking behavior, not new skill. HistGB and ridge got worse with the "
+            "extra features. Full comparison in `daily/results/with_macro/`."
+        )
         st.divider()
         st.caption(
             "The sections below describe the original pipeline (60-day window, scalers fit on the training period, price-level target) "

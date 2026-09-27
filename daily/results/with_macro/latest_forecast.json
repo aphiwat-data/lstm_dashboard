@@ -1,0 +1,12 @@
+{
+  "as_of_date": "2026-09-21",
+  "latest_close": 4383.9,
+  "predicted_return": 0.0035020874347537756,
+  "predicted_next_close": 4399.28,
+  "p_up": 0.535508930683136,
+  "interval_90_close": [
+    4283.23,
+    4508.2
+  ],
+  "generated_at": "2026-09-27T07:46:45+00:00"
+}

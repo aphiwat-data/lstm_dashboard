@@ -29,6 +29,17 @@ EMBARGO_BARS = 5  # must be >= max(HORIZONS)
 MAX_END_LAG_DAYS = 5
 EXTREME_LOGRET = 0.07
 
+# Cross-asset/macro tickers (Phase 8, README §12 item 13): none of this is derivable from gold's own price
+# history, which is the ceiling the price-only feature set already ran into (AUC 0.50-0.52, every model).
+MACRO_TICKERS = {
+    "dxy": "DX-Y.NYB",     # US Dollar Index - gold is USD-priced, inverse relationship expected
+    "silver": "SI=F",      # precious-metals complex co-movement + gold/silver ratio
+    "spx": "^GSPC",        # risk-on/risk-off sentiment
+    "vix": "^VIX",         # fear gauge - gold's safe-haven demand
+    "yield10y": "^TNX",    # nominal rate proxy (opportunity cost of holding non-yielding gold)
+    "tip": "TIP",          # TIPS ETF price, inverse proxy for real yield (gold's most cited driver)
+}
+
 
 def load_silver(src: str) -> pd.DataFrame:
     if src.startswith("s3://"):
@@ -60,6 +71,57 @@ def clean_and_report(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     rep.update(rows_clean=int(len(df)), start=str(df.index.min().date()), end=str(df.index.max().date()))
     rep["coverage_warnings"] = [f"data ends {df.index.max():%Y-%m-%d}, {lag} days ago (tail missing?)"] if lag > MAX_END_LAG_DAYS else []
     return df, rep
+
+
+def fetch_macro(start: str, end: str, cache: Path | None = None) -> pd.DataFrame:
+    """One Close column per MACRO_TICKERS series, each on its OWN native trading calendar (indices, bonds and
+    commodities don't all close on the same days as COMEX gold). Cached to parquet since yfinance is a live
+    network call and re-fetching the full 2004-present history on every build is unnecessary."""
+    if cache is not None and cache.exists():
+        return pd.read_parquet(cache)
+    import yfinance as yf
+
+    cols = {}
+    for name, ticker in MACRO_TICKERS.items():
+        h = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=True)
+        cols[name] = h["Close"][ticker] if isinstance(h.columns, pd.MultiIndex) else h["Close"]
+    macro = pd.DataFrame(cols)
+    macro.index = pd.to_datetime(macro.index).tz_localize(None)
+    if cache is not None:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        macro.to_parquet(cache)
+    return macro
+
+
+def align_macro(gold_index: pd.DatetimeIndex, macro: pd.DataFrame) -> pd.DataFrame:
+    """As-of (backward) align each macro series onto gold's trading calendar: row t gets the most recent macro
+    close AT OR BEFORE gold day t, never a later one, so a holiday/weekend mismatch between markets (e.g. a
+    bond-market holiday when COMEX trades) can only look backward, never leak a future macro value."""
+    out = pd.DataFrame(index=gold_index)
+    for col in macro.columns:
+        s = macro[col].dropna().sort_index()
+        pos = s.index.searchsorted(gold_index, side="right") - 1
+        val = np.where(pos >= 0, s.to_numpy()[np.clip(pos, 0, len(s) - 1)], np.nan)
+        out[col] = val
+    return out
+
+
+def make_macro_features(aligned: pd.DataFrame, gold_close: pd.Series) -> pd.DataFrame:
+    """Same convention as make_features: every column is a return/ratio/z-score (never a raw level), computed
+    only from `aligned` rows <= t, so it's causal and scale-free the same way the price-only features are."""
+    f = pd.DataFrame(index=aligned.index)
+    for name in ("dxy", "silver", "spx"):
+        lp = np.log(aligned[name])
+        for n in (1, 5, 20):
+            f[f"f_{name}_ret_{n}"] = lp.diff(n)
+    for n in (1, 5, 20):
+        f[f"f_yield10y_chg_{n}"] = aligned["yield10y"].diff(n)  # already in percentage points, additive not log
+        f[f"f_tip_ret_{n}"] = np.log(aligned["tip"]).diff(n)
+    f["f_vix_chg_5"] = aligned["vix"].diff(5)
+    roll = aligned["vix"].rolling(60)
+    f["f_vix_z_60"] = (aligned["vix"] - roll.mean()) / roll.std()
+    f["f_gold_silver_ratio_ret_20"] = np.log(gold_close / aligned["silver"]).diff(20)
+    return f
 
 
 def make_features(d: pd.DataFrame) -> pd.DataFrame:
@@ -109,11 +171,17 @@ def assign_splits(index: pd.DatetimeIndex) -> pd.Series:
     return s
 
 
-def build(src: str) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+def build(src: str, use_macro: bool = False, macro_cache: Path | None = None) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """Returns (labelled dataset, report, latest feature rows). The latest rows include the newest day, whose
     next-day label does not exist yet, so a forecast for tomorrow can be made from them."""
     d, rep = clean_and_report(load_silver(src))
     feats_all = make_features(d)
+    rep["macro"] = {"enabled": use_macro}
+    if use_macro:
+        macro_raw = fetch_macro(str(d.index.min().date()), str((d.index.max() + pd.Timedelta(days=1)).date()), macro_cache)
+        aligned = align_macro(d.index, macro_raw)
+        feats_all = feats_all.join(make_macro_features(aligned, d["close"]))
+        rep["macro"]["tickers"] = MACRO_TICKERS
     feat = [c for c in feats_all.columns if c.startswith("f_")]
     latest = feats_all.dropna(subset=feat).join(d["close"].rename("meta_close")).tail(120)
     df = feats_all.join(make_targets(d))
@@ -135,8 +203,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--silver", default=DEFAULT_SILVER)
     ap.add_argument("--out-dir", type=Path, default=Path("data/processed"))
+    ap.add_argument("--macro", action="store_true", help="add cross-asset/macro features (DXY, silver, SPX, VIX, 10Y yield, TIP)")
+    ap.add_argument("--macro-cache", type=Path, default=Path("data/macro_cache.parquet"))
     args = ap.parse_args()
-    df, rep, latest = build(args.silver)
+    df, rep, latest = build(args.silver, use_macro=args.macro, macro_cache=args.macro_cache if args.macro else None)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(args.out_dir / "xauusd_d1_features.parquet")
     latest.to_parquet(args.out_dir / "xauusd_d1_latest_features.parquet")
