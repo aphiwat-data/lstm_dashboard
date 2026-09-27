@@ -32,7 +32,7 @@ also visible in the commit history.
 |---|---|
 | Does the LSTM beat a trivial baseline at next-day direction? | **No.** Daily: 51.9% vs "always up" 55.9% (test 2025-01-09 to 2026-09-18, n=424). |
 | Does hourly data help (1, 4 and 24 bars ahead)? | **No.** Accuracy about 50–54% vs "always up" 51.5% / 52.9% / 55.1%; AUC 0.50–0.52. |
-| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence.** Even the trivial rule scores 51–56%; a result near 70% would point to a leak or a metric artifact. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
+| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, and not by combining models.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52; ensembling them cannot manufacture a signal that none of them has. "Always up" alone reaches 56% at 1 day, 65.8% at 20 days and 74.2% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
 | Is the price forecast usable? | It matches a no-change forecast (daily MAE \$47.42 vs \$47.27). Read it as "about today's close, within the interval". |
 | What was the big bug? | A price-level target and price-level inputs with train-only scalers: once gold left the training range in 2025-26, MAE reached ≈ \$640. Fixed with a return target and scale-free features. |
 
@@ -127,6 +127,35 @@ are missing because of rate limiting, so bid-vs-mid comparisons use the bars pre
 - The dashboard now leads with this corrected evaluation; the original views are kept in an expander for the record. While
   checking the page in a browser we also found that pairs of dollar signs in markdown text are rendered as LaTeX (garbled
   captions), a bug no automated test had caught.
+
+
+### Phase 8: should models be combined to reach 70% accuracy?
+
+Asked directly after Phase 7. Answer: no combination of what we have gets there, and 70% itself needs to be
+pinned down before it is a meaningful target.
+
+- **Ensembling does not create signal.** Every model tried across the daily and hourly work (ridge, HistGB
+  regressor/classifier, LSTM/GRU) independently lands at AUC 0.50-0.52. Blending them can reduce variance
+  between runs, not add predictive power that none of the inputs has.
+- **"Always up" alone climbs with the horizon, since gold trended up over the sample:**
+
+| Horizon (trading days) | Always-up, TEST 2025-01-09..2026-09-18 | Always-up, all years 2004-2026 | Test n_eff |
+|---|---|---|---|
+| 1 | 56.0% | 53.1% | 423 |
+| 5 | 60.6% | 56.0% | 83 |
+| 20 | 65.8% | 56.4% | 20 |
+| 60 | 74.2% | 62.3% | 6 |
+| 120 | 77.0% | 68.8% | 2 |
+
+  A reported "74% accuracy at 60 days" needs no model at all, and at that horizon the test period only
+  contains about 6 non-overlapping windows, too few to conclude anything either way.
+- **Three ways a ~70% figure shows up that do not mean the model has skill:** (1) a long horizon in a trending
+  market, as above; (2) reporting accuracy only on the model's most confident predictions without stating the
+  coverage (Phase 6's 56-60% figure, later traced to a spread artifact); (3) a leak or an evaluation mistake —
+  the likeliest explanation for a ~70% figure seen elsewhere on daily-or-shorter gold data.
+- **What might move AUC, untested here:** inputs outside price history — economic-calendar events (FOMC, CPI,
+  NFP), the US dollar index, bond yields, COT positioning — and hourly cross-asset features (§12). Expected
+  effect size is small; there is no basis in what we have tried to expect it to reach 70%.
 
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
