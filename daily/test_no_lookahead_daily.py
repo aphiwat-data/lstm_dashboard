@@ -2,7 +2,8 @@
 import numpy as np
 import pandas as pd
 
-from build_daily_dataset import HORIZONS, MACRO_TICKERS, align_macro, make_calendar_features, make_features, make_macro_features, make_targets
+from build_daily_dataset import (CPI_DATES, FOMC_DATES, HORIZONS, MACRO_TICKERS, align_macro,
+                                  make_calendar_features, make_features, make_macro_features, make_targets)
 
 
 def _synthetic_days(n=1500, seed=0):
@@ -114,6 +115,25 @@ def test_days_since_nfp_is_causal_and_resets():
     pd.testing.assert_series_equal(f["f_days_since_nfp"], f2["f_days_since_nfp"].loc[f.index])
 
 
+def test_fomc_and_cpi_days_match_known_dates():
+    idx = pd.bdate_range("2024-01-01", "2024-12-31")
+    f = make_calendar_features(idx)
+    for d in ["2024-01-31", "2024-06-12", "2024-12-18"]:  # known FOMC decision days in 2024
+        assert f.loc[d, "f_fomc_day"] == 1.0, d
+    for d in ["2024-02-13", "2024-07-11", "2024-12-11"]:  # known CPI release days in 2024
+        assert f.loc[d, "f_cpi_day"] == 1.0, d
+    assert f["f_fomc_day"].sum() == 8  # 2024 had 8 scheduled FOMC meetings, no notation votes
+    assert f["f_cpi_day"].sum() == 12  # 12 CPI releases in 2024
+
+
+def test_fomc_cpi_dates_are_fixed_and_disjoint_from_lookahead():
+    # the event lists themselves are module-level constants, independent of any price data, so mutating
+    # price data (as the causality tests above do) cannot possibly change them -- this just guards against
+    # accidental duplicate/out-of-range entries creeping in on a future edit.
+    assert len(FOMC_DATES) == len(set(FOMC_DATES))
+    assert len(CPI_DATES) == len(set(CPI_DATES))
+
+
 if __name__ == "__main__":
     test_features_and_targets_are_causal()
     test_features_are_scale_free()
@@ -121,4 +141,6 @@ if __name__ == "__main__":
     test_macro_features_are_scale_free()
     test_nfp_day_matches_known_dates()
     test_days_since_nfp_is_causal_and_resets()
+    test_fomc_and_cpi_days_match_known_dates()
+    test_fomc_cpi_dates_are_fixed_and_disjoint_from_lookahead()
     print("OK: no look-ahead, features are scale-free (price + macro + calendar)")

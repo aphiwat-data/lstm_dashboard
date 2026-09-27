@@ -192,12 +192,28 @@ added skill would do. HistGB and ridge simply got worse — plausible overfittin
 either.** Combined with Phase 8, every lever tried on this dataset — more model types, ensembling, and now
 non-price inputs — lands at the same AUC ~0.50 ceiling.
 
-**Addendum**: also added an NFP (US Non-Farm Payrolls) release-day calendar feature (`--calendar` flag,
+**Addendum 1**: also added an NFP (US Non-Farm Payrolls) release-day calendar feature (`--calendar` flag,
 `f_nfp_day`/`f_days_since_nfp` in `daily/build_daily_dataset.py`) on top of the six macro series above — a
 deterministic "first Friday of the month" rule, since `bls.gov` blocks automated access and no other source
 of the exact historical CPI/FOMC release-date list could be verified reliably enough to trust in a research
 dataset (those two remain untested for that reason, not by choice). Result: still null (LSTM AUC 0.504,
 HistGB classifier AUC 0.496 vs. chance) — full results in `daily/results/with_macro_calendar/`.
+
+**Addendum 2 (FOMC + CPI added)**: revisited the CPI/FOMC gap by sourcing exact historical dates directly
+from `federalreserve.gov`'s per-year historical-materials pages (2004-2020) and `fomccalendars.htm`
+(2021-2027) for 204 FOMC decision days, and `bls.gov/bls/news-release/cpi.htm` for 271 CPI release dates
+(2004-2026) — both fetched and hand-verified, not guessed. Added as `f_fomc_day`/`f_days_since_fomc` and
+`f_cpi_day`/`f_days_since_cpi`, same causal `_days_since` helper as NFP (event dates are fixed/known in
+advance, so no look-ahead risk). This is the closest-to-significant result of every experiment so far — LSTM
+AUC 0.516, accuracy 58.5% (above the 55.9% always-up rate), MAE $46.88 (a rare positive skill vs. no-change,
++0.0083) — **but still not significant**: p vs. always-up = 0.304, and checking the mechanism (Lessons #4)
+shows the same pattern as every prior run: the LSTM predicts "up" on 88% of days regardless of which
+features it's given, barely changed from the 85-89% range in every earlier version. The point estimate has
+bounced around across five feature-set variants (51.9% → 55.7% → 55.7% → 58.5%) while AUC stayed in a tight
+0.45-0.52 band and no p-value has cleared 0.05 — noise consistent with the same underlying null, not a trend
+toward significance. (The "predicted down" subset alone shows a higher hit rate, but at n=51 this is exactly
+the small-sample, look-at-the-confident-subset trap Phase 6's bid-ask artifact already burned this project
+on once — not reported as a finding.) Full results in `daily/results/with_macro_calendar_full/`.
 
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
@@ -1179,12 +1195,13 @@ that discipline matters most), and teardown instructions are all in
 12. **Refresh the corrected daily results** after new data arrives:
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
     (commands in the script docstrings), commit `daily/results/`.
-13. **Daily-pipeline cross-asset + NFP calendar features: done (Phase 9), still null** — DXY, silver, S&P
-    500, VIX, 10Y yield, TIP, and an NFP release-day dummy added to the daily model; AUC stayed at ~0.50.
-    CPI/FOMC dummies remain untested — `bls.gov` blocks automated access and no other historical release-date
-    source could be verified reliably enough to trust. The hourly-specific version of cross-asset features
-    (silver, EURUSD, S&P 500 as hourly bars) also remains untested, optional if there's time; re-download the
-    four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once Dukascopy's rate limit allows.
+13. **Daily-pipeline cross-asset + calendar features: done (Phase 9, both addenda), still null** — DXY,
+    silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates from federalreserve.gov) and CPI (271 dates
+    from bls.gov) all added to the daily model; best result so far is LSTM AUC 0.516, p vs. always-up = 0.304
+    — closer than every other variant but still not significant. The hourly-specific version of cross-asset
+    features (silver, EURUSD, S&P 500 as hourly bars) remains untested, optional if there's time;
+    re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once Dukascopy's rate limit
+    allows.
 14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
     coverage) and present the corrected results (§8.0) with the always-up
     baseline shown next to every accuracy figure.
