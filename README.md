@@ -128,6 +128,26 @@ are missing because of rate limiting, so bid-vs-mid comparisons use the bars pre
   checking the page in a browser we also found that pairs of dollar signs in markdown text are rendered as LaTeX (garbled
   captions), a bug no automated test had caught.
 
+**Addendum: regression-native metrics (R², IC), not just direction/MAE.** Directional accuracy is a
+classification-style view of what is fundamentally a regression problem, so both R² (coefficient of
+determination) and the Information Coefficient (Spearman rank correlation between predicted and actual
+return, `ic_spearman`/`ic_p` — already computed by `daily/walk_forward.py`, just not previously surfaced in
+this doc) were checked on the same identical test period:
+
+| Model | R² (returns) | IC (Spearman) | IC p-value |
+|---|---|---|---|
+| Predict-zero-return baseline | -0.005 | – | – |
+| Rolling drift | -0.003 | -0.064 | 0.186 |
+| Ridge | -0.044 | -0.093 | 0.057 |
+| HistGB regressor | -0.191 | -0.038 | 0.438 |
+| **LSTM** | **-0.013** | **0.008** | **0.873** |
+
+Every model's R² is negative — worse than a constant "predict zero return" forecast — and no IC is
+significant (HistGB regressor's R² is the worst by far, consistent with Phase 9's suspicion that adding
+degrees of freedom to these models mostly adds overfitting, not skill; Ridge's IC is the closest to
+significant at p = 0.057, but it's *negative* — weakly anti-correlated with the outcome, not a usable
+signal). This confirms the direction-accuracy finding from an entirely different metric family: it isn't an
+artifact of choosing accuracy/AUC as the yardstick.
 
 ### Phase 8: should models be combined to reach 70% accuracy?
 
@@ -1164,10 +1184,12 @@ that discipline matters most), and teardown instructions are all in
      this project.
    - Fix the "ARIMA" terminology slip elsewhere in Chapter 4 (AR(5) is a
      linear-regression autoregressive model, not a fitted ARIMA(p,d,q)).
-2. **Do not cite the old R² (~0.87).** It predates both the AR(5)/early-stopping
-   fixes and the scale correction (Journey, phase 7). If an R² is still wanted,
-   compute it on returns from `daily/results/wf_predictions.csv`; expect it to be
-   near zero.
+2. ~~Do not cite the old R² (~0.87)~~ **Done** — computed on returns from
+   `daily/results/wf_predictions.csv`. It predates both the AR(5)/early-stopping
+   fixes and the scale correction (Journey, phase 7), and is superseded: the
+   corrected LSTM's R² is **-0.013** (worse than predicting zero return every
+   day, R² = -0.005). See Journey, Phase 7 addendum for the full table
+   (R² and IC for every model).
 3. **Re-verify the exact row counts** in §2.2/§6 (5,491 Silver rows, 5,431
    Gold rows, 4,887/544 train/test) against a fresh run if the dataset has
    grown since (new trading days keep appending via `yfinance`).
