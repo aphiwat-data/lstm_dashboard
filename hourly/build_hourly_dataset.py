@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-AUX_TAGS = {"xagusd": "xag", "eurusd": "eur", "usa500idxusd": "spx"}
+AUX_TAGS = {"xagusd": "xag", "eurusd": "eur", "usa500idxusd": "spx", "dollaridxusd": "dxy"}
 SPLITS = {"train_end": "2023-12-31", "val_end": "2024-12-31"}  # test = after val_end (matches the daily project's 2024-12-31 cut)
 HORIZONS = (4, 24)
 EMBARGO_BARS = 24  # must be >= max(HORIZONS) so multi-bar labels never straddle a split boundary

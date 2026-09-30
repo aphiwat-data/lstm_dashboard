@@ -96,6 +96,31 @@ it widens, so the "signal" is not tradable. Downloading ask prices and using mid
 We also had to retract our own earlier statement that this edge "replicates on validation and test". (Four months of ask data
 are missing because of rate limiting, so bid-vs-mid comparisons use the bars present in both feeds.)
 
+**Addendum: hourly cross-asset features, mirroring Phase 9's daily test.** The infrastructure for this was
+already written (`AUX_TAGS` in `hourly/build_hourly_dataset.py`) but never exercised — no raw data had ever
+been downloaded. Added silver, EUR/USD and S&P 500 (Dukascopy codes `xagusd`/`eurusd`/`usa500idxusd`, already
+hinted at in the downloader's own usage examples) plus a US Dollar Index proxy (`dollaridxusd`, newly added
+to `AUX_TAGS`). Two real constraints, unlike anything hit on the daily side: Dukascopy's S&P 500 series only
+starts 2011-09 and its Dollar Index only starts 2017-12 (both well after gold's 2004 start), and no VIX or
+bond-yield equivalent exists on Dukascopy at all — those two are simply not obtainable this way. Full
+download (bid+ask XAUUSD, bid-only for the aux instruments, 2004-present, mid-price series rebuilt from
+bid+ask) took about 40 minutes.
+
+Result, same 1/4/24-bar horizons as Phase 5, mid prices: **null, matching Phase 9's daily conclusion almost
+exactly.** Comparing IC (Spearman) with vs. without the aux features at 1 bar barely moves — HistGB regressor
+0.0246→0.0244 (p 0.015→0.016), GRU ensemble 0.0279→0.0275 (p 0.006→0.007) — and no model's direction accuracy
+clears always-up at any horizon (all p > 0.05 for outperforming; several score significantly *below*
+always-up instead, the same pattern seen throughout). Full results: `hourly/results/with_aux_mid/`.
+
+**Separate observation, not caused by the aux features (present already in the pre-existing 1-bar baseline
+committed before this addendum), worth flagging rather than acting on:** at the 1-bar horizon specifically,
+HistGB regressor and the GRU both show an IC that clears p < 0.05 (unlike anything seen on daily data across
+every variant in Phase 8/9), while direction accuracy still does not beat always-up (p = 0.38-0.76). This
+does not reproduce at 4 or 24 bars. Given how many models/horizons/feature-sets have now been tested across
+this whole investigation, a handful of p-values in the 0.006-0.04 range are within what multiple testing
+alone would produce by chance — this is noted as a curiosity for a future, dedicated look (with a proper
+multiple-comparisons correction), not reported as a finding.
+
 ### Phase 7: fixing the daily pipeline properly (daily/)
 - The earlier "fixed" claim for the daily MAE was wrong: it only held for the last three weeks of the test period; over the
   full period the LSTM's MAE was still ≈ \$639 against ≈ \$51 for trivial baselines.
