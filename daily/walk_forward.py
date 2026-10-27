@@ -148,7 +148,7 @@ def main() -> None:
     for n, r in results["models"].items():
         hd, sg = r.get("direction_from_head"), r.get("direction_from_sign")
         d = hd or sg
-        print(f"{n:14s} MAE ${r.get('mae_usd', float('nan')):7.2f} skill {r.get('mae_skill_vs_naive', float('nan')):+.4f} DMp {r.get('dm_p_vs_naive', float('nan')):.3f} IC {r.get('ic_spearman', float('nan')):+.3f} | "
+        print(f"{n:14s} MAE ${r.get('mae_usd', float('nan')):7.2f} skill {r.get('mae_skill_vs_naive', float('nan')):+.4f} DMp {r.get('dm_p_vs_naive', float('nan')):.3f} IC {r.get('ic_spearman', float('nan')):+.3f} R2 {r.get('r2_returns', float('nan')):+.4f} | "
               f"acc {d['acc']:.4f} CI [{d['ci95'][0]:.3f},{d['ci95'][1]:.3f}] p_vs_always_up {d['p_vs_always_up']:.3f} AUC {hd.get('auc', float('nan')) if hd else float('nan'):.3f}")
     print("\nlatest forecast:", json.dumps(results["latest_forecast"]))
 

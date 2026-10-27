@@ -174,6 +174,18 @@ significant at p = 0.057, but it's *negative* — weakly anti-correlated with th
 signal). This confirms the direction-accuracy finding from an entirely different metric family: it isn't an
 artifact of choosing accuracy/AUC as the yardstick.
 
+R² is now computed by the code, not by hand: `price_report()` in `hourly/train_models.py` (shared by `daily/walk_forward.py`)
+writes `r2_returns` per model and `naive_r2_returns` (the predict-zero baseline) to every results JSON, and the dashboard shows it.
+
+**Refresh (2026-10-27).** The daily pipeline was re-run on newly collected data: 25 more trading days (through 2026-10-26;
+S3 silver itself was not modified, new GC=F bars were appended locally after checking that 22 overlapping days matched the
+silver table exactly), so the test window grew from 424 to 449 days (2025-01-09 to 2026-10-23). The old outputs are kept in
+`daily/results/snapshot_2026-09-18/`; **every number in this README's Journey, §8.0 and the thesis tables is from that
+snapshot**, as are the feature-search folders (`with_macro*`, `with_cot`), so the comparisons among them stay like-for-like.
+The refreshed main results lead to the same conclusion: LSTM direction accuracy 51.9% vs. always-up 55.2% (p = 0.155, AUC
+0.463), MAE \$46.83 vs. \$46.63 for a no-change forecast (Diebold-Mariano p = 0.38), R² -0.014 (predict-zero -0.003), IC +0.006
+(p = 0.90). The static-training variants (`model_results_lstm_w*`) were not re-run.
+
 ### Phase 8: should models be combined to reach 70% accuracy?
 
 Asked directly after Phase 7. Answer: no combination of what we have gets there, and 70% itself needs to be
@@ -944,6 +956,13 @@ brief:
 > app's Secrets, never in git). The KPIs and the Model Evaluation tab now lead with the corrected evaluation read from
 > `daily/results/`; the original views live in an expander ("Original pipeline"). The layout description below covers the
 > original design and the views kept in that expander.
+>
+> **Update (Oct 2026): forecast-first redesign.** The next-day forecast is now the largest element on the page (big price,
+> change vs. last close, 90% likely range, and a recent-price chart with the forecast and its range drawn on it). Tabs are
+> now **Track record** (past forecasts vs. actual), **How reliable?** (plain-language verdict, up/down accuracy vs.
+> "always up", detailed metrics incl. R² and IC in an expander), **Data explorer** (price history, volatility, features) and
+> **Method**. The tab-by-tab description below predates this and is kept for the record. Streamlit theme and toolbar
+> settings live in `.streamlit/config.toml`.
 
 **STATUS: still open to further iteration**, but now a complete, polished,
 English-only pass covering all four components the proposal's §3.8
@@ -1256,7 +1275,9 @@ that discipline matters most), and teardown instructions are all in
     on the friend's account; detach/delete them if the automation is dropped.
 12. **Refresh the corrected daily results** after new data arrives:
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
-    (commands in the script docstrings), commit `daily/results/`.
+    (commands in the script docstrings), commit `daily/results/`. **Last done 2026-10-27** (data through 2026-10-26,
+    see Journey, Phase 7 refresh note). The S3 silver table is still at 2026-09-21: re-run notebooks 01-02 (or the Lambda
+    path) to bring it forward, or pass a locally extended silver parquet to `--silver`.
 13. **Daily-pipeline cross-asset + calendar + COT features: closed, done (Phase 9, all addenda), null** —
     DXY, silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates), CPI (271 dates) and CFTC Commitment of
     Traders positioning all added to the daily model; best single result is LSTM AUC 0.516 (macro+NFP+FOMC+CPI,

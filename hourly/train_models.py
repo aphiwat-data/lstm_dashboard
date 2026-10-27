@@ -61,19 +61,25 @@ def ic_pvalue(r: float, n: int, h: int) -> float:
     return float(2 * (1 - t_dist.cdf(abs(t), n_eff - 2)))
 
 
+def r2_returns(y: np.ndarray, pred: np.ndarray) -> float:
+    """Coefficient of determination on the return target (sklearn's definition: SST is centred on mean(y)),
+    so a constant forecast of 0 scores slightly below 0 whenever the mean return is not exactly 0."""
+    return float(1 - np.sum((y - pred) ** 2) / np.sum((y - y.mean()) ** 2))
+
+
 def price_report(g: pd.DataFrame, h: int, pred_ret: np.ndarray | None, p_up: np.ndarray | None = None) -> dict:
     ycol, dcol, ccol = target_cols(h)
     y_ret, y_dir = g[ycol].to_numpy(), g[dcol].to_numpy()
     close, target_close = g["meta_close"].to_numpy(), g[ccol].to_numpy()
     mae0, rmse0 = np.mean(np.abs(close - target_close)), np.sqrt(np.mean((close - target_close) ** 2))
-    out: dict = {"naive_mae_usd": float(mae0), "naive_rmse_usd": float(rmse0)}
+    out: dict = {"naive_mae_usd": float(mae0), "naive_rmse_usd": float(rmse0), "naive_r2_returns": r2_returns(y_ret, np.zeros_like(y_ret))}
     if pred_ret is not None:
         pred_price = close * np.exp(pred_ret)
         mae, rmse = np.mean(np.abs(pred_price - target_close)), np.sqrt(np.mean((pred_price - target_close) ** 2))
         varying = np.std(pred_ret) > 0
         ic = spearmanr(pred_ret, y_ret) if varying else None
         out.update(
-            mae_usd=float(mae), rmse_usd=float(rmse),
+            mae_usd=float(mae), rmse_usd=float(rmse), r2_returns=r2_returns(y_ret, pred_ret),
             mae_skill_vs_naive=float(1 - mae / mae0), rmse_skill_vs_naive=float(1 - rmse / rmse0),
             dm_p_vs_naive=dm_pvalue(y_ret - pred_ret, y_ret, max(24, 2 * h)) if varying else float("nan"),
             ic_spearman=float(ic.statistic) if ic else float("nan"), ic_p=ic_pvalue(ic.statistic, len(y_ret), h) if ic else float("nan"),

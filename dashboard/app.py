@@ -73,6 +73,23 @@ st.set_page_config(
 )
 
 
+APP_CSS = """<style>
+.block-container {padding-top: 2.2rem; max-width: 1280px;}
+.fc-title {font-size: 1.9rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.15;}
+.fc-tagline {opacity: .65; font-size: .95rem; margin: .2rem 0 1.1rem;}
+.fc-hero {border: 1px solid rgba(128,128,128,.30); border-radius: 18px; padding: 26px 28px; min-height: 372px; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(135deg, rgba(42,120,214,.16), rgba(42,120,214,.03));}
+.fc-label {font-size: .78rem; letter-spacing: .13em; text-transform: uppercase; opacity: .7; font-weight: 700;}
+.fc-price {font-size: 4rem; font-weight: 800; line-height: 1.05; margin: .35rem 0 .45rem; letter-spacing: -.025em;}
+.fc-delta {font-size: 1.15rem; font-weight: 700;}
+.fc-delta.up {color: #2FBF71;}
+.fc-delta.down {color: #E34948;}
+.fc-sub {font-size: .9rem; font-weight: 400; color: rgba(128,128,128,.95);}
+.fc-range {margin-top: 1rem; font-size: 1rem;}
+.fc-pill {align-self: flex-start; margin-top: 1.1rem; padding: .22rem .75rem; border-radius: 999px; font-size: .78rem; border: 1px solid rgba(128,128,128,.45); opacity: .85;}
+</style>"""
+st.markdown(APP_CSS, unsafe_allow_html=True)
+
+
 # ---------------------------------------------------------------------------
 # Data loading — cached so S3/model load only happens once per session
 # ---------------------------------------------------------------------------
@@ -129,7 +146,7 @@ V2_DIR = Path(__file__).resolve().parents[1] / "daily" / "results"
 
 
 @st.cache_data(show_spinner=False)
-def load_v2():
+def load_v2(results_mtime: float):
     """Corrected daily evaluation (daily/walk_forward.py): walk-forward LSTM on log-returns, judged against the
     always-up rate. Returns (results, predictions) or (None, None) when the files are not in the repository."""
     try:
@@ -231,194 +248,200 @@ pred_error   = wf_actual - wf_pred  # positive = model under-predicted, negative
 model_last_retrained = get_model_last_retrained()
 days_since_retrain    = (pd.Timestamp.now(tz="UTC").tz_localize(None) - model_last_retrained).days
 lambda_forecast       = get_lambda_forecast()
-v2, v2_preds          = load_v2()
+_v2_file = V2_DIR / "walk_forward_results.json"
+v2, v2_preds          = load_v2(_v2_file.stat().st_mtime if _v2_file.exists() else 0.0)  # mtime in the cache key: a refresh shows up without a restart
 
 # 30-day rolling volatility, computed on the fly for the dashboard view (the
 # model itself trains on the 7-day volatility_7 feature — see Feature Explorer)
 df["volatility_30"] = df["return"].rolling(30).std()
 
 # ---------------------------------------------------------------------------
-# Sidebar — project facts, always visible, doesn't require a tab click
+# Sidebar — short and calm; technical details live in an expander
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### About This Project")
-    st.caption(
-        "Next-Day Gold Price Forecasting with LSTM — undergraduate Computer "
-        "Engineering senior project, Mae Fah Luang University."
-    )
-    st.markdown("**Dataset**")
-    st.text(f"Ticker: GC=F (COMEX Gold Futures)\nRange: {df['date'].min().date()} – {df['date'].max().date()}\nRows: {len(df):,}")
-    st.markdown("**Train / Test Split**")
+    st.markdown("### Gold Price Forecast")
+    st.caption("Next-day XAU/USD forecasting with an LSTM. Computer Engineering senior project, Mae Fah Luang University.")
     if v2 is not None:
-        st.text(f"Chronological split: {SPLIT_DATE}\nScalers re-fit inside each\ntraining window (no look-ahead)")
+        st.caption(f"Data through **{v2['latest_forecast']['as_of_date']}** · generated {v2['latest_forecast']['generated_at'][:10]}")
     else:
-        st.text(f"Chronological split: {SPLIT_DATE}\nScalers fit on train only\n(leakage prevention)")
-    st.markdown("**Model**")
-    if v2 is not None:
-        pr = v2["protocol"]
-        st.text(
-            f"LSTM({pr['lstm_units']}), 2 heads: return + direction\nInput window: {pr['window']} days\n"
-            f"Walk-forward retrain: every {pr['retrain_every_days']} days\n{pr['train_len_days']}-day rolling window\n"
-            f"Target: next-day log-return\nScalers re-fit in every window"
-        )
-        st.caption(f"Original pipeline (price-level target): 2-layer LSTM (64, 32), window {SEQ_LEN}.")
-    else:
-        st.text(f"2-layer LSTM (64, 32 units)\nInput window: {SEQ_LEN} days\nWalk-forward retrain: every {RETRAIN_EVERY_DAYS} days\n365-day rolling training window")
-
-    st.markdown("**Model Freshness**")
-    if v2 is not None:
-        st.text(f"Data through: {v2['latest_forecast']['as_of_date']}\nForecast generated: {v2['latest_forecast']['generated_at'][:10]}")
-        st.caption("Regenerate with daily/walk_forward.py (see daily/results).")
-    else:
-        st.text(
-            f"Last retrained: {model_last_retrained.date()}\n"
-            f"{days_since_retrain} day(s) since last retrain"
-        )
-        if days_since_retrain > RETRAIN_EVERY_DAYS:
-            st.warning(
-                f"Overdue for retrain by {days_since_retrain - RETRAIN_EVERY_DAYS} day(s) "
-                f"(cadence: every {RETRAIN_EVERY_DAYS} days). This is about the model "
-                f"itself going stale — separate from whether the underlying price data "
-                f"(above) is up to date.",
-                icon="⚠️",
+        st.caption(f"Data through **{latest_row['date'].date()}**")
+    with st.expander("Model and data details"):
+        st.markdown("**Data**")
+        st.text(f"GC=F (COMEX Gold Futures)\n{df['date'].min().date()} – {df['date'].max().date()}\n{len(df):,} rows")
+        st.markdown("**Model**")
+        if v2 is not None:
+            pr = v2["protocol"]
+            st.text(
+                f"LSTM({pr['lstm_units']}), 2 heads: return + direction\nInput window: {pr['window']} days\n"
+                f"Retrained every {pr['retrain_every_days']} days\non a {pr['train_len_days']}-day window\n"
+                f"Target: next-day log-return\nTest: {pr['test_start']} – {pr['test_end']}"
             )
         else:
-            st.caption(f"Within the {RETRAIN_EVERY_DAYS}-day retrain cadence.")
-    st.divider()
+            st.text(f"2-layer LSTM (64, 32 units)\nInput window: {SEQ_LEN} days\nRetrained every {RETRAIN_EVERY_DAYS} days\n365-day rolling window")
+            st.text(f"Last retrained: {model_last_retrained.date()} ({days_since_retrain} day(s) ago)")
+            if days_since_retrain > RETRAIN_EVERY_DAYS:
+                st.warning(f"Overdue for retrain by {days_since_retrain - RETRAIN_EVERY_DAYS} day(s).", icon="⚠️")
+
+# ---------------------------------------------------------------------------
+# Forecast-first header: the next-day forecast is the project's headline output,
+# so it gets the biggest number on the page plus a chart showing it in context.
+# ---------------------------------------------------------------------------
+WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
+
+
+def usd(x: float, decimals: int = 2) -> str:
+    """Dollar amount for raw-HTML blocks. The entity (not a literal dollar sign) stops Streamlit's markdown from
+    pairing dollar signs into LaTeX, the same bug the backslash escapes elsewhere in this file work around."""
+    return f"&#36;{x:,.{decimals}f}"
+
+
+def next_trading_day(d) -> pd.Timestamp:
+    return pd.Timestamp(d) + pd.offsets.BDay(1)
+
+
+def model_verdict(lstm: dict, up: float) -> tuple[str, str]:
+    """('better' | 'worse' | 'same') for price error vs. no-change and for direction vs. always-up, at p < 0.05."""
+    hd = lstm["direction_from_head"]
+    p_price, p_dir = lstm["dm_p_vs_naive"], hd["p_vs_always_up"]
+    price = "better" if p_price < 0.05 and lstm["mae_skill_vs_naive"] > 0 else "worse" if p_price < 0.05 and lstm["mae_skill_vs_naive"] < 0 else "same"
+    direction = "better" if p_dir < 0.05 and hd["acc"] > up else "worse" if p_dir < 0.05 and hd["acc"] < up else "same"
+    return price, direction
+
+
+def forecast_inputs() -> dict:
     if v2 is not None:
-        st.caption(
-            "Corrected evaluation comes from daily/walk_forward.py (results committed in daily/results). "
-            "The original pipeline's charts (recomputed baselines + S3 walk-forward arrays) remain under "
-            "Model Evaluation > Original pipeline."
-        )
-    else:
-        st.caption(
-            "Baseline models (Naive, AR(5), Linear Regression) are recomputed "
-            "live in this app from the Gold-layer data and saved scalers. LSTM "
-            "walk-forward results are loaded directly from S3."
-        )
-
-# ---------------------------------------------------------------------------
-# Header + hero forecast (always visible, above the tabs) — the forecast is
-# the project's headline output, so it gets a dedicated, visually dominant
-# gauge rather than sharing equal billing with the secondary KPIs.
-# ---------------------------------------------------------------------------
-st.title("Next-Day Gold Price Forecasting")
+        lf = v2["latest_forecast"]
+        hist = v2_preds[["date", "meta_close"]].rename(columns={"meta_close": "close"})
+        as_of = pd.Timestamp(lf["as_of_date"])
+        if as_of > hist["date"].max():
+            hist = pd.concat([hist, pd.DataFrame({"date": [as_of], "close": [lf["latest_close"]]})], ignore_index=True)
+        return dict(hist=hist.sort_values("date"), as_of=as_of, last_close=lf["latest_close"], fc=lf["predicted_next_close"],
+                    lo=lf["interval_90_close"][0], hi=lf["interval_90_close"][1])
+    return dict(hist=df[["date", "close"]], as_of=latest_row["date"], last_close=float(latest_row["close"]), fc=next_day_pred, lo=forecast_lo, hi=forecast_hi)
 
 
-def render_hero_forecast(latest_close: float, pred_close: float, lo: float, hi: float, as_of: str) -> None:
-    up = pred_close >= latest_close
-    fig_hero = go.Figure(go.Indicator(
-        mode="number+delta+gauge",
-        value=pred_close,
-        number={"prefix": "$", "valueformat": ",.2f", "font": {"size": 34}},
-        delta={"reference": latest_close, "valueformat": ",.2f", "increasing": {"color": "#3DBE6C"}, "decreasing": {"color": "#E34948"}},
-        domain={"x": [0.05, 0.97], "y": [0.1, 0.9]},
-        gauge={
-            "shape": "bullet", "axis": {"range": [lo, hi], "tickprefix": "$", "tickfont": {"size": 11}},
-            "bar": {"color": COLORS["LSTM Walk-Forward"], "thickness": 0.5},
-            "steps": [{"range": [lo, hi], "color": "rgba(42,120,214,0.12)"}],
-            "threshold": {"line": {"color": "#8a8a86", "width": 2}, "thickness": 0.9, "value": latest_close},
-        },
+def hero_html(fi: dict) -> str:
+    fc, last, lo, hi = fi["fc"], fi["last_close"], fi["lo"], fi["hi"]
+    change, pct = fc - last, (fc / last - 1) * 100
+    up = change >= 0
+    return (
+        '<div class="fc-hero">'
+        f'<div class="fc-label">Forecast for {next_trading_day(fi["as_of"]).strftime("%a %d %b %Y")}</div>'
+        f'<div class="fc-price">{usd(fc)}</div>'
+        f'<div class="fc-delta {"up" if up else "down"}">{"▲" if up else "▼"} {"+" if up else "−"}{usd(abs(change))} ({pct:+.2f}%)'
+        f'<span class="fc-sub"> &nbsp;vs. last close {usd(last)} on {pd.Timestamp(fi["as_of"]).strftime("%d %b")}</span></div>'
+        f'<div class="fc-range">90% likely range &nbsp;<b>{usd(lo, 0)} – {usd(hi, 0)}</b></div>'
+        '<div class="fc-pill">Research forecast · not trading advice</div>'
+        '</div>'
+    )
+
+
+def forecast_chart(fi: dict, window_days: int) -> go.Figure:
+    h = fi["hist"].tail(window_days)
+    fc, lo, hi, last = fi["fc"], fi["lo"], fi["hi"], fi["last_close"]
+    last_date, fc_date = pd.Timestamp(fi["as_of"]), next_trading_day(fi["as_of"])
+    blue = COLORS["LSTM Walk-Forward"]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=h["date"], y=h["close"], mode="lines", name="Actual close", line=dict(color=COLORS["actual"], width=2.4),
+                             hovertemplate="%{x|%a %d %b}<br>$%{y:,.2f}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=[last_date, fc_date], y=[last, fc], mode="lines", line=dict(color=blue, width=2, dash="dot"), hoverinfo="skip"))
+    fig.add_trace(go.Scatter(
+        x=[fc_date], y=[fc], mode="markers+text", text=[f"${fc:,.0f}"], textposition="middle right", textfont=dict(size=15, color=blue),
+        marker=dict(symbol="diamond", size=16, color=blue, line=dict(color="white", width=1.5)),
+        error_y=dict(type="data", symmetric=False, array=[hi - fc], arrayminus=[fc - lo], color=blue, thickness=3, width=9),
+        hovertemplate=f"Forecast for %{{x|%a %d %b}}<br>${fc:,.2f}<br>90% range ${lo:,.0f} to ${hi:,.0f}<extra></extra>",
     ))
-    fig_hero.update_layout(height=200, margin=dict(t=10, b=10, l=10, r=90))
-    st.plotly_chart(fig_hero, use_container_width=True, config={"displayModeBar": False})
-    st.caption(
-        f"{'▲' if up else '▼'} vs. today's close **\\${latest_close:,.2f}** · 90% range **\\${lo:,.2f} – \\${hi:,.2f}** "
-        f"(gray line = today's close) · as of {as_of}"
+    span = max((fc_date - h["date"].min()).days, 10)
+    y_lo, y_hi = min(h["close"].min(), lo), max(h["close"].max(), hi)
+    pad = (y_hi - y_lo) * 0.10
+    fig.update_layout(
+        height=336, margin=dict(l=8, r=8, t=8, b=8), showlegend=False, hovermode="closest",
+        xaxis=dict(showgrid=False, range=[h["date"].min(), fc_date + pd.Timedelta(days=int(span * 0.16))]),
+        yaxis=dict(tickprefix="$", tickformat=",.0f", gridcolor="rgba(128,128,128,.18)", range=[y_lo - pad, y_hi + pad]),
     )
+    return fig
 
 
+fi = forecast_inputs()
+st.markdown('<div class="fc-title">Next-Day Gold Price Forecast</div><div class="fc-tagline">XAU/USD · LSTM model, retrained every 7 trading days</div>', unsafe_allow_html=True)
+hero_col, chart_col = st.columns([5, 7], gap="large")
+with hero_col:
+    st.markdown(hero_html(fi), unsafe_allow_html=True)
+with chart_col:
+    win = st.radio("History shown", list(WINDOWS), index=1, horizontal=True, label_visibility="collapsed", key="hero_window")
+    st.plotly_chart(forecast_chart(fi, WINDOWS[win]), use_container_width=True, config={"displayModeBar": False})
+    st.caption("Line: actual daily close · ◆ forecast for the next trading day, bar = 90% likely range")
+
+m1, m2, m3 = st.columns(3)
 if v2 is not None:
-    lf, m2 = v2["latest_forecast"], v2["models"]
-    up2, l2 = m2["drift"]["direction_from_sign"]["always_up_acc"], m2["lstm"]
-    acc2 = l2["direction_from_head"]["acc"]
-    render_hero_forecast(lf["latest_close"], lf["predicted_next_close"], *lf["interval_90_close"], lf["as_of_date"])
-    st.caption(
-        "Read this as roughly today's close within the range shown, not a trading signal — the LSTM cannot be "
-        "told apart from 'always up' on this data (see Model Evaluation)."
-    )
-
-    c1, c2 = st.columns(2)
-    c1.metric("LSTM Direction Accuracy (test)", f"{acc2:.1%}", f"{(acc2 - up2) * 100:+.1f} pt vs always-up ({up2:.1%})")
-    c2.metric("LSTM MAE (test)", f"${l2['mae_usd']:,.2f}", f"{l2['mae_usd'] - l2['naive_mae_usd']:+.2f} vs no-change", delta_color="inverse")
-else:
-    render_hero_forecast(latest_row["close"], next_day_pred, forecast_lo, forecast_hi, str(latest_row["date"].date()))
-    st.caption("Treat this as a directional signal, not a precise price target — the model under-predicts sharp upward moves (Model Evaluation).")
-
-    c1, c2 = st.columns(2)
-    c1.metric("LSTM Directional Accuracy", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
-    c2.metric("LSTM MAE (test period)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
-
-with st.expander("Daily automation forecast (Lambda inference-refresh)", expanded=False):
-    st.caption("Note: this automation runs the ORIGINAL price-level model; it has not been updated to the corrected return-target model.")
-    st.caption(
-        "The KPI above is computed fresh on every page load from the canonical "
-        "Gold-layer data and model in S3. Separately, a scheduled Lambda "
-        "(`automation/lambda_function.py`) runs once daily to keep a forecast "
-        "ready between full pipeline re-runs — shown here for comparison."
-    )
-    if lambda_forecast is None:
-        st.caption(
-            "No automation output found yet at "
-            f"`s3://{S3_BUCKET}/{FORECAST_KEY}` — either the Lambda hasn't been "
-            "deployed/run yet, or it hasn't found a new trading day to process. "
-            "This is expected until it's set up; the KPI above is unaffected."
-        )
+    lstm_v2, up_v2 = v2["models"]["lstm"], v2["models"]["drift"]["direction_from_sign"]["always_up_acc"]
+    acc_v2 = lstm_v2["direction_from_head"]["acc"]
+    m1.metric("Typical daily miss", f"${lstm_v2['mae_usd']:,.2f}", f"{lstm_v2['mae_usd'] - lstm_v2['naive_mae_usd']:+.2f} vs. “tomorrow = today”", delta_color="off",
+              help="Average gap between the forecast and the actual next-day close on the test period. A guess of “tomorrow's price = today's price” scores almost the same.")
+    m2.metric("Up/down calls correct", f"{acc_v2:.1%}", f"{(acc_v2 - up_v2) * 100:+.1f} pt vs. always guessing “up” ({up_v2:.1%})", delta_color="off",
+              help="Share of test days where the forecast got the direction right. Gold rose on most test days, so always guessing “up” is the bar to beat, not 50%.")
+    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b %Y"), f"{v2['protocol']['n_test']} test days", delta_color="off")
+    price_edge, dir_edge = model_verdict(lstm_v2, up_v2)
+    if "better" in (price_edge, dir_edge):
+        st.caption("Some edge over simple baselines was measured. See **How reliable?** for the evidence and caveats.")
     else:
-        generated_at = pd.Timestamp(lambda_forecast["generated_at"]).tz_localize(None)
-        age_hours = (pd.Timestamp.now(tz="UTC").tz_localize(None) - generated_at).total_seconds() / 3600
-        lc1, lc2, lc3 = st.columns(3)
-        lc1.metric("Automation forecast (as of " + lambda_forecast["as_of_date"] + ")",
-                   f"${lambda_forecast['predicted_next_close']:,.2f}",
-                   f"{lambda_forecast['delta']:+,.2f}")
-        lc2.metric("Agrees with on-the-fly forecast?",
-                   "Yes" if abs(lambda_forecast["predicted_next_close"] - next_day_pred) < 1.0 else "Differs")
-        lc3.metric("Generated", f"{age_hours:.1f}h ago")
-        if age_hours > 48:
-            st.warning(
-                "This automation output is over 48 hours old — the scheduled "
-                "Lambda may not be running (check EventBridge Scheduler / Lambda "
-                "logs in AWS). Not necessarily an error on a weekend/market "
-                "holiday, when no new close posts.",
-                icon="⚠️",
-            )
+        st.caption("Read this as roughly today's close within the range shown. On this data the model does not beat simple baselines (“tomorrow = today”, “always up”). See **How reliable?**.")
+else:
+    m1.metric("Typical daily miss (MAE)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
+    m2.metric("Up/down calls correct", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
+    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b %Y"))
+    st.caption("Treat this as a directional signal, not a precise price target: the model under-predicts sharp upward moves.")
 
-def render_v2_eval(v2: dict, p: pd.DataFrame) -> None:
+
+def render_track_record(v2: dict, p: pd.DataFrame) -> None:
+    st.subheader("Forecast vs. actual")
+    win_tr = st.radio("Window", ["1M", "3M", "6M", "All"], index=1, horizontal=True, label_visibility="collapsed", key="track_window")
+    q = p.tail({"1M": 22, "3M": 66, "6M": 132, "All": len(p)}[win_tr])
+    pred_close = q["meta_close"] * np.exp(q["pred_ret_lstm"])
+    err = q["meta_next_close"] - pred_close
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28], vertical_spacing=0.06,
+        subplot_titles=("Next-day close: actual vs. forecast", "Miss (actual − forecast, USD)"),
+    )
+    fig.add_trace(go.Scatter(x=q["date"], y=q["meta_next_close"], name="Actual next close", line=dict(color=COLORS["actual"], width=2.2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=q["date"], y=pred_close, name="Forecast", line=dict(color=COLORS["LSTM Walk-Forward"], width=2, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Bar(x=q["date"], y=err, marker_color=[ERROR_UNDER if e >= 0 else ERROR_OVER for e in err], showlegend=False), row=2, col=1)
+    fig.add_hline(y=0, line_color="#8a8a86", line_width=1, row=2, col=1)
+    fig.update_layout(height=500, hovermode="x unified", margin=dict(t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="left", x=0))
+    fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
+    fig.update_yaxes(title_text="USD", row=2, col=1)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.caption("Each point is a forecast made the day before (x-axis = the day it was made). Both lines show the NEXT trading day's close.")
+    st.download_button("Download predictions (CSV)", data=p.to_csv(index=False).encode("utf-8"), file_name="daily_walk_forward_predictions.csv", mime="text/csv")
+
+
+def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
     proto, models = v2["protocol"], v2["models"]
     up = models["drift"]["direction_from_sign"]["always_up_acc"]
-    st.subheader("Corrected evaluation: walk-forward LSTM on returns")
-    st.caption(
-        f"Same walk-forward scheme as the original notebooks (retrain every {proto['retrain_every_days']} trading days on the latest "
-        f"{proto['train_len_days']} days), but predicting the next-day log-return from scale-free features, with scalers re-fit inside every "
-        f"window. Test period {proto['test_start']} to {proto['test_end']} ({proto['n_test']} days); every model is scored on the same days."
-    )
+    lstm = models["lstm"]
+    hd = lstm["direction_from_head"]
+    price_edge, dir_edge = model_verdict(lstm, up)
+    phrase = {"better": "beats", "worse": "is worse than", "same": "cannot be told apart from"}
 
-    pred_close = p["meta_close"] * np.exp(p["pred_ret_lstm"])
-    err = p["meta_next_close"] - pred_close
-    fig = make_subplots(
-        rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.06,
-        subplot_titles=("Next-day close: actual vs. LSTM forecast", "Forecast error (actual - forecast, USD)"),
+    st.subheader("How reliable is the forecast?")
+    if "better" in (price_edge, dir_edge):
+        st.success("**Verdict: some measurable edge.** Check the details below before relying on it.")
+    else:
+        st.info("**Verdict: no reliable edge.** The model does not beat the simple baselines, so treat the forecast as “about today's close, within the range shown”.")
+    r2_line = (
+        f"- **Return fit:** R² {lstm['r2_returns']:+.3f} (a constant zero-return forecast scores {lstm['naive_r2_returns']:+.3f}); rank correlation IC {lstm['ic_spearman']:+.3f} (p = {lstm['ic_p']:.2f}).\n"
+        if "r2_returns" in lstm else ""
     )
-    fig.add_trace(go.Scatter(x=p["date"], y=p["meta_next_close"], name="Actual next close", line=dict(color=COLORS["actual"], width=2)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=p["date"], y=pred_close, name="LSTM forecast", line=dict(color=COLORS["LSTM Walk-Forward"], width=2, dash="dash")), row=1, col=1)
-    fig.add_trace(go.Bar(x=p["date"], y=err, marker_color=[ERROR_UNDER if e >= 0 else ERROR_OVER for e in err], showlegend=False), row=2, col=1)
-    fig.add_hline(y=0, line_color="#8a8a86", line_width=1, row=2, col=1)
-    fig.update_layout(height=520, hovermode="x unified", margin=dict(t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.05, xanchor="left", x=0))
-    fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
-    fig.update_yaxes(title_text="Error (USD)", row=2, col=1)
-    st.plotly_chart(fig, use_container_width=True)
-    st.caption(
-        "The x-axis is the day the forecast is made; both lines show the NEXT trading day's close. The forecast tracks the actual series "
-        "almost exactly because it is close to a no-change forecast: the errors are day-to-day market moves, not a systematic lag."
+    st.markdown(
+        f"- **Price error:** typical miss \\${lstm['mae_usd']:,.2f} per day. The model {phrase[price_edge]} a “tomorrow = today” guess (\\${lstm['naive_mae_usd']:,.2f}; Diebold-Mariano p = {lstm['dm_p_vs_naive']:.2f}).\n"
+        f"- **Up/down calls:** {hd['acc']:.1%} correct (95% CI {hd['ci95'][0]:.1%} to {hd['ci95'][1]:.1%}). The model {phrase[dir_edge]} “always up” ({up:.1%}; p = {hd['p_vs_always_up']:.2f}).\n"
+        f"{r2_line}"
+        f"- **Sample size:** {proto['n_test']} test days ({proto['test_start']} to {proto['test_end']}), so the interval is about ±{(hd['ci95'][1] - hd['ci95'][0]) / 2 * 100:.0f} points and small edges cannot be detected either way."
     )
 
     st.divider()
-    st.subheader("Direction accuracy vs. the 'always up' rule")
-    st.caption(
-        f"Gold rose on {up:.1%} of test days, so a model that always says 'up' already scores {up:.1%}. That, not 50%, is the bar to beat. "
-        "Bars show accuracy with a 95% confidence interval."
-    )
+    st.markdown("**Up/down accuracy vs. the simplest strategy**")
+    st.caption(f"Gold rose on {up:.1%} of test days, so always saying “up” already scores {up:.1%}. That, not 50%, is the bar to beat. Bars show 95% confidence intervals.")
     entries = [("Always up", models["drift"]["direction_from_sign"]), ("Momentum rule", models["momentum_rule"]["direction_from_head"]),
                ("Ridge", models["ridge"]["direction_from_sign"]), ("HistGB classifier", models["hist_gb_clf"]["direction_from_head"]),
                ("LSTM", models["lstm"]["direction_from_head"])]
@@ -429,54 +452,44 @@ def render_v2_eval(v2: dict, p: pd.DataFrame) -> None:
         textfont=dict(size=13, color="white"),
         error_y=dict(type="data", symmetric=False, array=[(d["ci95"][1] - d["acc"]) * 100 for _, d in entries], arrayminus=[(d["acc"] - d["ci95"][0]) * 100 for _, d in entries]),
     ))
-    fig_d.add_hline(y=up * 100, line_dash="dash", line_color="#8a8a86")
-    fig_d.update_layout(height=380, margin=dict(t=40, b=10), showlegend=False, yaxis=dict(range=[35, 72], title="Direction accuracy (%)"),
-                        title=dict(text=f"Dashed line = always up ({up:.1%})", font=dict(size=13)))
-    st.plotly_chart(fig_d, use_container_width=True)
+    fig_d.add_hline(y=up * 100, line_dash="dash", line_color="#8a8a86", annotation_text=f"always up {up:.1%}", annotation_position="top left")
+    fig_d.update_layout(height=360, margin=dict(t=20, b=10), showlegend=False, yaxis=dict(range=[35, 72], title="Correct up/down calls (%)"))
+    st.plotly_chart(fig_d, use_container_width=True, config={"displayModeBar": False})
 
-    st.divider()
-    st.subheader("Model comparison (identical test days)")
-    labels = {"drift": "Rolling drift", "ridge": "Ridge", "hist_gb_reg": "HistGB regressor", "hist_gb_clf": "HistGB classifier", "lstm": "LSTM", "momentum_rule": "Momentum rule"}
-    rows = {}
-    for key, r in models.items():
-        d = r.get("direction_from_head") or r["direction_from_sign"]
-        rows[labels.get(key, key)] = {
-            "MAE ($)": r.get("mae_usd"), "MAE skill vs no-change": r.get("mae_skill_vs_naive"), "DM p (vs no-change)": r.get("dm_p_vs_naive"),
-            "Direction acc. (%)": d["acc"] * 100, "vs always-up (pt)": (d["acc"] - d["always_up_acc"]) * 100, "p (vs always-up)": d["p_vs_always_up"],
-            "AUC": (r.get("direction_from_head") or {}).get("auc"), "IC (rank corr.)": r.get("ic_spearman"),
-        }
-    table = pd.DataFrame(rows).T.astype(float)  # None -> NaN so missing cells render as a dash
-    fmt = {"MAE ($)": "{:.2f}", "MAE skill vs no-change": "{:+.4f}", "DM p (vs no-change)": "{:.3f}", "Direction acc. (%)": "{:.1f}",
-           "vs always-up (pt)": "{:+.1f}", "p (vs always-up)": "{:.3f}", "AUC": "{:.3f}", "IC (rank corr.)": "{:+.3f}"}
-    shown = table.apply(lambda col: col.map(lambda v: "–" if pd.isna(v) else fmt[col.name].format(v)))  # display copy; `table` keeps the numbers
-    st.dataframe(shown, use_container_width=True)
-    lstm = models["lstm"]
-    hd = lstm["direction_from_head"]
-    st.markdown(
-        f"**Interpretation.** The LSTM's price error (MAE \\${lstm['mae_usd']:,.2f}) is essentially the no-change level (\\${lstm['naive_mae_usd']:,.2f}; skill "
-        f"{lstm['mae_skill_vs_naive']:+.2%}, Diebold-Mariano p = {lstm['dm_p_vs_naive']:.2f}). Its direction accuracy ({hd['acc']:.1%}, 95% CI "
-        f"{hd['ci95'][0]:.1%} to {hd['ci95'][1]:.1%}) is not distinguishable from always-up ({up:.1%}, p = {hd['p_vs_always_up']:.2f}). "
-        f"With only {proto['n_test']} test days the interval is about +/-{(hd['ci95'][1] - hd['ci95'][0]) / 2 * 100:.0f} points, so small edges cannot be detected either way. "
-        "The much larger errors reported by the original pipeline came from a price-level scale problem, not from the market."
-    )
-    d1, d2 = st.columns(2)
-    d1.download_button("Download predictions (CSV)", data=p.to_csv(index=False).encode("utf-8"), file_name="daily_walk_forward_predictions.csv", mime="text/csv")
-    d2.download_button("Download metrics table (CSV)", data=table.to_csv().encode("utf-8"), file_name="daily_walk_forward_metrics.csv", mime="text/csv")
+    with st.expander("Detailed metrics for every model (MAE, AUC, IC, R², p-values)"):
+        labels = {"drift": "Rolling drift", "ridge": "Ridge", "hist_gb_reg": "HistGB regressor", "hist_gb_clf": "HistGB classifier", "lstm": "LSTM", "momentum_rule": "Momentum rule"}
+        rows = {}
+        for key, r in models.items():
+            d = r.get("direction_from_head") or r["direction_from_sign"]
+            rows[labels.get(key, key)] = {
+                "MAE ($)": r.get("mae_usd"), "MAE skill vs no-change": r.get("mae_skill_vs_naive"), "DM p (vs no-change)": r.get("dm_p_vs_naive"),
+                "Direction acc. (%)": d["acc"] * 100, "vs always-up (pt)": (d["acc"] - d["always_up_acc"]) * 100, "p (vs always-up)": d["p_vs_always_up"],
+                "AUC": (r.get("direction_from_head") or {}).get("auc"), "IC (rank corr.)": r.get("ic_spearman"), "R² (returns)": r.get("r2_returns"),
+            }
+        table = pd.DataFrame(rows).T.astype(float)  # None -> NaN so missing cells render as a dash
+        fmt = {"MAE ($)": "{:.2f}", "MAE skill vs no-change": "{:+.4f}", "DM p (vs no-change)": "{:.3f}", "Direction acc. (%)": "{:.1f}",
+               "vs always-up (pt)": "{:+.1f}", "p (vs always-up)": "{:.3f}", "AUC": "{:.3f}", "IC (rank corr.)": "{:+.3f}", "R² (returns)": "{:+.4f}"}
+        shown = table.apply(lambda col: col.map(lambda v: "–" if pd.isna(v) else fmt[col.name].format(v)))  # display copy; `table` keeps the numbers
+        st.dataframe(shown, use_container_width=True)
+        st.download_button("Download metrics table (CSV)", data=table.to_csv().encode("utf-8"), file_name="daily_walk_forward_metrics.csv", mime="text/csv")
 
 
-tab_overview, tab_eval, tab_vol, tab_method = st.tabs([
-    "Overview", "Model Evaluation", "Volatility & Features", "Methodology",
+tab_track, tab_rel, tab_data, tab_method = st.tabs([
+    "Track record", "How reliable?", "Data explorer", "Method",
 ])
+
+with tab_track:
+    if v2 is not None:
+        render_track_record(v2, v2_preds)
+    else:
+        st.info("The forecast track record is built from daily/results, which is not available in this deployment.")
 
 # ---------------------------------------------------------------------------
 # TAB 1 — Overview: full historical price chart (+ volume panel, when present)
 # ---------------------------------------------------------------------------
-with tab_overview:
+with tab_data:
     st.subheader("Historical Gold Price (GC=F)")
-    st.caption(
-        "Full collected history. Use the range selector or drag the slider "
-        "below the chart to zoom into a specific period."
-    )
+    st.caption("Drag the slider or use 1Y / 5Y / All to zoom.")
 
     # Volume gets its own panel here (the conventional price+volume combo
     # chart) purely for context/reference. Whether it's a genuine model
@@ -529,26 +542,17 @@ with tab_overview:
 
     st.plotly_chart(fig_hist, use_container_width=True)
 
-    overview_caption = (
-        "The price series shows a sustained long-term uptrend with a sharp, "
-        "historically unprecedented acceleration during the 2025–2026 test "
-        "period — the central challenge discussed throughout Model Evaluation."
+    st.caption(
+        "Long-term uptrend with a sharp acceleration in 2025–2026. "
+        + ("Volume is shown for reference only (see Method for why it is not a model feature)." if has_volume else "")
     )
-    if has_volume:
-        overview_caption += (
-            " Volume is shown for reference only — see Methodology for why "
-            "it isn't part of the model's feature set (the long, mostly-empty "
-            "stretches are a known gap in Yahoo Finance's continuous-futures "
-            "volume reporting for GC=F, not a bug in this pipeline)."
-        )
-    st.caption(overview_caption)
 
 # ---------------------------------------------------------------------------
 # TAB 2 — Model Evaluation: actual vs predicted, error panel, comparison
 # ---------------------------------------------------------------------------
-with tab_eval:
+with tab_rel:
     if v2 is not None:
-        render_v2_eval(v2, v2_preds)
+        render_scorecard(v2, v2_preds)
     _orig = (
         st.expander("Original pipeline (price-level target, notebooks 03-06): kept for the record", expanded=False)
         if v2 is not None else nullcontext()
@@ -707,13 +711,9 @@ with tab_eval:
 # ---------------------------------------------------------------------------
 # TAB 3 — Volatility & Feature Explorer
 # ---------------------------------------------------------------------------
-with tab_vol:
+with tab_data:
     st.subheader("30-Day Rolling Volatility")
-    st.caption(
-        "Standard deviation of daily returns over a trailing 30-day window — "
-        "higher values mark periods of larger, less predictable daily "
-        "price swings, often around macroeconomic news or geopolitical events."
-    )
+    st.caption("Standard deviation of daily returns over a trailing 30-day window. Higher = bigger, less predictable swings.")
     fig_vol = go.Figure()
     fig_vol.add_trace(go.Scatter(
         x=df["date"], y=df["volatility_30"], name="30-Day Volatility",
@@ -730,13 +730,7 @@ with tab_vol:
     st.divider()
 
     st.subheader("Daily Return Distribution")
-    st.caption(
-        "Shape of the day-over-day percentage change (return) the model "
-        "actually trains on — plotted, not just described, because a "
-        "distribution's shape (fat tails, symmetry, how tightly it clusters "
-        "around zero) says more about non-stationarity than a mean/std pair "
-        "alone."
-    )
+    st.caption("Day-over-day percentage change, the quantity the model actually predicts.")
     return_pct = (df["return"] * 100).dropna()
     fig_ret = go.Figure(go.Histogram(
         x=return_pct, nbinsx=120,
@@ -749,23 +743,12 @@ with tab_vol:
         xaxis_title="Daily Return (%)", yaxis_title="Frequency",
     )
     st.plotly_chart(fig_ret, use_container_width=True)
-    st.caption(
-        f"Mean {return_pct.mean():+.3f}% · Std {return_pct.std():.3f}% — "
-        "tightly centered on zero with a visible peak (more days near-flat "
-        "than a normal distribution would predict) and a few multi-percent "
-        "tails in both directions. This is exactly the non-stationarity fix "
-        "described in Methodology: expressing moves as a percentage keeps "
-        "this distribution's shape stable regardless of whether gold is "
-        "trading at \\$400 or \\$5,300, which the raw price series cannot do."
-    )
+    st.caption(f"Mean {return_pct.mean():+.3f}% · Std {return_pct.std():.3f}% — tightly centred on zero with fat tails, and stable whether gold trades at \\$400 or \\$5,300.")
 
     st.divider()
 
     st.subheader("Feature Explorer")
-    st.caption(
-        "The engineered features the model actually trains on (see "
-        "Methodology for why each one was added)."
-    )
+    st.caption("The engineered features the model trains on.")
     feat_choice = st.multiselect(
         "Select features to plot",
         options=list(FEATURE_LABELS.keys()),
@@ -816,7 +799,7 @@ with tab_method:
 
         with st.expander("Also tested, still null: macro, calendar and positioning features"):
             st.caption(
-                "Five independent additions to the LSTM, identical test period and protocol throughout. AUC never leaves the "
+                "Five independent additions to the LSTM, identical protocol throughout, evaluated on the 2025-01-09 to 2026-09-18 snapshot. AUC never leaves the "
                 "0.45-0.52 band and no p-value clears 0.05 — checked directly, the model predicts 'up' on 85-89% of days "
                 "regardless of which features it gets, which is why accuracy moves while AUC does not."
             )
@@ -878,3 +861,38 @@ with tab_method:
             "MAE/RMSE measure error magnitude but say nothing about calling direction — a model can score well on MAE simply "
             "because prices rarely move much day-to-day, while being no better than a coin flip on up-vs-down."
         )
+
+    st.divider()
+    with st.expander("Daily automation forecast (Lambda inference-refresh)", expanded=False):
+        st.caption("Note: this automation runs the ORIGINAL price-level model; it has not been updated to the corrected return-target model.")
+        st.caption(
+            "The KPI above is computed fresh on every page load from the canonical "
+            "Gold-layer data and model in S3. Separately, a scheduled Lambda "
+            "(`automation/lambda_function.py`) runs once daily to keep a forecast "
+            "ready between full pipeline re-runs — shown here for comparison."
+        )
+        if lambda_forecast is None:
+            st.caption(
+                "No automation output found yet at "
+                f"`s3://{S3_BUCKET}/{FORECAST_KEY}` — either the Lambda hasn't been "
+                "deployed/run yet, or it hasn't found a new trading day to process. "
+                "This is expected until it's set up; the KPI above is unaffected."
+            )
+        else:
+            generated_at = pd.Timestamp(lambda_forecast["generated_at"]).tz_localize(None)
+            age_hours = (pd.Timestamp.now(tz="UTC").tz_localize(None) - generated_at).total_seconds() / 3600
+            lc1, lc2, lc3 = st.columns(3)
+            lc1.metric("Automation forecast (as of " + lambda_forecast["as_of_date"] + ")",
+                       f"${lambda_forecast['predicted_next_close']:,.2f}",
+                       f"{lambda_forecast['delta']:+,.2f}")
+            lc2.metric("Agrees with on-the-fly forecast?",
+                       "Yes" if abs(lambda_forecast["predicted_next_close"] - next_day_pred) < 1.0 else "Differs")
+            lc3.metric("Generated", f"{age_hours:.1f}h ago")
+            if age_hours > 48:
+                st.warning(
+                    "This automation output is over 48 hours old — the scheduled "
+                    "Lambda may not be running (check EventBridge Scheduler / Lambda "
+                    "logs in AWS). Not necessarily an error on a weekend/market "
+                    "holiday, when no new close posts.",
+                    icon="⚠️",
+                )
