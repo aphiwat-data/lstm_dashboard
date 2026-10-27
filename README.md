@@ -7,7 +7,8 @@ every real issue hit and fixed, current evaluation results, and everything
 still pending. It merges the written thesis proposal (`Next_day_Gold_
 Prices_Forcasting_With_LSTM.pdf`) with what the pipeline *actually* does
 today, and calls out every place the two disagree. Read this fully before
-making changes.
+making changes. If you are picking the project up, start with the
+**[Handoff](#handoff-where-things-stand-2026-10-27)** block below.
 
 For the full chronological story of every AWS/code error hit and how it
 was fixed (useful for "what problems did you encounter" in the defense),
@@ -17,6 +18,84 @@ see **[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)**.
 > pipeline's very large LSTM error (MAE ≈ \$640) was a scale problem, not a market effect, and its "best
 > directional accuracy" did not survive comparison with the trivial "always up" rule. Read the
 > **[Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned)** first; the corrected numbers are in §8.0.
+
+---
+
+## Handoff: where things stand (2026-10-27)
+
+Read this block first if you are picking the project up (a new contributor or another coding agent); everything below it is the
+detailed record.
+
+**Links.** Code: https://github.com/aphiwat-data/lstm_dashboard (public, branch `main`). Live dashboard:
+https://lstmdashboard-v6sere4oaulpge5dj9bq5p.streamlit.app (Streamlit Community Cloud redeploys from `main` within about a minute
+of a push). The thesis documents (Word/PDF, including Chapter 3) are kept outside this repo.
+
+**The result.** On the 449-day walk-forward test window (2025-01-09 to 2026-10-23) the LSTM is level with a no-change forecast, not
+better:
+
+| Check | Result |
+|---|---|
+| Price error | MAE \$46.83 vs \$46.63 for "tomorrow = today" (Diebold-Mariano p = 0.38); 1.15% of the price |
+| Fit on returns | R² -0.014 (a constant zero-return forecast scores -0.003); IC +0.006 (p = 0.90) |
+| Direction (secondary) | 51.9% vs always-up 55.2% (p = 0.155), AUC 0.463; the model says "up" on about 88% of days |
+| Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
+| The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
+
+The write-up is a well-instrumented negative result. The feature-search line is closed (Phase 9); do not reopen it without a new idea.
+
+**Metric policy (advisor, 2026-10-27).** Directional accuracy is a classification metric, not the yardstick for a price forecast. Lead
+with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" baseline and keep up/down accuracy only as a labelled
+secondary check (it is how the proposal phrased the ~70% target, and it exposes the model's majority-class behaviour). The dashboard
+already does this; the thesis tables still carry Direction Accuracy columns (§12 item 15).
+
+**Evaluation protocol (daily).** `daily/walk_forward.py` retrains every 7 trading days on the trailing 365 days: input window 20 days,
+LSTM(32) with two heads (next-day log-return and direction), 3 seeds averaged, scalers re-fit inside every window; the forecast price
+is `close * exp(predicted log-return)`. Baselines on identical rows: rolling drift (= always up), ridge, HistGB regressor and
+classifier, momentum rule. Statistics: binomial test against the always-up rate, Wilson 95% CIs, AUC, Diebold-Mariano against
+no-change, Spearman IC, R² on returns, and a 90% interval from the LSTM residuals. Features come from
+`daily/build_daily_dataset.py` and are causal and scale-free by construction (`daily/test_no_lookahead_daily.py` checks it).
+
+**How to run things** (the S3 silver table and the dashboard's original-pipeline views need AWS credentials; pass `--silver <local
+parquet>` to keep the daily scripts off S3):
+
+```bash
+python3 -m streamlit run dashboard/app.py          # dashboard on http://localhost:8501 (repo root)
+cd daily
+python3 test_no_lookahead_daily.py                 # causality tests
+python3 build_daily_dataset.py --out-dir data/processed
+python3 walk_forward.py --data data/processed/xauusd_d1_features.parquet --latest data/processed/xauusd_d1_latest_features.parquet --out-dir results
+python3 horizon_always_up.py                       # the Phase 8 horizon table
+```
+
+The feature-search folders are the same walk-forward run on a differently built dataset (one `--out-dir` per variant):
+
+| Results folder (`daily/results/`) | `build_daily_dataset.py` flags |
+|---|---|
+| `with_macro/` | `--macro` |
+| `with_macro_calendar/` | `--macro --calendar --calendar-events nfp` |
+| `with_macro_calendar_full/` | `--macro --calendar` |
+| `with_cot/` | `--macro --calendar --cot` |
+
+Hourly: `hourly/run_full_pipeline.sh` (needs Node for `dukascopy-node`; run `npm install` in `hourly/` first), then
+`hourly/train_models.py` (usage in its docstring).
+
+**Refreshing the results** (§12 item 12). (1) Extend the silver data: the S3 table is still at 2026-09-21, and a local parquet with the
+same columns can be passed to `--silver`. (2) Delete or repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first:
+`fetch_macro` and `fetch_cot` return a cache as-is without checking its end date, so a stale cache silently forward-fills old values.
+(3) Re-run the main walk-forward **and all four variants on the same rows**, keep the previous outputs in a dated
+`daily/results/snapshot_*` folder, and update the README numbers, Chapter 3 Tables 3.2-3.5 and the dashboard together (the
+dashboard's feature-search table reads the `with_*` folders by itself).
+
+**Working agreements and traps.**
+- The repo is public: never commit AWS keys, the AWS account ID or any credentials (Streamlit Cloud keeps them in the app's Secrets).
+  The student names and IDs in the dashboard sidebar are public on purpose (the owner's request).
+- Dashboard code: native Streamlit elements only (no `unsafe_allow_html`), `width="stretch"`, escape dollar signs in markdown as
+  `\$`, and use `st.container(horizontal=True)` instead of `st.columns` for anything that must survive the open sidebar. Cloud
+  installs a newer Streamlit than local development used (1.66 vs 1.56), so check every layout change at 1280, 1024, 900, 760 and
+  390 px and on the live URL after the push (§10, lessons).
+- The owner pushes small commits straight to `main`. Every push redeploys the public app, so a broken `app.py` is public at once.
+- Chapter 3 tables were updated programmatically from the results JSONs with python-docx (each table cell is a single run: set
+  `run.text` to keep the formatting). Keep a backup next to the file and compare every number with the README.
 
 ---
 
@@ -208,6 +287,9 @@ pinned down before it is a meaningful target.
 | 60 | 75.6% | 62.9% | 6 |
 | 120 | 71.1% | 68.9% | 2 |
 
+  (Produced by `daily/horizon_always_up.py`: the share of test days whose h-day-ahead return is positive, using only price pairs
+  inside the test window, so n = N - h and n_eff = n // h.)
+
   A reported "76% accuracy at 60 days" needs no model at all, and at that horizon the test period only
   contains about 6 non-overlapping windows, too few to conclude anything either way.
 - **Three ways a ~70% figure shows up that do not mean the model has skill:** (1) a long horizon in a trending
@@ -279,7 +361,7 @@ as a well-instrumented negative result rather than pursued further.
 `f_nfp_day`/`f_days_since_nfp` in `daily/build_daily_dataset.py`) on top of the six macro series above — a
 deterministic "first Friday of the month" rule, since `bls.gov` blocks automated access and no other source
 of the exact historical CPI/FOMC release-date list could be verified reliably enough to trust in a research
-dataset (those two remain untested for that reason, not by choice). Result: still null (LSTM AUC 0.514,
+dataset (at that point those two were untested for that reason, not by choice; Addendum 2 below adds them). Result: still null (LSTM AUC 0.514,
 accuracy 55.0%, p = 0.924; HistGB classifier AUC 0.489) — full results in `daily/results/with_macro_calendar/`.
 
 **Addendum 2 (FOMC + CPI added)**: revisited the CPI/FOMC gap by sourcing exact historical dates directly
@@ -312,17 +394,18 @@ on once — not reported as a finding.) Full results in `daily/results/with_macr
 ### Where things live
 | Path | What |
 |---|---|
-| `notebooks/`, `automation/` | Original daily pipeline and the (not yet deployed) Lambda |
-| `daily/` | Corrected daily dataset builder, tests, walk-forward evaluation; `results/` feeds the dashboard, `results/with_macro/` is the Phase 9 cross-asset run |
-| `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check; `results/summary_hourly_findings.png` is the one-page summary |
-| `dashboard/app.py` | Streamlit app (deployed on Streamlit Community Cloud) |
+| `notebooks/`, `automation/` | Original daily pipeline (notebooks 01-06) and the Lambda automation, which is designed but not deployed and still runs the old price-level model |
+| `daily/` | Corrected daily dataset builder, causality tests and walk-forward evaluation. `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
+| `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check and the cross-asset test (`results/with_aux_mid/`); `results/summary_hourly_findings.png` is the one-page summary |
+| `dashboard/app.py` | Streamlit app (deployed on Streamlit Community Cloud from `main`); `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
 | `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
 
 ### Status and next steps
-Open items are tracked in §12. The main ones: finish or clean up the Lambda deployment (and convert it to the return-target
-model) and replace the thesis Table 3.2 with the corrected table in §8.0. Cross-asset features are now tested (Phase 9,
-still null); economic-calendar dummies (FOMC/CPI/NFP) remain untested if there's time, but given the evidence above —
-every lever tried lands at AUC ~0.50 — the honest write-up is a well-instrumented negative result rather than a 70% claim.
+See the **Handoff** block at the top and §12 for the tracked open items. In short: the modelling work is finished and closed as a
+negative result (every lever tried, including macro, NFP, FOMC/CPI and COT features on daily and hourly data, lands at AUC ~0.50,
+so the honest write-up is a well-instrumented negative result rather than a 70% claim). What remains is writing and housekeeping:
+the thesis write-up (Chapter 3 is on the 449-day window; a regression-first restructure is optional), the Lambda decision (finish it
+around the return-target model, or tear down the partial AWS changes), and refreshing the results when new data arrives (§12 item 12).
 
 ---
 
@@ -356,7 +439,7 @@ Financial Analytics.
 ## 1. Repository Structure
 
 ```
-gold-lstm-forecast/
+lstm_dashboard/
 ├── README.md                    ← this file
 ├── docs/
 │   └── TROUBLESHOOTING.md       ← full chronological log of every error + fix
@@ -369,7 +452,13 @@ gold-lstm-forecast/
 │   └── 06_Model_Evaluation.ipynb
 ├── dashboard/
 │   ├── app.py                   ← Streamlit dashboard (deployed on Streamlit Community Cloud; reads S3 + daily/results) — see §10
-│   └── requirements.txt
+│   ├── assets/                  ← mfu_logo.png, adt_logo.png (sidebar header)
+│   ├── requirements.txt         ← sets a streamlit>=1.56 floor (Cloud installs the newest release)
+│   └── .python-version          ← 3.11
+├── .streamlit/config.toml       ← theme colour and minimal toolbar
+├── .claude/launch.json          ← preview-server config for Claude Code sessions (optional)
+├── .devcontainer/               ← dev container definition
+├── .python-version              ← 3.11
 ├── automation/                  ← daily inference-refresh Lambda — see §11 and automation/README.md
 │   ├── README.md                ← full design rationale + deploy/teardown steps
 │   ├── lambda_function.py       ← the daily handler (inference-only, no training)
@@ -378,15 +467,21 @@ gold-lstm-forecast/
 │   ├── deploy.sh                ← idempotent: ECR + Lambda + EventBridge Scheduler
 │   └── iam_*.json, scheduler_*.json  ← least-privilege policies for the Lambda's own role
 ├── daily/                       ← corrected daily pipeline (Sep 2026) — see Journey and §8.0
-│   ├── build_daily_dataset.py   ← scale-free features + log-return targets from the Silver table
+│   ├── build_daily_dataset.py   ← scale-free features + log-return targets from the Silver table; --macro / --calendar / --cot add the Phase 9 feature sets
 │   ├── test_no_lookahead_daily.py
 │   ├── walk_forward.py          ← walk-forward LSTM (retrain every 7 days, 365-day window) + baselines + tomorrow's forecast
-│   └── results/                 ← metrics JSON, predictions CSV, latest_forecast.json (read by the dashboard)
+│   ├── horizon_always_up.py     ← always-up accuracy by horizon (Phase 8 table)
+│   ├── requirements.txt
+│   └── results/                 ← main run (449-day window): walk_forward_results.json, wf_predictions.csv, latest_forecast.json (read by the dashboard)
+│       ├── with_macro/, with_macro_calendar/, with_macro_calendar_full/, with_cot/   ← Phase 9 feature-search runs on the same rows
+│       ├── snapshot_2026-09-18/ ← the earlier 424-day outputs of all five runs
+│       └── model_results_lstm_w*.json   ← static-training variants (not re-run in the October refresh)
 ├── hourly/                      ← hourly XAU/USD experiments (Dukascopy) — see Journey, phases 5-6
 │   ├── download_dukascopy.py, build_hourly_dataset.py, test_no_lookahead.py
 │   ├── baseline.py, train_models.py, spread_artifact_check.py, make_summary_figure.py
-│   └── results/                 ← metrics JSON + summary_hourly_findings.png
-└── .gitignore                   ← excludes venv/, .aws/, and pulled *.npy/*.pkl/*.keras/*.parquet artifacts
+│   ├── run_full_pipeline.sh, package.json   ← download (bid, ask, aux instruments) and build; needs Node for dukascopy-node
+│   └── results/                 ← metrics JSON + summary_hourly_findings.png; with_aux_mid/ is the hourly cross-asset test
+└── .gitignore                   ← excludes venv/, .aws/, daily/data/, hourly/data/ and pulled *.npy/*.pkl/*.keras/*.parquet artifacts
 ```
 
 All 6 notebooks in `notebooks/` are the **current, corrected** versions —
@@ -961,7 +1056,7 @@ brief:
 
 ---
 
-## 10. Streamlit Dashboard (local, ad-hoc — not a persistent server)
+## 10. Streamlit Dashboard (deployed on Streamlit Community Cloud)
 
 > **Update (Sep 2026):** the dashboard is also deployed on Streamlit Community Cloud (Python 3.11; AWS credentials in the
 > app's Secrets, never in git). The KPIs and the Model Evaluation tab now lead with the corrected evaluation read from
@@ -991,18 +1086,33 @@ brief:
 > uses wrapping horizontal containers (`st.container(horizontal=True)`), which wrap by *content* width, so the range and
 > last close drop below the price instead of squeezing it.
 
-**STATUS: still open to further iteration**, but now a complete, polished,
-English-only pass covering all four components the proposal's §3.8
-specifies — not just a starting point. Keep improving it based on
-feedback; nothing below should be treated as frozen.
+**STATUS: live and redesigned (October 2026).** Further iteration is welcome (nothing here is frozen), but the structure in the next
+subsection is what a reader sees today.
 
-**Design decision (this part IS fixed)**: the dashboard runs **locally on
-the student's Mac**, on demand (screenshots now, live demos to the advisor
-later), reading data straight from S3. It is deliberately **not** deployed
-to always-on AWS compute — the real AWS cost risk in this project is
-compute left running continuously, not data reads or occasional inference;
-S3 storage/reads at this data volume are effectively free, and a single
-local inference call costs nothing.
+### Current dashboard (October 2026)
+- **Hosting.** Streamlit Community Cloud, app path `dashboard/app.py`, Python 3.11, redeployed automatically from `main`. AWS credentials
+  live in the app's Secrets (never in git). For local runs use `python3 -m streamlit run dashboard/app.py` (needs AWS credentials for
+  the S3 reads).
+- **Sidebar (credits first).** MFU and ADT logos side by side, project title, degree and school, authors with student IDs, advisor and
+  committee, then data freshness and a "Model and data details" expander.
+- **Header (the forecast is the product).** Next-day forecast price (the largest element), change vs. last close, 90% likely range and
+  last close, a 1M/3M/6M/1Y chart with the forecast and its range drawn on it, then three cards: typical daily miss (MAE in dollars),
+  typical miss as a share of the price (MAPE) and the data-through date. Chips are green or red only when the difference from
+  "tomorrow = today" is statistically clear (p < 0.05), orange or blue when it is within noise.
+- **Tabs, in order.** *Track record* (forecast vs. actual and the daily miss); *Data explorer* (price history with volume, 30-day
+  volatility, return distribution, feature explorer); *How reliable?* (verdict, price error, R² and IC, typical miss per model vs.
+  "tomorrow = today", a secondary up/down expander, a full-metrics expander, and the original pipeline kept for the record);
+  *Method* (bottom line, what changed after review, the "Also tested, still null" table read from `daily/results/with_*`, and the
+  original methodology notes).
+- **Data it reads.** `daily/results/walk_forward_results.json`, `wf_predictions.csv` and `latest_forecast.json` (cache keyed on file
+  mtime, so a refresh shows up without a restart), the four feature-search folders, and the S3 Gold/model artifacts for the original
+  pipeline views.
+- **Rules that came from real bugs:** native Streamlit elements only; `width="stretch"` instead of `use_container_width`; escape
+  dollar signs in markdown as `\$`; wrapping containers instead of `st.columns` where the open sidebar would squeeze content; check
+  every layout change at several widths and on the live URL (see the lessons above).
+
+**Hosting decision.** Streamlit Community Cloud is free. The real AWS cost risk in this project is compute left running continuously
+(not S3 reads or occasional inference), so the dashboard is deliberately not deployed to always-on AWS compute.
 
 Per the proposal's own §3.8 (Visualization and Reporting), Streamlit was
 chosen because it integrates directly with the existing Python pipeline
@@ -1015,7 +1125,7 @@ test-set comparison, (3) a dedicated 30-day rolling volatility chart, and
 the three baselines) — plus a next-day forecast KPI, a prediction-error
 panel, and a feature explorer that go beyond the original spec.
 
-### Layout — organized into four tabs
+### Layout of the original design (superseded October 2026; kept for the record)
 - **Overview** — KPI header (latest close, next-day forecast + delta, LSTM
   directional accuracy, LSTM MAE) sits above the tabs, always visible;
   the Overview tab itself holds the full historical price chart
@@ -1235,8 +1345,10 @@ that discipline matters most), and teardown instructions are all in
 
 ## 12. Pending / Not Yet Done
 
-1. **Update the thesis proposal Word document** (source `.docx`, not
-   accessible from this session — PDF-only):
+1. **Thesis write-up.** *Status (Oct 2026): the advisor allowed rewriting, so the old proposal is superseded and a new report is
+   being written. `Chapter3.docx` already has Table 3.2 replaced with the corrected results, §3.6.2's window fixed, and §3.7.4 with
+   Tables 3.3-3.5 (R²/IC, feature sets, horizons) added, all on the 449-day window; backups sit next to the file. The checklist
+   below is the original list for the old proposal; apply what is still relevant to the new report.*
    - Fix the Figure 3.9/3.10 caption swap noted earlier in the project.
    - Replace the interpretation and Table 3.2 with the corrected results in
      §8.0 (the original §8.4 table and the "worst MAE but best direction"
@@ -1258,8 +1370,8 @@ that discipline matters most), and teardown instructions are all in
 2. ~~Do not cite the old R² (~0.87)~~ **Done** — computed on returns from
    `daily/results/wf_predictions.csv`. It predates both the AR(5)/early-stopping
    fixes and the scale correction (Journey, phase 7), and is superseded: the
-   corrected LSTM's R² is **-0.013** (worse than predicting zero return every
-   day, R² = -0.005). See Journey, Phase 7 addendum for the full table
+   corrected LSTM's R² is **-0.014** (worse than predicting zero return every
+   day, R² = -0.003). See Journey, Phase 7 addendum for the full table
    (R² and IC for every model).
 3. **Re-verify the exact row counts** in §2.2/§6 (5,491 Silver rows, 5,431
    Gold rows, 4,887/544 train/test) against a fresh run if the dataset has
@@ -1273,9 +1385,8 @@ that discipline matters most), and teardown instructions are all in
 6. Optional/future: persist the baseline model metrics from notebook 06 to
    S3 (currently only recomputed on the fly) if a saved-artifact record is
    ever needed outside a live session.
-7. **Keep iterating on the Streamlit dashboard** (§10) — current layout is
-   a first pass; extend toward the proposal's full §3.8 spec (historical
-   price chart, dedicated volatility chart) and beyond, based on feedback.
+7. ~~Keep iterating on the Streamlit dashboard~~ **Done for now (Oct 2026):** the forecast-first redesign, credits sidebar,
+   regression-first metrics and responsive layout are live (§10). Further changes are optional and should follow the rules in §10.
 8. **Actually deploy and verify the daily automation** (§11) against the
    live AWS account — run `convert_and_export.py` + `deploy.sh`, confirm a
    real invocation writes a correct `latest_forecast.json`, then let it run
@@ -1304,7 +1415,9 @@ that discipline matters most), and teardown instructions are all in
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
     (commands in the script docstrings), commit `daily/results/`. **Last done 2026-10-27** (data through 2026-10-26,
     see Journey, Phase 7 refresh note). The S3 silver table is still at 2026-09-21: re-run notebooks 01-02 (or the Lambda
-    path) to bring it forward, or pass a locally extended silver parquet to `--silver`.
+    path) to bring it forward, or pass a locally extended silver parquet to `--silver`. When refreshing, re-run the main walk-forward
+    **and all four feature-search variants on the same rows**, and update the README, Chapter 3 and the dashboard together; delete or
+    repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first, because a stale cache is reused as-is (see Handoff).
 13. **Daily-pipeline cross-asset + calendar + COT features: closed, done (Phase 9, all addenda), null** —
     DXY, silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates), CPI (271 dates) and CFTC Commitment of
     Traders positioning all added to the daily model; best single result is LSTM AUC 0.520 (macro+NFP+FOMC+CPI,
@@ -1313,9 +1426,18 @@ that discipline matters most), and teardown instructions are all in
     cross-asset features (silver, EURUSD, S&P 500, DXY as hourly bars) was run too and is also null (hourly
     addendum in the Journey); re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
     Dukascopy's rate limit allows.
-14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
-    coverage) and present the corrected results (§8.0) with the always-up
-    baseline shown next to every accuracy figure.
+14. ~~Agree with the advisor what "~70% accuracy" refers to~~ **Largely resolved (2026-10-27):** the advisor said accuracy is a
+    classification metric and not the yardstick for a price forecast, so the dashboard and Chapter 3 lead with price error and the
+    ~70% target is a secondary analysis (thesis §3.7.4: always-up alone passes 70% at long horizons without any model, and ~70% sign
+    accuracy on daily returns would need a correlation near 0.59). Remaining: confirm with the advisor how the 70% objective should be
+    worded in the final report.
+15. **Optional: restructure Chapter 3 regression-first.** Lead Table 3.2 with MAE, RMSE, MAPE, R² and IC against the no-change
+    baseline and move Direction Accuracy and AUC into a secondary table; all the numbers are in `daily/results/walk_forward_results.json`.
+16. **Keep results, README, thesis and dashboard on one window.** Every daily number is on 2025-01-09 to 2026-10-23 (n = 449). A refresh
+    regenerates the main run and all four variants together, updates the README (Journey, §8.0, Phase 8 and 9), Chapter 3
+    Tables 3.2-3.5 and keeps the previous outputs in a dated `snapshot_*` folder.
+17. **Privacy.** The repo is public: no AWS keys or account ID in any file; the student names and IDs shown in the dashboard are there
+    by the owner's choice.
 
 ---
 
@@ -1354,24 +1476,12 @@ e0298426, 2024.
 
 ---
 
-## 14. Putting This on GitHub
+## 14. Repository, hosting and publishing
 
-This folder is a ready-to-init repo. From inside `gold-lstm-forecast/`:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: full pipeline (01-06), dashboard, docs"
-```
-
-Then create an empty repository on GitHub (via the website, or `gh repo
-create` if the GitHub CLI is installed and authenticated), and:
-
-```bash
-git remote add origin <your-repo-url>
-git branch -M main
-git push -u origin main
-```
+The code lives at https://github.com/aphiwat-data/lstm_dashboard (public). `main` is the deployed branch: a push redeploys the
+Streamlit app within about a minute, so look at the live URL after every push (the deployed Streamlit version is newer than the one
+used locally). New clone: `git clone https://github.com/aphiwat-data/lstm_dashboard.git`, then `pip install -r dashboard/requirements.txt`
+(and `daily/requirements.txt` for the daily scripts).
 
 Notes:
 - The `.gitignore` already excludes `venv/`, `.aws/` credentials, and the
