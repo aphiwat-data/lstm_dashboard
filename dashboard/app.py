@@ -270,8 +270,14 @@ v2, v2_preds          = load_v2(_v2_file.stat().st_mtime if _v2_file.exists() el
 df["volatility_30"] = df["return"].rolling(30).std()
 
 # ---------------------------------------------------------------------------
-# Sidebar — short and calm; technical details live in an expander
+# Sidebar — short and calm; credits and technical details live in expanders
 # ---------------------------------------------------------------------------
+LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mfu_logo.png"
+PROJECT_TITLE = "Next-Day Gold Price Forecasting with LSTM"
+TEAM = [("Mr. Achira Lueablae", "6631501120"), ("Mr. Aphiwat Chioewvijit", "6631501121")]
+ADVISOR = "Asst. Prof. Pattaramon Vuttipittayamongkol"
+COMMITTEE = ["Asst. Prof. Khwunta Kirimasthong", "Asst. Prof. Surapong Uttama"]
+
 with st.sidebar:
     st.markdown("### Gold Price Forecast")
     st.caption("Next-day XAU/USD forecasting with an LSTM. Computer Engineering senior project, Mae Fah Luang University.")
@@ -279,6 +285,15 @@ with st.sidebar:
         st.caption(f"Data through **{v2['latest_forecast']['as_of_date']}** · generated {v2['latest_forecast']['generated_at'][:10]}")
     else:
         st.caption(f"Data through **{latest_row['date'].date()}**")
+    with st.expander("About this project"):
+        if LOGO_PATH.exists():
+            with st.container(horizontal_alignment="center"):
+                st.image(str(LOGO_PATH), width=110)
+        st.markdown(f"**{PROJECT_TITLE}**")
+        st.caption("Bachelor of Engineering  \nMajor Computer Engineering  \nSchool of Applied Digital Technology  \nMae Fah Luang University · 2026")
+        st.markdown("**Developed by**\n\n" + "\n".join(f"- {name}  \n  :gray[Student ID {sid}]" for name, sid in TEAM))
+        st.markdown(f"**Advisor**\n\n- {ADVISOR}")
+        st.markdown("**Committee**\n\n" + "\n".join(f"- {name}" for name in COMMITTEE))
     with st.expander("Model and data details"):
         st.markdown("**Data**")
         st.text(f"GC=F (COMEX Gold Futures)\n{df['date'].min().date()} – {df['date'].max().date()}\n{len(df):,} rows")
