@@ -48,6 +48,22 @@ with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" ba
 secondary check (it is how the proposal phrased the ~70% target, and it exposes the model's majority-class behaviour). The dashboard
 already does this; the thesis tables still carry Direction Accuracy columns (§12 item 15).
 
+**In progress: regression-first metric rewrite (started 2026-10-27, not finished).** *Done:* `daily/regression_metrics.py` (tests in
+`daily/test_regression_metrics.py`) computes from `wf_predictions.csv`, with no retraining: MAE, RMSE, MAPE, MAE skill and Theil's U vs.
+no-change, Diebold-Mariano p (lags 0 and 24; LSTM p = 0.38-0.41 either way), R², out-of-sample R² vs. zero and vs. the rolling mean
+(LSTM -0.011), IC, and interval coverage, width and interval score using only errors known before each forecast. It writes
+`regression_metrics.json` into `daily/results/` and every `with_*` folder (run `python3 regression_metrics.py` from `daily/` after each
+walk-forward). *Finding:* the shipped "90% likely range" was calibrated on the whole test window's errors, so "contained the actual close
+on 90% of test days" was true by construction; scored honestly (errors known beforehand only) it covered 85.9%. A Gaussian band scaled by
+an EWMA of past errors (lambda 0.94, the RiskMetrics default, fixed in advance) covers 89.5% (n = 389); the same JSON compares its width
+with a no-change band (`interval.no_change_ewma_gaussian`). *Left to do:* (1) call `write_metrics` and `latest_band` from
+`walk_forward.py`, then run `python3 regression_metrics.py --refresh-latest-interval` so the shipped band uses the EWMA method;
+(2) dashboard: read `regression_metrics.json` for MAPE, out-of-sample R² and coverage, replace the hero caption "Actual closes fell inside
+this band on 90% of test days" with the honest coverage, and add the new columns to the metrics expander; (3) Chapter 3: Table 3.2 becomes
+price accuracy (MAE, RMSE, MAPE, MAE vs. no-change, DM p) for the five models that forecast a price, Table 3.3 gains out-of-sample R²,
+direction accuracy and AUC move to a secondary table that keeps all six models, the feature-set table leads with price error and IC
+(renumber captions and cross-references), and an interval-calibration paragraph is added; (4) README §8.0 and the Phase 7 tables to match.
+
 **Evaluation protocol (daily).** `daily/walk_forward.py` retrains every 7 trading days on the trailing 365 days: input window 20 days,
 LSTM(32) with two heads (next-day log-return and direction), 3 seeds averaged, scalers re-fit inside every window; the forecast price
 is `close * exp(predicted log-return)`. Baselines on identical rows: rolling drift (= always up), ridge, HistGB regressor and
