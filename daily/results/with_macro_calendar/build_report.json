@@ -1,5 +1,5 @@
 {
-  "rows_raw": 5606,
+  "rows_raw": 5631,
   "duplicate_dates": 0,
   "invalid_ohlc_rows": 347,
   "invalid_ohlc_share_by_year": {
@@ -13,7 +13,7 @@
     "2011": 0.079
   },
   "nonpositive_close_rows": 0,
-  "zero_volume_share": 0.0282,
+  "zero_volume_share": 0.0281,
   "gaps_gt_5_days": [],
   "extreme_1day_moves": [
     {
@@ -37,12 +37,10 @@
       "logret": -0.1141
     }
   ],
-  "rows_clean": 5606,
+  "rows_clean": 5631,
   "start": "2004-06-01",
-  "end": "2026-09-21",
-  "coverage_warnings": [
-    "data ends 2026-09-21, 6 days ago (tail missing?)"
-  ],
+  "end": "2026-10-26",
+  "coverage_warnings": [],
   "macro": {
     "enabled": true,
     "tickers": {
@@ -56,18 +54,24 @@
   },
   "calendar": {
     "enabled": true,
-    "note": "NFP (first-Friday-of-month) only; CPI/FOMC skipped, no reliable historical source (README \u00a712)"
+    "events": [
+      "nfp"
+    ],
+    "note": "NFP (first-Friday-of-month rule); FOMC/CPI from fixed historical date lists (federalreserve.gov, bls.gov)"
+  },
+  "cot": {
+    "enabled": false
   },
   "dataset": {
-    "rows": 5506,
+    "rows": 5531,
     "start": "2004-08-26",
-    "end": "2026-09-18",
+    "end": "2026-10-23",
     "n_features": 36,
     "per_split": {
       "test": {
-        "rows": 424,
-        "share_up": 0.559,
-        "share_up_h5": 0.6071
+        "rows": 449,
+        "share_up": 0.5523,
+        "share_up_h5": 0.5865
       },
       "train": {
         "rows": 4835,

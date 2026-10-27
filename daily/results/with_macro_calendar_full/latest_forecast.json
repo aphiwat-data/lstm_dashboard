@@ -1,12 +1,12 @@
 {
-  "as_of_date": "2026-09-21",
-  "latest_close": 4383.9,
-  "predicted_return": 0.0015067573403939605,
-  "predicted_next_close": 4390.51,
-  "p_up": 0.5180299878120422,
+  "as_of_date": "2026-10-26",
+  "latest_close": 4038.4,
+  "predicted_return": 0.003045293502509594,
+  "predicted_next_close": 4050.72,
+  "p_up": 0.5247589945793152,
   "interval_90_close": [
-    4275.13,
-    4498.56
+    3944.95,
+    4148.96
   ],
-  "generated_at": "2026-09-27T09:15:20+00:00"
+  "generated_at": "2026-10-27T09:48:56+00:00"
 }

@@ -182,12 +182,13 @@ writes `r2_returns` per model and `naive_r2_returns` (the predict-zero baseline)
 
 **Refresh (2026-10-27).** The daily pipeline was re-run on newly collected data: 25 more trading days (through 2026-10-26;
 S3 silver itself was not modified, new GC=F bars were appended locally after checking that 22 overlapping days matched the
-silver table exactly), so the test window grew from 424 to 449 days (2025-01-09 to 2026-10-23). The old outputs are kept in
-`daily/results/snapshot_2026-09-18/`; **every number in this README's Journey, §8.0 and the thesis tables is from that
-snapshot**, as are the feature-search folders (`with_macro*`, `with_cot`), so the comparisons among them stay like-for-like.
-The refreshed main results lead to the same conclusion: LSTM direction accuracy 51.9% vs. always-up 55.2% (p = 0.155, AUC
-0.463), MAE \$46.83 vs. \$46.63 for a no-change forecast (Diebold-Mariano p = 0.38), R² -0.014 (predict-zero -0.003), IC +0.006
-(p = 0.90). The static-training variants (`model_results_lstm_w*`) were not re-run.
+silver table exactly), so the test window grew from 424 to 449 days (2025-01-09 to 2026-10-23). **Every daily number in
+this README, the dashboard and the thesis tables is now from the 449-day window, including all four feature-search
+variants (`with_macro*`, `with_cot`), which were re-run on the same rows as the main run.** The previous 424-day outputs
+(main run and all four variants) are kept in `daily/results/snapshot_2026-09-18/`. The conclusion did not change: LSTM
+direction accuracy 51.9% vs. always-up 55.2% (p = 0.155, AUC 0.463), MAE \$46.83 vs. \$46.63 for a no-change forecast
+(Diebold-Mariano p = 0.38), R² -0.014 (predict-zero -0.003), IC +0.006 (p = 0.90); the feature-search LSTM AUCs moved by
++0.004 to +0.011 and kept their order. The static-training variants (`model_results_lstm_w*`) were not re-run.
 
 ### Phase 8: should models be combined to reach 70% accuracy?
 
@@ -232,23 +233,23 @@ backward, never leak a future value. Causality and scale-invariance are covered 
 `daily/results/with_macro/`.
 
 Re-ran the identical walk-forward protocol (retrain every 7 days on the last 365, same test window
-2025-01-09 to 2026-09-18, n=424) on the exact same rows, features-added-only:
+2025-01-09 to 2026-10-23, n=449) on the exact same rows, features-added-only:
 
 | Model | Acc (price-only → +macro) | AUC (price-only → +macro) | p vs always-up (price-only → +macro) |
 |---|---|---|---|
-| LSTM | 51.9% → **55.7%** | 0.452 → 0.501 | 0.097 → **0.922** |
-| HistGB classifier | 53.5% → 50.5% | 0.500 → 0.489 | 0.329 → 0.028 |
-| Ridge | 49.5% → 48.8% | – | 0.009 → 0.004 |
+| LSTM | 51.9% → **55.2%** | 0.463 → 0.510 | 0.155 → **1.000** |
+| HistGB classifier | 52.6% → 49.9% | 0.498 → 0.488 | 0.255 → 0.026 |
+| Ridge | 49.0% → 48.6% | – | 0.009 → 0.005 |
 
-The LSTM's accuracy number moved closer to the 55.9% always-up rate, which looks like an improvement until
-the mechanism is checked directly (Lessons #4 below): its predicted-`p_up` distribution shows it still
-predicts "up" on 86-89% of test days regardless of whether macro inputs are present (baseline 89.4%, +macro
-85.6%), and the test period itself is 55.9% up days — so a model that mostly says "up" scores well on
-accuracy in a trending window by construction, independent of any real signal. AUC (which doesn't reward
-guessing the majority class) stayed at chance in both versions, and the p-value against the trivial
-always-up rule got *less* significant (0.097 → 0.922) rather than more, which is the opposite of what real
-added skill would do. HistGB and ridge simply got worse — plausible overfitting from 34 features against a
-365-day retraining window. **Conclusion: no evidence of real skill gained from macro/cross-asset features
+The LSTM's accuracy moved from 3.3 points below the 55.2% always-up rate to exactly level with it, which looks
+like an improvement until the mechanism is checked directly (Lessons #4 below): its predicted-`p_up`
+distribution shows it still predicts "up" on 82-91% of test days whatever inputs it is given (price-only 88%,
++macro 86%), and the test period itself is 55.2% up days — so a model that mostly says "up" scores well on
+accuracy in a trending window by construction, independent of any real signal. It never gets *above* the
+always-up rate (a p-value of 1.000 means identical, not better). AUC (which doesn't reward guessing the
+majority class) moved from 0.463 to 0.510, both within noise of chance (standard error about 0.03 at n=449).
+HistGB and ridge got worse — the HistGB classifier is now significantly below always-up (p = 0.026), plausible
+overfitting from 34 features against a 365-day retraining window. **Conclusion: no evidence of real skill gained from macro/cross-asset features
 either.** Combined with Phase 8, every lever tried on this dataset — more model types, ensembling, and now
 non-price inputs — lands at the same AUC ~0.50 ceiling.
 
@@ -258,21 +259,28 @@ changes — sourced live from CFTC's own Socrata API (`publicreporting.cftc.gov`
 scraping or bot-blocking involved), 1,238 weekly records back to 2003. The report covers positions "as of"
 Tuesday but isn't published until the following Friday, so the feature's availability date is shifted +3 days
 before alignment — the one new causality risk this feature introduced, now covered by its own test. Result:
-LSTM AUC **dropped** to 0.491 (from 0.516 without COT), accuracy 55.2%, p vs. always-up = 0.769 — adding a
+LSTM AUC **dropped** to 0.498 (from 0.520 without COT), accuracy 54.6%, p vs. always-up = 0.776 — adding a
 5th feature source made things slightly worse, not better, consistent with added dimensionality diluting the
 365-day training window rather than contributing real signal. Full results in `daily/results/with_cot/`.
 
-**This closes the feature-search line of investigation.** Five independent attempts — ensembling (Phase 8),
-cross-asset/macro, NFP, FOMC+CPI, and COT positioning (Phase 9) — all land in the same AUC 0.45-0.52 band with
-no p-value ever clearing 0.05. The result is reported as a well-instrumented negative result rather than
-pursued further.
+**This closes the feature-search line of investigation.** Five attempts — ensembling (Phase 8), cross-asset/macro,
+NFP, FOMC+CPI, and COT positioning (Phase 9; nested feature sets on one shared test window, so not independent
+replications) — all land in the same LSTM AUC 0.46-0.52 band with no p-value ever clearing 0.05. One pattern is worth
+stating plainly rather than leaving to the table: on the 449-day window the LSTM's point estimates rise as feature
+blocks are added (AUC 0.463 → 0.510 → 0.514 → 0.520; rank correlation IC +0.006 → +0.043 → +0.055 → +0.070) before COT
+gives part of it back (AUC 0.498). That is what a small real effect would look like, and also what noise on a short,
+shared test window can look like: no step is distinguishable from zero (the best IC, +0.070, has p = 0.14 and is the best
+of five variants, so a Bonferroni-adjusted p is about 0.7), and even a real rank correlation of 0.07 would lift sign
+accuracy by only about two points (0.5 + arcsin(0.07)/π ≈ 52.2% on a symmetric target). Reaching ~70% on daily returns
+would need a correlation near 0.59 (R² about 0.35), against the R² of about -0.01 measured here. The result is reported
+as a well-instrumented negative result rather than pursued further.
 
 **Addendum 1**: also added an NFP (US Non-Farm Payrolls) release-day calendar feature (`--calendar` flag,
 `f_nfp_day`/`f_days_since_nfp` in `daily/build_daily_dataset.py`) on top of the six macro series above — a
 deterministic "first Friday of the month" rule, since `bls.gov` blocks automated access and no other source
 of the exact historical CPI/FOMC release-date list could be verified reliably enough to trust in a research
-dataset (those two remain untested for that reason, not by choice). Result: still null (LSTM AUC 0.504,
-HistGB classifier AUC 0.496 vs. chance) — full results in `daily/results/with_macro_calendar/`.
+dataset (those two remain untested for that reason, not by choice). Result: still null (LSTM AUC 0.514,
+accuracy 55.0%, p = 0.924; HistGB classifier AUC 0.489) — full results in `daily/results/with_macro_calendar/`.
 
 **Addendum 2 (FOMC + CPI added)**: revisited the CPI/FOMC gap by sourcing exact historical dates directly
 from `federalreserve.gov`'s per-year historical-materials pages (2004-2020) and `fomccalendars.htm`
@@ -280,13 +288,13 @@ from `federalreserve.gov`'s per-year historical-materials pages (2004-2020) and 
 (2004-2026) — both fetched and hand-verified, not guessed. Added as `f_fomc_day`/`f_days_since_fomc` and
 `f_cpi_day`/`f_days_since_cpi`, same causal `_days_since` helper as NFP (event dates are fixed/known in
 advance, so no look-ahead risk). This is the closest-to-significant result of every experiment so far — LSTM
-AUC 0.516, accuracy 58.5% (above the 55.9% always-up rate), MAE $46.88 (a rare positive skill vs. no-change,
-+0.0083) — **but still not significant**: p vs. always-up = 0.304, and checking the mechanism (Lessons #4)
-shows the same pattern as every prior run: the LSTM predicts "up" on 88% of days regardless of which
-features it's given, barely changed from the 85-89% range in every earlier version. The point estimate has
-bounced around across five feature-set variants (51.9% → 55.7% → 55.7% → 58.5%) while AUC stayed in a tight
-0.45-0.52 band and no p-value has cleared 0.05 — noise consistent with the same underlying null, not a trend
-toward significance. (The "predicted down" subset alone shows a higher hit rate, but at n=51 this is exactly
+AUC 0.520, accuracy 57.5% (above the 55.2% always-up rate), MAE $46.38 (a rare positive skill vs. no-change,
++0.0055) — **but still not significant**: p vs. always-up = 0.367, and checking the mechanism (Lessons #4)
+shows the same pattern as every prior run: the LSTM predicts "up" on 89% of days regardless of which
+features it's given, inside the 82-91% range of every other version. The point estimate has moved across the
+five feature-set variants (51.9% → 55.2% → 55.0% → 57.5% → 54.6% with COT) while AUC stayed in a tight 0.46-0.52 band
+and no p-value has cleared 0.05 — consistent with the same underlying null (the small, steady upward drift in AUC and IC
+is discussed in the closing paragraph above). (The "predicted down" subset alone shows a higher hit rate, 60% of 50 days, but at n=50 this is exactly
 the small-sample, look-at-the-confident-subset trap Phase 6's bid-ask artifact already burned this project
 on once — not reported as a finding.) Full results in `daily/results/with_macro_calendar_full/`.
 
@@ -1299,11 +1307,11 @@ that discipline matters most), and teardown instructions are all in
     path) to bring it forward, or pass a locally extended silver parquet to `--silver`.
 13. **Daily-pipeline cross-asset + calendar + COT features: closed, done (Phase 9, all addenda), null** —
     DXY, silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates), CPI (271 dates) and CFTC Commitment of
-    Traders positioning all added to the daily model; best single result is LSTM AUC 0.516 (macro+NFP+FOMC+CPI,
-    without COT), p vs. always-up = 0.304 — closer than every other variant but never significant; adding COT
-    on top made it worse (AUC 0.491). This line of investigation is considered closed. The hourly-specific
-    version of cross-asset features (silver, EURUSD, S&P 500 as hourly bars) remains untested, optional if
-    there's time; re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
+    Traders positioning all added to the daily model; best single result is LSTM AUC 0.520 (macro+NFP+FOMC+CPI,
+    without COT), p vs. always-up = 0.367 — closer than every other variant but never significant; adding COT
+    on top made it worse (AUC 0.498). This line of investigation is considered closed. The hourly version of
+    cross-asset features (silver, EURUSD, S&P 500, DXY as hourly bars) was run too and is also null (hourly
+    addendum in the Journey); re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
     Dukascopy's rate limit allows.
 14. Agree with the advisor what "~70% accuracy" refers to (horizon, baseline,
     coverage) and present the corrected results (§8.0) with the always-up
