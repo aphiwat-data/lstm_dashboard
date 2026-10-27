@@ -270,30 +270,29 @@ v2, v2_preds          = load_v2(_v2_file.stat().st_mtime if _v2_file.exists() el
 df["volatility_30"] = df["return"].rolling(30).std()
 
 # ---------------------------------------------------------------------------
-# Sidebar — short and calm; credits and technical details live in expanders
+# Sidebar — project credits on top, then data freshness; technical details live in an expander
 # ---------------------------------------------------------------------------
 LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mfu_logo.png"
-PROJECT_TITLE = "Next-Day Gold Price Forecasting with LSTM"
 TEAM = [("Mr. Achira Lueablae", "6631501120"), ("Mr. Aphiwat Chioewvijit", "6631501121")]
 ADVISOR = "Asst. Prof. Pattaramon Vuttipittayamongkol"
 COMMITTEE = ["Asst. Prof. Khwunta Kirimasthong", "Asst. Prof. Surapong Uttama"]
 
 with st.sidebar:
-    st.markdown("### Gold Price Forecast")
-    st.caption("Next-day XAU/USD forecasting with an LSTM. Computer Engineering senior project, Mae Fah Luang University.")
+    if LOGO_PATH.exists():
+        with st.container(horizontal_alignment="center"):
+            st.image(str(LOGO_PATH), width=110)
+    st.markdown("**Next-Day Gold Price  \nForecasting with LSTM**", text_alignment="center")
+    st.caption("Bachelor of Engineering  \nMajor Computer Engineering  \nSchool of Applied Digital Technology  \nMae Fah Luang University · 2026", text_alignment="center")
+    st.markdown(
+        "**Developed by**\n\n" + "\n".join(f"- {name}  \n  :gray[Student ID {sid}]" for name, sid in TEAM)
+        + f"\n\n**Advisor**\n\n- {ADVISOR}"
+        + "\n\n**Committee**\n\n" + "\n".join(f"- {name}" for name in COMMITTEE)
+    )
+    st.divider()
     if v2 is not None:
         st.caption(f"Data through **{v2['latest_forecast']['as_of_date']}** · generated {v2['latest_forecast']['generated_at'][:10]}")
     else:
         st.caption(f"Data through **{latest_row['date'].date()}**")
-    with st.expander("About this project"):
-        if LOGO_PATH.exists():
-            with st.container(horizontal_alignment="center"):
-                st.image(str(LOGO_PATH), width=110)
-        st.markdown(f"**{PROJECT_TITLE}**")
-        st.caption("Bachelor of Engineering  \nMajor Computer Engineering  \nSchool of Applied Digital Technology  \nMae Fah Luang University · 2026")
-        st.markdown("**Developed by**\n\n" + "\n".join(f"- {name}  \n  :gray[Student ID {sid}]" for name, sid in TEAM))
-        st.markdown(f"**Advisor**\n\n- {ADVISOR}")
-        st.markdown("**Committee**\n\n" + "\n".join(f"- {name}" for name in COMMITTEE))
     with st.expander("Model and data details"):
         st.markdown("**Data**")
         st.text(f"GC=F (COMEX Gold Futures)\n{df['date'].min().date()} – {df['date'].max().date()}\n{len(df):,} rows")
@@ -345,24 +344,25 @@ def forecast_inputs() -> dict:
 
 def render_hero(fi: dict) -> None:
     """Built only from native Streamlit elements (no raw HTML/CSS), so it cannot break on a different Streamlit
-    version or a stale browser tab, and the columns stack on narrow screens instead of wrapping the price."""
+    version or a stale browser tab. Horizontal containers wrap by content width, not viewport width: with the sidebar
+    open on a small window the stats drop below the price instead of squeezing the price onto several lines."""
     fc, last, lo, hi = fi["fc"], fi["last_close"], fi["lo"], fi["hi"]
     change, pct = fc - last, (fc / last - 1) * 100
     up = change >= 0
     with st.container(border=True):
-        c1, c2, c3 = st.columns([5, 3, 3], gap="large")
-        with c1:
-            st.caption(f"FORECAST FOR {next_trading_day(fi['as_of']).strftime('%a %d %b %Y').upper()}")
-            st.markdown(f"# \\${fc:,.2f}")
-            st.markdown(f"**:{'green' if up else 'red'}[{'▲' if up else '▼'} {'+' if up else '−'}\\${abs(change):,.2f} ({pct:+.2f}%)]** vs. last close")
-        with c2:
-            st.caption("90% LIKELY RANGE")
-            st.markdown(f"#### \\${lo:,.0f}–\\${hi:,.0f}")
-            st.caption("Actual closes fell inside this band on 90% of test days.")
-        with c3:
-            st.caption(f"LAST CLOSE · {pd.Timestamp(fi['as_of']).strftime('%d %b').upper()}")
-            st.markdown(f"#### \\${last:,.2f}")
-            st.caption("Research forecast, not trading advice.")
+        with st.container(horizontal=True, horizontal_alignment="distribute", gap="medium"):
+            with st.container(width="content"):
+                st.caption(f"FORECAST FOR {next_trading_day(fi['as_of']).strftime('%a %d %b %Y').upper()}")
+                st.markdown(f"# \\${fc:,.2f}")
+                st.markdown(f"**:{'green' if up else 'red'}[{'▲' if up else '▼'} {'+' if up else '−'}\\${abs(change):,.2f} ({pct:+.2f}%)]** vs. last close")
+            with st.container(horizontal=True, width="content", gap="medium"):
+                with st.container(width="content"):
+                    st.caption("90% LIKELY RANGE")
+                    st.markdown(f"#### \\${lo:,.0f}–\\${hi:,.0f}")
+                with st.container(width="content"):
+                    st.caption(f"LAST CLOSE · {pd.Timestamp(fi['as_of']).strftime('%d %b').upper()}")
+                    st.markdown(f"#### \\${last:,.2f}")
+        st.caption("Actual closes fell inside the range on 90% of test days. Research forecast, not trading advice.")
 
 
 def forecast_chart(fi: dict, window_days: int) -> go.Figure:
@@ -501,8 +501,8 @@ def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
         st.download_button("Download metrics table (CSV)", data=table.to_csv().encode("utf-8"), file_name="daily_walk_forward_metrics.csv", mime="text/csv")
 
 
-tab_track, tab_rel, tab_data, tab_method = st.tabs([
-    "Track record", "How reliable?", "Data explorer", "Method",
+tab_track, tab_data, tab_rel, tab_method = st.tabs([
+    "Track record", "Data explorer", "How reliable?", "Method",
 ])
 
 with tab_track:
@@ -512,7 +512,7 @@ with tab_track:
         st.info("The forecast track record is built from daily/results, which is not available in this deployment.")
 
 # ---------------------------------------------------------------------------
-# TAB 1 — Overview: full historical price chart (+ volume panel, when present)
+# Data explorer — full historical price chart (+ volume panel, when present)
 # ---------------------------------------------------------------------------
 with tab_data:
     st.subheader("Historical Gold Price (GC=F)")
@@ -575,7 +575,7 @@ with tab_data:
     )
 
 # ---------------------------------------------------------------------------
-# TAB 2 — Model Evaluation: actual vs predicted, error panel, comparison
+# How reliable? — verdict and metrics, plus the original pipeline kept for the record
 # ---------------------------------------------------------------------------
 with tab_rel:
     if v2 is not None:
@@ -736,7 +736,7 @@ with tab_rel:
         )
 
 # ---------------------------------------------------------------------------
-# TAB 3 — Volatility & Feature Explorer
+# Data explorer (continued) — volatility & feature explorer
 # ---------------------------------------------------------------------------
 with tab_data:
     st.subheader("30-Day Rolling Volatility")

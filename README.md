@@ -959,17 +959,22 @@ brief:
 >
 > **Update (Oct 2026): forecast-first redesign.** The next-day forecast is now the largest element on the page (big price,
 > change vs. last close, 90% likely range, and a recent-price chart with the forecast and its range drawn on it). Tabs are
-> now **Track record** (past forecasts vs. actual), **How reliable?** (plain-language verdict, up/down accuracy vs.
-> "always up", detailed metrics incl. R² and IC in an expander), **Data explorer** (price history, volatility, features) and
-> **Method**. The tab-by-tab description below predates this and is kept for the record. Streamlit theme and toolbar
-> settings live in `.streamlit/config.toml`.
+> now **Track record** (past forecasts vs. actual), **Data explorer** (price history, volatility, features), **How reliable?**
+> (plain-language verdict, up/down accuracy vs. "always up", detailed metrics incl. R² and IC in an expander) and
+> **Method**. The sidebar opens with the project credits (university logo, authors with student IDs, advisor and
+> examining committee), then data freshness and a "Model and data details" expander. The tab-by-tab description below
+> predates this and is kept for the record. Streamlit theme and toolbar settings live in `.streamlit/config.toml`.
 >
 > Lessons from the first deployed version of this redesign: (1) it drew the forecast card with raw HTML/CSS, which broke
 > twice in practice (a 4rem price wrapped onto three lines at ordinary laptop widths, and one open browser tab showed the
 > markup as plain text after a redeploy), so the page now uses **only native Streamlit elements**; (2) Cloud installs the
 > newest Streamlit (1.66 at the time) while local development was on 1.56, so `dashboard/requirements.txt` now sets a floor
-> (`streamlit>=1.56`) and every layout change should be checked at 1280, 760 and 390 px wide *and* on the deployed URL;
-> (3) `use_container_width` had been deprecated (removal date passed), replaced by `width="stretch"`.
+> (`streamlit>=1.56`) and every layout change should be checked at 1280, 1024, 900, 760 and 390 px wide *and* on the
+> deployed URL; (3) `use_container_width` had been deprecated (removal date passed), replaced by `width="stretch"`;
+> (4) the three-column forecast card still crushed the price (`$4,045` / `.61`) at about 800–1100 px with the sidebar open,
+> because Streamlit stacks columns by *viewport* width (below 640 px) while the open sidebar takes ~300 px of it. The card now
+> uses wrapping horizontal containers (`st.container(horizontal=True)`), which wrap by *content* width, so the range and
+> last close drop below the price instead of squeezing it.
 
 **STATUS: still open to further iteration**, but now a complete, polished,
 English-only pass covering all four components the proposal's §3.8
