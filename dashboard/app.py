@@ -272,15 +272,18 @@ df["volatility_30"] = df["return"].rolling(30).std()
 # ---------------------------------------------------------------------------
 # Sidebar — project credits on top, then data freshness; technical details live in an expander
 # ---------------------------------------------------------------------------
-LOGO_PATH = Path(__file__).resolve().parent / "assets" / "mfu_logo.png"
+ASSETS = Path(__file__).resolve().parent / "assets"
+LOGOS = [(ASSETS / "mfu_logo.png", 72), (ASSETS / "adt_logo.png", 96)]  # (file, display width in px): the crest is tall, the ADT mark round
 TEAM = [("Mr. Achira Lueablae", "6631501120"), ("Mr. Aphiwat Chioewvijit", "6631501121")]
 ADVISOR = "Asst. Prof. Pattaramon Vuttipittayamongkol"
 COMMITTEE = ["Asst. Prof. Khwunta Kirimasthong", "Asst. Prof. Surapong Uttama"]
 
 with st.sidebar:
-    if LOGO_PATH.exists():
-        with st.container(horizontal_alignment="center"):
-            st.image(str(LOGO_PATH), width=110)
+    with st.container(horizontal=True, horizontal_alignment="center", vertical_alignment="center", gap="medium"):
+        for logo, width in LOGOS:
+            if logo.exists():
+                with st.container(width=width):  # image(width=...) would downscale the file itself and look soft on high-DPI screens
+                    st.image(str(logo), width="stretch")
     st.markdown("**Next-Day Gold Price  \nForecasting with LSTM**", text_alignment="center")
     st.caption("Bachelor of Engineering  \nMajor Computer Engineering  \nSchool of Applied Digital Technology  \nMae Fah Luang University · 2026", text_alignment="center")
     st.markdown(

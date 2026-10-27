@@ -961,8 +961,8 @@ brief:
 > change vs. last close, 90% likely range, and a recent-price chart with the forecast and its range drawn on it). Tabs are
 > now **Track record** (past forecasts vs. actual), **Data explorer** (price history, volatility, features), **How reliable?**
 > (plain-language verdict, up/down accuracy vs. "always up", detailed metrics incl. R² and IC in an expander) and
-> **Method**. The sidebar opens with the project credits (university logo, authors with student IDs, advisor and
-> examining committee), then data freshness and a "Model and data details" expander. The tab-by-tab description below
+> **Method**. The sidebar opens with the project credits (MFU and School of Applied Digital Technology logos, authors
+> with student IDs, advisor and examining committee), then data freshness and a "Model and data details" expander. The tab-by-tab description below
 > predates this and is kept for the record. Streamlit theme and toolbar settings live in `.streamlit/config.toml`.
 >
 > Lessons from the first deployed version of this redesign: (1) it drew the forecast card with raw HTML/CSS, which broke
