@@ -30,10 +30,10 @@ also visible in the commit history.
 
 | Question | Answer today |
 |---|---|
-| Does the LSTM beat a trivial baseline at next-day direction? | **No.** Daily: 51.9% vs "always up" 55.9% (test 2025-01-09 to 2026-09-18, n=424). |
+| Does the LSTM beat a trivial baseline at next-day direction? | **No.** Daily: 51.9% vs "always up" 55.2% (test 2025-01-09 to 2026-10-23, n=449). |
 | Does hourly data help (1, 4 and 24 bars ahead)? | **No.** Accuracy about 50–54% vs "always up" 51.5% / 52.9% / 55.1%; AUC 0.50–0.52. |
-| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, not by combining models, and not by adding macro/cross-asset inputs.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52 on price history alone; adding DXY/silver/S&P 500/VIX/yields/TIP (Phase 9) still lands at AUC ~0.50. Ensembling or feeding in more inputs cannot manufacture a signal that none of them has. "Always up" alone reaches 56% at 1 day, 65.8% at 20 days and 74.2% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
-| Is the price forecast usable? | It matches a no-change forecast (daily MAE \$47.42 vs \$47.27). Read it as "about today's close, within the interval". |
+| Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, not by combining models, and not by adding macro/cross-asset inputs.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52 on price history alone; adding DXY/silver/S&P 500/VIX/yields/TIP (Phase 9) still lands at AUC ~0.50. Ensembling or feeding in more inputs cannot manufacture a signal that none of them has. "Always up" alone reaches 55% at 1 day, 62.0% at 20 days and 75.6% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
+| Is the price forecast usable? | It matches a no-change forecast (daily MAE \$46.83 vs \$46.63). Read it as "about today's close, within the interval". |
 | What was the big bug? | A price-level target and price-level inputs with train-only scalers: once gold left the training range in 2025-26, MAE reached ≈ \$640. Fixed with a return target and scale-free features. |
 
 ### Phase 1: build the pipeline (§5-§7)
@@ -134,20 +134,21 @@ multiple-comparisons correction), not reported as a finding.
   asserts no feature changes.
 - **Also wrong before:** the old "directional accuracy" compared day-to-day changes of the predictions with those of the
   actual prices; the standard definition compares the sign of the predicted return with the sign of the actual return.
-- Result (walk-forward, retrain every 7 days on 365 days, test 2025-01-09 to 2026-09-18):
+- Result (walk-forward, retrain every 7 days on 365 days, test 2025-01-09 to 2026-10-23, n=449; the earlier 424-day run is kept in
+  `daily/results/snapshot_2026-09-18/`):
 
 | Model | MAE (USD) | MAE skill vs no-change | Direction accuracy | vs always-up (pt) | p vs always-up |
 |---|---|---|---|---|---|
-| No-change (naive) | 47.27 | 0 | – | – | – |
-| Rolling drift (= always up) | 46.96 | +0.0065 | 55.9% | +0.0 | 1.000 |
-| Ridge | 48.43 | -0.0245 | 49.5% | -6.4 | 0.009 |
-| HistGB regressor | 51.43 | -0.0879 | 50.2% | -5.7 | 0.021 |
-| HistGB classifier | – | – | 53.5% | -2.4 | 0.329 |
-| **LSTM (walk-forward)** | 47.42 | -0.0031 | 51.9% | -4.0 | 0.097 |
-| Momentum rule | – | – | 45.0% | -10.8 | 0.000 |
+| No-change (naive) | 46.63 | 0 | – | – | – |
+| Rolling drift (= always up) | 46.36 | +0.0057 | 55.2% | +0.0 | 1.000 |
+| Ridge | 47.87 | -0.0267 | 49.0% | -6.2 | 0.009 |
+| HistGB regressor | 50.68 | -0.0868 | 50.3% | -4.9 | 0.041 |
+| HistGB classifier | – | – | 52.6% | -2.7 | 0.255 |
+| **LSTM (walk-forward)** | 46.83 | -0.0043 | 51.9% | -3.3 | 0.155 |
+| Momentum rule | – | – | 45.2% | -10.0 | 0.000 |
 
-  The LSTM's price error is at the no-change level (Diebold-Mariano p = 0.51) and its direction accuracy
-  (51.9%, 95% CI 47.1-56.6%) is not distinguishable from
+  The LSTM's price error is at the no-change level (Diebold-Mariano p = 0.38) and its direction accuracy
+  (51.9%, 95% CI 47.3-56.5%) is not distinguishable from
   always-up. Six static-training variants (window 20 or 60 days, 1- and 5-day horizons, training from 2012) agree; see `daily/results/`.
 - The dashboard now leads with this corrected evaluation; the original views are kept in an expander for the record. While
   checking the page in a browser we also found that pairs of dollar signs in markdown text are rendered as LaTeX (garbled
@@ -161,18 +162,20 @@ this doc) were checked on the same identical test period:
 
 | Model | R² (returns) | IC (Spearman) | IC p-value |
 |---|---|---|---|
-| Predict-zero-return baseline | -0.005 | – | – |
-| Rolling drift | -0.003 | -0.064 | 0.186 |
-| Ridge | -0.044 | -0.093 | 0.057 |
-| HistGB regressor | -0.191 | -0.038 | 0.438 |
-| **LSTM** | **-0.013** | **0.008** | **0.873** |
+| Predict-zero-return baseline | -0.003 | – | – |
+| Rolling drift | -0.003 | -0.027 | 0.561 |
+| Ridge | -0.045 | -0.103 | 0.029 |
+| HistGB regressor | -0.186 | -0.034 | 0.473 |
+| **LSTM** | **-0.014** | **0.006** | **0.896** |
 
-Every model's R² is negative — worse than a constant "predict zero return" forecast — and no IC is
-significant (HistGB regressor's R² is the worst by far, consistent with Phase 9's suspicion that adding
-degrees of freedom to these models mostly adds overfitting, not skill; Ridge's IC is the closest to
-significant at p = 0.057, but it's *negative* — weakly anti-correlated with the outcome, not a usable
-signal). This confirms the direction-accuracy finding from an entirely different metric family: it isn't an
-artifact of choosing accuracy/AUC as the yardstick.
+Every model's R² is negative (R² < 0 means doing worse than simply predicting the test-period mean return), and the
+three learned models are also below the predict-zero baseline; only the rolling drift, which is essentially a constant, is
+level with it. No IC points the useful way: the LSTM's is +0.006 (p = 0.90), and Ridge's is -0.103 (p = 0.029), nominally
+significant but with the *wrong sign* (its predictions were weakly inversely related to the outcome), which with four models
+tested would not survive a Bonferroni correction (threshold 0.0125) and could only be exploited with hindsight. HistGB
+regressor's R² is the worst by far (-0.186), consistent with Phase 9's suspicion that adding degrees of freedom to these
+models mostly adds overfitting, not skill. This confirms the direction-accuracy finding from an entirely different metric
+family: it isn't an artifact of choosing accuracy/AUC as the yardstick.
 
 R² is now computed by the code, not by hand: `price_report()` in `hourly/train_models.py` (shared by `daily/walk_forward.py`)
 writes `r2_returns` per model and `naive_r2_returns` (the predict-zero baseline) to every results JSON, and the dashboard shows it.
@@ -196,15 +199,15 @@ pinned down before it is a meaningful target.
   between runs, not add predictive power that none of the inputs has.
 - **"Always up" alone climbs with the horizon, since gold trended up over the sample:**
 
-| Horizon (trading days) | Always-up, TEST 2025-01-09..2026-09-18 | Always-up, all years 2004-2026 | Test n_eff |
+| Horizon (trading days) | Always-up, TEST 2025-01-09..2026-10-23 | Always-up, all years 2004-2026 | Test n_eff |
 |---|---|---|---|
-| 1 | 56.0% | 53.1% | 423 |
-| 5 | 60.6% | 56.0% | 83 |
-| 20 | 65.8% | 56.4% | 20 |
-| 60 | 74.2% | 62.3% | 6 |
-| 120 | 77.0% | 68.8% | 2 |
+| 1 | 55.1% | 52.7% | 448 |
+| 5 | 58.8% | 55.9% | 88 |
+| 20 | 62.0% | 56.3% | 21 |
+| 60 | 75.6% | 62.9% | 6 |
+| 120 | 71.1% | 68.9% | 2 |
 
-  A reported "74% accuracy at 60 days" needs no model at all, and at that horizon the test period only
+  A reported "76% accuracy at 60 days" needs no model at all, and at that horizon the test period only
   contains about 6 non-overlapping windows, too few to conclude anything either way.
 - **Three ways a ~70% figure shows up that do not mean the model has skill:** (1) a long horizon in a trending
   market, as above; (2) reporting accuracy only on the model's most confident predictions without stating the
@@ -832,21 +835,21 @@ evaluation-window alignment changed.
 
 Same walk-forward scheme as notebook 05 (retrain every 7 trading days on the latest 365 days), but predicting the
 next-day log-return from scale-free features with scalers re-fit in every window (`daily/walk_forward.py`). Test period
-2025-01-09 to 2026-09-18 (424 days); all models are scored on the same days. Gold rose on
-55.9% of these days, so "always up" scores 55.9%.
+2025-01-09 to 2026-10-23 (449 days); all models are scored on the same days. Gold rose on
+55.2% of these days, so "always up" scores 55.2%.
 
 | Model | MAE (USD) | MAE skill vs no-change | Direction accuracy | vs always-up (pt) | p vs always-up |
 |---|---|---|---|---|---|
-| No-change (naive) | 47.27 | 0 | – | – | – |
-| Rolling drift (= always up) | 46.96 | +0.0065 | 55.9% | +0.0 | 1.000 |
-| Ridge | 48.43 | -0.0245 | 49.5% | -6.4 | 0.009 |
-| HistGB regressor | 51.43 | -0.0879 | 50.2% | -5.7 | 0.021 |
-| HistGB classifier | – | – | 53.5% | -2.4 | 0.329 |
-| **LSTM (walk-forward)** | 47.42 | -0.0031 | 51.9% | -4.0 | 0.097 |
-| Momentum rule | – | – | 45.0% | -10.8 | 0.000 |
+| No-change (naive) | 46.63 | 0 | – | – | – |
+| Rolling drift (= always up) | 46.36 | +0.0057 | 55.2% | +0.0 | 1.000 |
+| Ridge | 47.87 | -0.0267 | 49.0% | -6.2 | 0.009 |
+| HistGB regressor | 50.68 | -0.0868 | 50.3% | -4.9 | 0.041 |
+| HistGB classifier | – | – | 52.6% | -2.7 | 0.255 |
+| **LSTM (walk-forward)** | 46.83 | -0.0043 | 51.9% | -3.3 | 0.155 |
+| Momentum rule | – | – | 45.2% | -10.0 | 0.000 |
 
 **Interpretation.** The corrected LSTM's price error is essentially the no-change level and its direction accuracy is not
-distinguishable from always-up (95% CI 47.1-56.6%, AUC 0.45). With 424 test days the interval is about ±5 points, so small
+distinguishable from always-up (95% CI 47.3-56.5%, AUC 0.46). With 449 test days the interval is about ±5 points, so small
 edges cannot be detected either way. Hourly experiments (Journey, phases 5-6) reach the same conclusion. The earlier "central
 finding" (worst MAE but best directional accuracy) was produced by the price-level scale problem and a non-standard
 direction metric. Raw results: `daily/results/`, `hourly/results/`.
@@ -960,8 +963,12 @@ brief:
 > **Update (Oct 2026): forecast-first redesign.** The next-day forecast is now the largest element on the page (big price,
 > change vs. last close, 90% likely range, and a recent-price chart with the forecast and its range drawn on it). Tabs are
 > now **Track record** (past forecasts vs. actual), **Data explorer** (price history, volatility, features), **How reliable?**
-> (plain-language verdict, up/down accuracy vs. "always up", detailed metrics incl. R² and IC in an expander) and
-> **Method**. The sidebar opens with the project credits (MFU and School of Applied Digital Technology logos, authors
+> (plain-language verdict from price error vs. "tomorrow = today", R² and IC, typical miss per model, the full metrics table in
+> an expander, and the up/down check kept as a clearly labelled secondary view) and **Method**. After advisor feedback that
+> directional accuracy is a classification metric rather than the yardstick for a price forecast, the headline metrics under the
+> forecast are now the typical daily miss in dollars and as a share of the price (chips are green or red only when the
+> difference from "tomorrow = today" is statistically clear, orange or blue when it is within noise); the proposal's ~70%
+> direction target is still addressed, in the secondary view and in thesis §3.7.4. The sidebar opens with the project credits (MFU and School of Applied Digital Technology logos, authors
 > with student IDs, advisor and examining committee), then data freshness and a "Model and data details" expander. The tab-by-tab description below
 > predates this and is kept for the record. Streamlit theme and toolbar settings live in `.streamlit/config.toml`.
 >

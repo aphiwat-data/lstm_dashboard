@@ -333,6 +333,20 @@ def model_verdict(lstm: dict, up: float) -> tuple[str, str]:
     return price, direction
 
 
+def pct_miss(p: pd.DataFrame) -> tuple[float, float]:
+    """Mean absolute percentage miss of the LSTM forecast and of a "tomorrow = today" guess, on the same test days."""
+    actual = p["meta_next_close"]
+    lstm = (p["meta_close"] * np.exp(p["pred_ret_lstm"]) - actual).abs() / actual
+    naive = (p["meta_close"] - actual).abs() / actual
+    return float(lstm.mean() * 100), float(naive.mean() * 100)
+
+
+def edge_color(edge: str, diff: float) -> str:
+    """Chip colour for "model error minus baseline error": green / red only when the difference is statistically clear (p < 0.05),
+    orange (a bit worse) or blue (a bit better) when it is within noise."""
+    return {"better": "green", "worse": "red"}.get(edge) or ("orange" if diff > 0 else "blue")
+
+
 def forecast_inputs() -> dict:
     if v2 is not None:
         lf = v2["latest_forecast"]
@@ -402,25 +416,29 @@ win = st.radio("History shown", list(WINDOWS), index=1, horizontal=True, label_v
 st.plotly_chart(forecast_chart(fi, WINDOWS[win]), width="stretch", config={"displayModeBar": False})
 st.caption("Line: actual daily close · ◆ forecast for the next trading day, bar = 90% likely range")
 
-m1, m2, m3 = st.columns(3)
+# Error in price terms is what a price forecast is judged by. Fixed-width metrics inside a wrapping container sit in one row on a wide page
+# and stack on a narrow one (st.columns only stacks by viewport width, which the open sidebar defeats).
 if v2 is not None:
     lstm_v2, up_v2 = v2["models"]["lstm"], v2["models"]["drift"]["direction_from_sign"]["always_up_acc"]
-    acc_v2 = lstm_v2["direction_from_head"]["acc"]
-    m1.metric("Typical daily miss", f"${lstm_v2['mae_usd']:,.2f}", f"{lstm_v2['mae_usd'] - lstm_v2['naive_mae_usd']:+.2f} vs. “tomorrow = today”", delta_color="off",
-              help="Average gap between the forecast and the actual next-day close on the test period. A guess of “tomorrow's price = today's price” scores almost the same.")
-    m2.metric("Up/down calls correct", f"{acc_v2:.1%}", f"{(acc_v2 - up_v2) * 100:+.1f} pt vs. always guessing “up” ({up_v2:.1%})", delta_color="off",
-              help="Share of test days where the forecast got the direction right. Gold rose on most test days, so always guessing “up” is the bar to beat, not 50%.")
-    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b"), f"{pd.Timestamp(fi['as_of']).year} · {v2['protocol']['n_test']} test days", delta_color="off")
-    price_edge, dir_edge = model_verdict(lstm_v2, up_v2)
-    if "better" in (price_edge, dir_edge):
-        st.caption("Some edge over simple baselines was measured. See **How reliable?** for the evidence and caveats.")
+    pct_lstm, pct_naive = pct_miss(v2_preds)
+    price_edge, _ = model_verdict(lstm_v2, up_v2)
+    miss_color = edge_color(price_edge, lstm_v2["mae_usd"] - lstm_v2["naive_mae_usd"])
+    chip_key = " Chip colour: green = clearly better than that guess, red = clearly worse, orange or blue = no clear difference (within noise)."
+    with st.container(horizontal=True, gap="medium"):
+        st.metric("Typical daily miss", f"${lstm_v2['mae_usd']:,.2f}", f"{lstm_v2['mae_usd'] - lstm_v2['naive_mae_usd']:+.2f} vs. “tomorrow = today”", delta_color=miss_color, width=230,
+                  help="Average gap between the forecast and the actual next-day close on the test period (MAE). A guess of “tomorrow's price = today's price” scores almost the same." + chip_key)
+        st.metric("Typical miss, % of price", f"{pct_lstm:.2f}%", f"{pct_lstm - pct_naive:+.3f} pt vs. “tomorrow = today”", delta_color=miss_color, width=230,
+                  help="The same miss as a share of the price (mean absolute percentage error). A guess of “tomorrow's price = today's price” scores almost the same." + chip_key)
+        st.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b"), f"{pd.Timestamp(fi['as_of']).year} · {v2['protocol']['n_test']} test days", delta_color="blue", delta_arrow="off", width=230)
+    if price_edge == "better":
+        st.caption("Some edge over a simple baseline was measured. See **How reliable?** for the evidence and caveats.")
     else:
-        st.caption("Read this as roughly today's close within the range shown. On this data the model does not beat simple baselines (“tomorrow = today”, “always up”). See **How reliable?**.")
+        st.caption("Read this as roughly today's close within the range shown: on this data the model does not beat the simple “tomorrow = today” guess. See **How reliable?**.")
 else:
-    m1.metric("Typical daily miss (MAE)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
-    m2.metric("Up/down calls correct", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
-    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b"), str(pd.Timestamp(fi["as_of"]).year), delta_color="off")
-    st.caption("Treat this as a directional signal, not a precise price target: the model under-predicts sharp upward moves.")
+    with st.container(horizontal=True, gap="medium"):
+        st.metric("Typical daily miss (MAE)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}", width=230)
+        st.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b"), str(pd.Timestamp(fi["as_of"]).year), delta_color="blue", delta_arrow="off", width=230)
+    st.caption("Treat this as a rough guide, not a precise price target: the model under-predicts sharp upward moves.")
 
 
 def render_track_record(v2: dict, p: pd.DataFrame) -> None:
@@ -452,39 +470,61 @@ def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
     hd = lstm["direction_from_head"]
     price_edge, dir_edge = model_verdict(lstm, up)
     phrase = {"better": "beats", "worse": "is worse than", "same": "cannot be told apart from"}
+    pct_lstm, pct_naive = pct_miss(p)
 
     st.subheader("How reliable is the forecast?")
-    if "better" in (price_edge, dir_edge):
+    if price_edge == "better":
         st.success("**Verdict: some measurable edge.** Check the details below before relying on it.")
     else:
-        st.info("**Verdict: no reliable edge.** The model does not beat the simple baselines, so treat the forecast as “about today's close, within the range shown”.")
+        st.info("**Verdict: no reliable edge.** The price forecast does not beat a simple “tomorrow = today” guess, so treat it as “about today's close, within the range shown”.")
     r2_line = (
         f"- **Return fit:** R² {lstm['r2_returns']:+.3f} (a constant zero-return forecast scores {lstm['naive_r2_returns']:+.3f}); rank correlation IC {lstm['ic_spearman']:+.3f} (p = {lstm['ic_p']:.2f}).\n"
         if "r2_returns" in lstm else ""
     )
     st.markdown(
-        f"- **Price error:** typical miss \\${lstm['mae_usd']:,.2f} per day. The model {phrase[price_edge]} a “tomorrow = today” guess (\\${lstm['naive_mae_usd']:,.2f}; Diebold-Mariano p = {lstm['dm_p_vs_naive']:.2f}).\n"
-        f"- **Up/down calls:** {hd['acc']:.1%} correct (95% CI {hd['ci95'][0]:.1%} to {hd['ci95'][1]:.1%}). The model {phrase[dir_edge]} “always up” ({up:.1%}; p = {hd['p_vs_always_up']:.2f}).\n"
+        f"- **Price error:** typical miss \\${lstm['mae_usd']:,.2f} per day ({pct_lstm:.2f}% of the price; RMSE \\${lstm['rmse_usd']:,.2f}). The model {phrase[price_edge]} a “tomorrow = today” guess (\\${lstm['naive_mae_usd']:,.2f}, {pct_naive:.2f}%; Diebold-Mariano p = {lstm['dm_p_vs_naive']:.2f}).\n"
         f"{r2_line}"
-        f"- **Sample size:** {proto['n_test']} test days ({proto['test_start']} to {proto['test_end']}), so the interval is about ±{(hd['ci95'][1] - hd['ci95'][0]) / 2 * 100:.0f} points and small edges cannot be detected either way."
+        f"- **Sample size:** {proto['n_test']} test days ({proto['test_start']} to {proto['test_end']}), so small differences between models are within noise."
     )
 
     st.divider()
-    st.markdown("**Up/down accuracy vs. the simplest strategy**")
-    st.caption(f"Gold rose on {up:.1%} of test days, so always saying “up” already scores {up:.1%}. That, not 50%, is the bar to beat. Bars show 95% confidence intervals.")
-    entries = [("Always up", models["drift"]["direction_from_sign"]), ("Momentum rule", models["momentum_rule"]["direction_from_head"]),
-               ("Ridge", models["ridge"]["direction_from_sign"]), ("HistGB classifier", models["hist_gb_clf"]["direction_from_head"]),
-               ("LSTM", models["lstm"]["direction_from_head"])]
-    colors = ["#8a8a86", COLORS["Naive Persistence"], COLORS["Linear Regression"], COLORS["AR(5) Baseline"], COLORS["LSTM Walk-Forward"]]
-    acc = [d["acc"] * 100 for _, d in entries]
-    fig_d = go.Figure(go.Bar(
-        x=[n for n, _ in entries], y=acc, marker_color=colors, text=[f"{a:.1f}%" for a in acc], textposition="inside", insidetextanchor="start",
-        textfont=dict(size=13, color="white"),
-        error_y=dict(type="data", symmetric=False, array=[(d["ci95"][1] - d["acc"]) * 100 for _, d in entries], arrayminus=[(d["acc"] - d["ci95"][0]) * 100 for _, d in entries]),
+    st.markdown("**Typical daily miss by model (USD, lower is better)**")
+    st.caption(f"The dashed line is a “tomorrow = today” guess (\\${lstm['naive_mae_usd']:,.2f}). A model has to land clearly below it to add value.")
+    mae_entries = [("Rolling drift", "drift", "#8a8a86"), ("Ridge", "ridge", COLORS["Linear Regression"]),
+                   ("HistGB regressor", "hist_gb_reg", COLORS["AR(5) Baseline"]), ("LSTM", "lstm", COLORS["LSTM Walk-Forward"])]
+    maes = [models[k]["mae_usd"] for _, k, _ in mae_entries]
+    fig_m = go.Figure(go.Bar(
+        x=[n for n, _, _ in mae_entries], y=maes, marker_color=[c for _, _, c in mae_entries], text=[f"${m:,.2f}" for m in maes],
+        textposition="inside", insidetextanchor="start", textfont=dict(size=13, color="white"),
     ))
-    fig_d.add_hline(y=up * 100, line_dash="dash", line_color="#8a8a86", annotation_text=f"always up {up:.1%}", annotation_position="top left")
-    fig_d.update_layout(height=360, margin=dict(t=20, b=10), showlegend=False, yaxis=dict(range=[35, 72], title="Correct up/down calls (%)"))
-    st.plotly_chart(fig_d, width="stretch", config={"displayModeBar": False})
+    fig_m.add_hline(y=lstm["naive_mae_usd"], line_dash="dash", line_color="#8a8a86", annotation_text="“tomorrow = today”", annotation_position="top left")
+    fig_m.update_layout(height=320, margin=dict(t=20, b=10), showlegend=False, yaxis=dict(range=[0, max(maes) * 1.12], title="Typical miss (USD)"))
+    st.plotly_chart(fig_m, width="stretch", config={"displayModeBar": False})
+
+    with st.expander("Secondary check: up/down calls (a classification-style view)"):
+        st.caption(
+            "Calling the next day's direction treats the forecast as a yes/no classifier, which is not how a price forecast is judged, so the error measures "
+            "above are the main yardstick. It is shown because the proposal's ~70% target was phrased this way and because it exposes how the model behaves."
+        )
+        st.markdown(
+            f"**{hd['acc']:.1%}** of up/down calls were correct (95% CI {hd['ci95'][0]:.1%} to {hd['ci95'][1]:.1%}). The model {phrase[dir_edge]} “always up” "
+            f"({up:.1%}; p = {hd['p_vs_always_up']:.2f}). Gold rose on {up:.1%} of test days, so always saying “up” already scores that; 50% is not the bar to beat. "
+            f"With {proto['n_test']} test days the interval is about ±{(hd['ci95'][1] - hd['ci95'][0]) / 2 * 100:.0f} points."
+        )
+        st.caption("Bars show 95% confidence intervals; the dashed line is “always up”.")
+        entries = [("Always up", models["drift"]["direction_from_sign"]), ("Momentum rule", models["momentum_rule"]["direction_from_head"]),
+                   ("Ridge", models["ridge"]["direction_from_sign"]), ("HistGB classifier", models["hist_gb_clf"]["direction_from_head"]),
+                   ("LSTM", models["lstm"]["direction_from_head"])]
+        colors = ["#8a8a86", COLORS["Naive Persistence"], COLORS["Linear Regression"], COLORS["AR(5) Baseline"], COLORS["LSTM Walk-Forward"]]
+        acc = [d["acc"] * 100 for _, d in entries]
+        fig_d = go.Figure(go.Bar(
+            x=[n for n, _ in entries], y=acc, marker_color=colors, text=[f"{a:.1f}%" for a in acc], textposition="inside", insidetextanchor="start",
+            textfont=dict(size=13, color="white"),
+            error_y=dict(type="data", symmetric=False, array=[(d["ci95"][1] - d["acc"]) * 100 for _, d in entries], arrayminus=[(d["acc"] - d["ci95"][0]) * 100 for _, d in entries]),
+        ))
+        fig_d.add_hline(y=up * 100, line_dash="dash", line_color="#8a8a86", annotation_text=f"always up {up:.1%}", annotation_position="top left")
+        fig_d.update_layout(height=360, margin=dict(t=20, b=10), showlegend=False, yaxis=dict(range=[35, 72], title="Correct up/down calls (%)"))
+        st.plotly_chart(fig_d, width="stretch", config={"displayModeBar": False})
 
     with st.expander("Detailed metrics for every model (MAE, AUC, IC, R², p-values)"):
         labels = {"drift": "Rolling drift", "ridge": "Ridge", "hist_gb_reg": "HistGB regressor", "hist_gb_clf": "HistGB classifier", "lstm": "LSTM", "momentum_rule": "Momentum rule"}
@@ -807,10 +847,10 @@ with tab_method:
 
     if v2 is not None:
         lstm2 = v2["models"]["lstm"]
+        r2_clause = f" and its R² on daily returns is {lstm2['r2_returns']:+.3f}" if "r2_returns" in lstm2 else ""
         st.markdown(
-            f"**Bottom line:** no forecasting edge was found. The LSTM's direction accuracy "
-            f"({lstm2['direction_from_head']['acc']:.1%}) is not distinguishable from the trivial "
-            f"'always up' rule ({v2['models']['drift']['direction_from_sign']['always_up_acc']:.1%}). "
+            f"**Bottom line:** no forecasting edge was found. The LSTM's typical daily miss (\\${lstm2['mae_usd']:,.2f}) is level with a "
+            f"“tomorrow = today” guess (\\${lstm2['naive_mae_usd']:,.2f}){r2_clause}. "
             "Read the forecast as roughly today's close, not a trading signal."
         )
 
@@ -822,9 +862,9 @@ with tab_method:
                 "re-fit inside every walk-forward window."
             )
             st.write(
-                "Evaluation was also tightened: results are compared against the 'always up' rate (gold trended up, so that rule "
-                "already scores above 50%) with 95% confidence intervals, and price errors are tested against a no-change forecast "
-                "(Diebold-Mariano)."
+                "Evaluation was also tightened: price errors are tested against a no-change forecast (Diebold-Mariano), and up/down "
+                "calls are compared against the 'always up' rate (gold trended up, so that rule already scores above 50%) with 95% "
+                "confidence intervals."
             )
 
         with st.expander("Also tested, still null: macro, calendar and positioning features"):
@@ -892,10 +932,13 @@ with tab_method:
             "the model absorb new price levels as they occur, instead of staying frozen."
         )
 
-    with st.expander("Why Directional Accuracy is reported alongside MAE/RMSE"):
+    with st.expander("Why up/down accuracy is only a secondary check"):
+        up_share = float((v2_preds["p_up_lstm"] > 0.5).mean()) if v2_preds is not None else None
         st.write(
-            "MAE/RMSE measure error magnitude but say nothing about calling direction — a model can score well on MAE simply "
-            "because prices rarely move much day-to-day, while being no better than a coin flip on up-vs-down."
+            "Up/down accuracy treats the forecast as a yes/no classifier. A price forecast is judged by how far off it is (MAE, RMSE, "
+            "% error) and by R², each against a “tomorrow = today” baseline. Direction is still reported as a secondary check, for two "
+            "reasons: the proposal's ~70% target was phrased as direction accuracy, and the check shows how the model behaves."
+            + (f" It says “up” on {up_share:.0%} of test days, so its up/down score mostly tracks the share of up days in the test period." if up_share is not None else "")
         )
 
     st.divider()
