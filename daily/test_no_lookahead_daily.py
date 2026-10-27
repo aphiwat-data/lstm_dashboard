@@ -169,6 +169,13 @@ def test_cot_features_are_causal():
     pd.testing.assert_frame_equal(base.loc[unaffected, cols], new.loc[unaffected, cols], check_exact=False, rtol=1e-12, atol=1e-12)
 
 
+def test_calendar_events_can_be_selected():
+    idx = pd.bdate_range("2024-01-01", "2024-12-31")
+    assert list(make_calendar_features(idx, ("nfp",)).columns) == ["f_nfp_day", "f_days_since_nfp"]
+    assert list(make_calendar_features(idx, ("fomc", "cpi")).columns) == ["f_fomc_day", "f_days_since_fomc", "f_cpi_day", "f_days_since_cpi"]
+    pd.testing.assert_frame_equal(make_calendar_features(idx)[["f_nfp_day", "f_days_since_nfp"]], make_calendar_features(idx, ("nfp",)))
+
+
 if __name__ == "__main__":
     test_features_and_targets_are_causal()
     test_features_are_scale_free()
@@ -180,4 +187,5 @@ if __name__ == "__main__":
     test_fomc_cpi_dates_are_fixed_and_disjoint_from_lookahead()
     test_cot_publication_lag_shifts_index_forward()
     test_cot_features_are_causal()
+    test_calendar_events_can_be_selected()
     print("OK: no look-ahead, features are scale-free (price + macro + calendar + COT)")

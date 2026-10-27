@@ -963,6 +963,13 @@ brief:
 > "always up", detailed metrics incl. R² and IC in an expander), **Data explorer** (price history, volatility, features) and
 > **Method**. The tab-by-tab description below predates this and is kept for the record. Streamlit theme and toolbar
 > settings live in `.streamlit/config.toml`.
+>
+> Lessons from the first deployed version of this redesign: (1) it drew the forecast card with raw HTML/CSS, which broke
+> twice in practice (a 4rem price wrapped onto three lines at ordinary laptop widths, and one open browser tab showed the
+> markup as plain text after a redeploy), so the page now uses **only native Streamlit elements**; (2) Cloud installs the
+> newest Streamlit (1.66 at the time) while local development was on 1.56, so `dashboard/requirements.txt` now sets a floor
+> (`streamlit>=1.56`) and every layout change should be checked at 1280, 760 and 390 px wide *and* on the deployed URL;
+> (3) `use_container_width` had been deprecated (removal date passed), replaced by `width="stretch"`.
 
 **STATUS: still open to further iteration**, but now a complete, polished,
 English-only pass covering all four components the proposal's §3.8

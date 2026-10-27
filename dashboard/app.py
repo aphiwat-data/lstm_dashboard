@@ -69,25 +69,8 @@ ERROR_UNDER = "#E34948"   # model predicted too LOW  (red, warm — the surge st
 st.set_page_config(
     page_title="Gold Price LSTM Forecast",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",  # open on desktop, collapsed on narrow screens (an open drawer would cover the forecast)
 )
-
-
-APP_CSS = """<style>
-.block-container {padding-top: 2.2rem; max-width: 1280px;}
-.fc-title {font-size: 1.9rem; font-weight: 800; letter-spacing: -.01em; line-height: 1.15;}
-.fc-tagline {opacity: .65; font-size: .95rem; margin: .2rem 0 1.1rem;}
-.fc-hero {border: 1px solid rgba(128,128,128,.30); border-radius: 18px; padding: 26px 28px; min-height: 372px; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(135deg, rgba(42,120,214,.16), rgba(42,120,214,.03));}
-.fc-label {font-size: .78rem; letter-spacing: .13em; text-transform: uppercase; opacity: .7; font-weight: 700;}
-.fc-price {font-size: 4rem; font-weight: 800; line-height: 1.05; margin: .35rem 0 .45rem; letter-spacing: -.025em;}
-.fc-delta {font-size: 1.15rem; font-weight: 700;}
-.fc-delta.up {color: #2FBF71;}
-.fc-delta.down {color: #E34948;}
-.fc-sub {font-size: .9rem; font-weight: 400; color: rgba(128,128,128,.95);}
-.fc-range {margin-top: 1rem; font-size: 1rem;}
-.fc-pill {align-self: flex-start; margin-top: 1.1rem; padding: .22rem .75rem; border-radius: 999px; font-size: .78rem; border: 1px solid rgba(128,128,128,.45); opacity: .85;}
-</style>"""
-st.markdown(APP_CSS, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +138,37 @@ def load_v2(results_mtime: float):
         return res, preds
     except Exception:
         return None, None
+
+
+FEATURE_SEARCH = [  # label, results sub-folder under daily/results ("" = the main price-only run)
+    ("Price history only", ""),
+    ("+ cross-asset/macro (6 series)", "with_macro"),
+    ("+ NFP calendar", "with_macro_calendar"),
+    ("+ FOMC + CPI calendar", "with_macro_calendar_full"),
+    ("+ CFTC COT positioning", "with_cot"),
+]
+
+
+@st.cache_data(show_spinner=False)
+def feature_search_rows(stamp: float) -> list[dict]:
+    """One row per feature-search experiment, read from the committed results so a re-run updates the dashboard
+    (nothing here is typed in by hand). `stamp` (latest file mtime) is only there to invalidate the cache."""
+    rows = []
+    for label, folder in FEATURE_SEARCH:
+        try:
+            res = json.loads((V2_DIR / folder / "walk_forward_results.json").read_text())
+            preds = pd.read_csv(V2_DIR / folder / "wf_predictions.csv")
+        except Exception:
+            continue
+        lstm, hd = res["models"]["lstm"], res["models"]["lstm"]["direction_from_head"]
+        rows.append(dict(label=label, n=res["protocol"]["n_test"], acc=hd["acc"], auc=hd.get("auc"), p=hd["p_vs_always_up"],
+                         r2=lstm.get("r2_returns"), up_share=float((preds["p_up_lstm"] > 0.5).mean())))
+    return rows
+
+
+def feature_search_stamp() -> float:
+    files = [V2_DIR / folder / "walk_forward_results.json" for _, folder in FEATURE_SEARCH]
+    return max((f.stat().st_mtime for f in files if f.exists()), default=0.0)
 
 
 def compute_baselines(df, feature_scaler, target_scaler):
@@ -289,12 +303,6 @@ with st.sidebar:
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 
 
-def usd(x: float, decimals: int = 2) -> str:
-    """Dollar amount for raw-HTML blocks. The entity (not a literal dollar sign) stops Streamlit's markdown from
-    pairing dollar signs into LaTeX, the same bug the backslash escapes elsewhere in this file work around."""
-    return f"&#36;{x:,.{decimals}f}"
-
-
 def next_trading_day(d) -> pd.Timestamp:
     return pd.Timestamp(d) + pd.offsets.BDay(1)
 
@@ -320,20 +328,26 @@ def forecast_inputs() -> dict:
     return dict(hist=df[["date", "close"]], as_of=latest_row["date"], last_close=float(latest_row["close"]), fc=next_day_pred, lo=forecast_lo, hi=forecast_hi)
 
 
-def hero_html(fi: dict) -> str:
+def render_hero(fi: dict) -> None:
+    """Built only from native Streamlit elements (no raw HTML/CSS), so it cannot break on a different Streamlit
+    version or a stale browser tab, and the columns stack on narrow screens instead of wrapping the price."""
     fc, last, lo, hi = fi["fc"], fi["last_close"], fi["lo"], fi["hi"]
     change, pct = fc - last, (fc / last - 1) * 100
     up = change >= 0
-    return (
-        '<div class="fc-hero">'
-        f'<div class="fc-label">Forecast for {next_trading_day(fi["as_of"]).strftime("%a %d %b %Y")}</div>'
-        f'<div class="fc-price">{usd(fc)}</div>'
-        f'<div class="fc-delta {"up" if up else "down"}">{"▲" if up else "▼"} {"+" if up else "−"}{usd(abs(change))} ({pct:+.2f}%)'
-        f'<span class="fc-sub"> &nbsp;vs. last close {usd(last)} on {pd.Timestamp(fi["as_of"]).strftime("%d %b")}</span></div>'
-        f'<div class="fc-range">90% likely range &nbsp;<b>{usd(lo, 0)} – {usd(hi, 0)}</b></div>'
-        '<div class="fc-pill">Research forecast · not trading advice</div>'
-        '</div>'
-    )
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([5, 3, 3], gap="large")
+        with c1:
+            st.caption(f"FORECAST FOR {next_trading_day(fi['as_of']).strftime('%a %d %b %Y').upper()}")
+            st.markdown(f"# \\${fc:,.2f}")
+            st.markdown(f"**:{'green' if up else 'red'}[{'▲' if up else '▼'} {'+' if up else '−'}\\${abs(change):,.2f} ({pct:+.2f}%)]** vs. last close")
+        with c2:
+            st.caption("90% LIKELY RANGE")
+            st.markdown(f"#### \\${lo:,.0f}–\\${hi:,.0f}")
+            st.caption("Actual closes fell inside this band on 90% of test days.")
+        with c3:
+            st.caption(f"LAST CLOSE · {pd.Timestamp(fi['as_of']).strftime('%d %b').upper()}")
+            st.markdown(f"#### \\${last:,.2f}")
+            st.caption("Research forecast, not trading advice.")
 
 
 def forecast_chart(fi: dict, window_days: int) -> go.Figure:
@@ -346,7 +360,7 @@ def forecast_chart(fi: dict, window_days: int) -> go.Figure:
                              hovertemplate="%{x|%a %d %b}<br>$%{y:,.2f}<extra></extra>"))
     fig.add_trace(go.Scatter(x=[last_date, fc_date], y=[last, fc], mode="lines", line=dict(color=blue, width=2, dash="dot"), hoverinfo="skip"))
     fig.add_trace(go.Scatter(
-        x=[fc_date], y=[fc], mode="markers+text", text=[f"${fc:,.0f}"], textposition="middle right", textfont=dict(size=15, color=blue),
+        x=[fc_date], y=[fc], mode="markers",
         marker=dict(symbol="diamond", size=16, color=blue, line=dict(color="white", width=1.5)),
         error_y=dict(type="data", symmetric=False, array=[hi - fc], arrayminus=[fc - lo], color=blue, thickness=3, width=9),
         hovertemplate=f"Forecast for %{{x|%a %d %b}}<br>${fc:,.2f}<br>90% range ${lo:,.0f} to ${hi:,.0f}<extra></extra>",
@@ -363,14 +377,12 @@ def forecast_chart(fi: dict, window_days: int) -> go.Figure:
 
 
 fi = forecast_inputs()
-st.markdown('<div class="fc-title">Next-Day Gold Price Forecast</div><div class="fc-tagline">XAU/USD · LSTM model, retrained every 7 trading days</div>', unsafe_allow_html=True)
-hero_col, chart_col = st.columns([5, 7], gap="large")
-with hero_col:
-    st.markdown(hero_html(fi), unsafe_allow_html=True)
-with chart_col:
-    win = st.radio("History shown", list(WINDOWS), index=1, horizontal=True, label_visibility="collapsed", key="hero_window")
-    st.plotly_chart(forecast_chart(fi, WINDOWS[win]), use_container_width=True, config={"displayModeBar": False})
-    st.caption("Line: actual daily close · ◆ forecast for the next trading day, bar = 90% likely range")
+st.markdown("### Next-Day Gold Price Forecast")
+st.caption("XAU/USD · LSTM model, retrained every 7 trading days")
+render_hero(fi)
+win = st.radio("History shown", list(WINDOWS), index=1, horizontal=True, label_visibility="collapsed", key="hero_window")
+st.plotly_chart(forecast_chart(fi, WINDOWS[win]), width="stretch", config={"displayModeBar": False})
+st.caption("Line: actual daily close · ◆ forecast for the next trading day, bar = 90% likely range")
 
 m1, m2, m3 = st.columns(3)
 if v2 is not None:
@@ -380,7 +392,7 @@ if v2 is not None:
               help="Average gap between the forecast and the actual next-day close on the test period. A guess of “tomorrow's price = today's price” scores almost the same.")
     m2.metric("Up/down calls correct", f"{acc_v2:.1%}", f"{(acc_v2 - up_v2) * 100:+.1f} pt vs. always guessing “up” ({up_v2:.1%})", delta_color="off",
               help="Share of test days where the forecast got the direction right. Gold rose on most test days, so always guessing “up” is the bar to beat, not 50%.")
-    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b %Y"), f"{v2['protocol']['n_test']} test days", delta_color="off")
+    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b"), f"{pd.Timestamp(fi['as_of']).year} · {v2['protocol']['n_test']} test days", delta_color="off")
     price_edge, dir_edge = model_verdict(lstm_v2, up_v2)
     if "better" in (price_edge, dir_edge):
         st.caption("Some edge over simple baselines was measured. See **How reliable?** for the evidence and caveats.")
@@ -389,7 +401,7 @@ if v2 is not None:
 else:
     m1.metric("Typical daily miss (MAE)", f"${results['LSTM Walk-Forward']['MAE']:,.2f}")
     m2.metric("Up/down calls correct", f"{dir_acc['LSTM Walk-Forward']:.1f}%")
-    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b %Y"))
+    m3.metric("Data through", pd.Timestamp(fi["as_of"]).strftime("%d %b"), str(pd.Timestamp(fi["as_of"]).year), delta_color="off")
     st.caption("Treat this as a directional signal, not a precise price target: the model under-predicts sharp upward moves.")
 
 
@@ -410,7 +422,7 @@ def render_track_record(v2: dict, p: pd.DataFrame) -> None:
     fig.update_layout(height=500, hovermode="x unified", margin=dict(t=30, b=10), legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="left", x=0))
     fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
     fig.update_yaxes(title_text="USD", row=2, col=1)
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     st.caption("Each point is a forecast made the day before (x-axis = the day it was made). Both lines show the NEXT trading day's close.")
     st.download_button("Download predictions (CSV)", data=p.to_csv(index=False).encode("utf-8"), file_name="daily_walk_forward_predictions.csv", mime="text/csv")
 
@@ -454,7 +466,7 @@ def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
     ))
     fig_d.add_hline(y=up * 100, line_dash="dash", line_color="#8a8a86", annotation_text=f"always up {up:.1%}", annotation_position="top left")
     fig_d.update_layout(height=360, margin=dict(t=20, b=10), showlegend=False, yaxis=dict(range=[35, 72], title="Correct up/down calls (%)"))
-    st.plotly_chart(fig_d, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig_d, width="stretch", config={"displayModeBar": False})
 
     with st.expander("Detailed metrics for every model (MAE, AUC, IC, R², p-values)"):
         labels = {"drift": "Rolling drift", "ridge": "Ridge", "hist_gb_reg": "HistGB regressor", "hist_gb_clf": "HistGB classifier", "lstm": "LSTM", "momentum_rule": "Momentum rule"}
@@ -470,7 +482,7 @@ def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
         fmt = {"MAE ($)": "{:.2f}", "MAE skill vs no-change": "{:+.4f}", "DM p (vs no-change)": "{:.3f}", "Direction acc. (%)": "{:.1f}",
                "vs always-up (pt)": "{:+.1f}", "p (vs always-up)": "{:.3f}", "AUC": "{:.3f}", "IC (rank corr.)": "{:+.3f}", "R² (returns)": "{:+.4f}"}
         shown = table.apply(lambda col: col.map(lambda v: "–" if pd.isna(v) else fmt[col.name].format(v)))  # display copy; `table` keeps the numbers
-        st.dataframe(shown, use_container_width=True)
+        st.dataframe(shown, width="stretch")
         st.download_button("Download metrics table (CSV)", data=table.to_csv().encode("utf-8"), file_name="daily_walk_forward_metrics.csv", mime="text/csv")
 
 
@@ -540,7 +552,7 @@ with tab_data:
             yaxis_title="Close Price (USD)", xaxis=range_axis,
         )
 
-    st.plotly_chart(fig_hist, use_container_width=True)
+    st.plotly_chart(fig_hist, width="stretch")
 
     st.caption(
         "Long-term uptrend with a sharp acceleration in 2025–2026. "
@@ -596,7 +608,7 @@ with tab_rel:
         )
         fig.update_yaxes(title_text="Price (USD)", row=1, col=1)
         fig.update_yaxes(title_text="Error (USD)", row=2, col=1)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.caption(
             f"Red bars ({ERROR_UNDER}) mark days the model under-predicted (actual > "
@@ -656,7 +668,7 @@ with tab_rel:
                 textposition="outside",
             ))
             fig_b.update_layout(title=title, height=360, margin=dict(t=40, b=10), showlegend=False)
-            col.plotly_chart(fig_b, use_container_width=True)
+            col.plotly_chart(fig_b, width="stretch")
 
         fig_d = go.Figure(go.Bar(
             x=model_names,
@@ -669,14 +681,14 @@ with tab_rel:
                          annotation_text="50% = random guess", annotation_position="top left")
         fig_d.update_layout(title="Directional Accuracy (%) — higher is better",
                              height=360, margin=dict(t=40, b=10), showlegend=False)
-        mcol3.plotly_chart(fig_d, use_container_width=True)
+        mcol3.plotly_chart(fig_d, width="stretch")
 
         metrics_table = pd.DataFrame({
             "MAE ($)": {m: round(results[m]["MAE"], 2) for m in model_names},
             "RMSE ($)": {m: round(results[m]["RMSE"], 2) for m in model_names},
             "Directional Accuracy (%)": {m: round(dir_acc[m], 2) for m in model_names},
         })
-        st.dataframe(metrics_table, use_container_width=True)
+        st.dataframe(metrics_table, width="stretch")
 
         dl1, dl2 = st.columns(2)
         dl1.download_button(
@@ -725,7 +737,7 @@ with tab_data:
         yaxis_title="Rolling Std. Dev. of Daily Return",
         xaxis=dict(rangeslider=dict(visible=True)),
     )
-    st.plotly_chart(fig_vol, use_container_width=True)
+    st.plotly_chart(fig_vol, width="stretch")
 
     st.divider()
 
@@ -742,7 +754,7 @@ with tab_data:
         height=360, margin=dict(t=10, b=10), bargap=0.02,
         xaxis_title="Daily Return (%)", yaxis_title="Frequency",
     )
-    st.plotly_chart(fig_ret, use_container_width=True)
+    st.plotly_chart(fig_ret, width="stretch")
     st.caption(f"Mean {return_pct.mean():+.3f}% · Std {return_pct.std():.3f}% — tightly centred on zero with fat tails, and stable whether gold trades at \\$400 or \\$5,300.")
 
     st.divider()
@@ -764,7 +776,7 @@ with tab_data:
                 line=dict(color=palette_cycle[i % len(palette_cycle)]),
             ))
         fig_f.update_layout(height=380, hovermode="x unified", margin=dict(t=10, b=10))
-        st.plotly_chart(fig_f, use_container_width=True)
+        st.plotly_chart(fig_f, width="stretch")
     else:
         st.caption("Select at least one feature above to plot it.")
 
@@ -798,20 +810,26 @@ with tab_method:
             )
 
         with st.expander("Also tested, still null: macro, calendar and positioning features"):
-            st.caption(
-                "Five independent additions to the LSTM, identical protocol throughout, evaluated on the 2025-01-09 to 2026-09-18 snapshot. AUC never leaves the "
-                "0.45-0.52 band and no p-value clears 0.05 — checked directly, the model predicts 'up' on 85-89% of days "
-                "regardless of which features it gets, which is why accuracy moves while AUC does not."
-            )
-            phase9 = pd.DataFrame([
-                {"Feature set": "Price history only", "Direction Acc.": "51.9%", "AUC": 0.452, "p vs always-up": 0.097},
-                {"Feature set": "+ cross-asset/macro (6 series)", "Direction Acc.": "55.7%", "AUC": 0.501, "p vs always-up": 0.922},
-                {"Feature set": "+ NFP calendar", "Direction Acc.": "55.2%", "AUC": 0.504, "p vs always-up": 0.769},
-                {"Feature set": "+ FOMC + CPI calendar", "Direction Acc.": "58.5%", "AUC": 0.516, "p vs always-up": 0.304},
-                {"Feature set": "+ CFTC COT positioning", "Direction Acc.": "55.2%", "AUC": 0.491, "p vs always-up": 0.769},
-            ]).set_index("Feature set")
-            st.dataframe(phase9, use_container_width=True)
-            st.caption("Full results: `daily/results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/`, `with_cot/`.")
+            fs_rows = feature_search_rows(feature_search_stamp())
+            if fs_rows:
+                p_min = min(fs_rows, key=lambda r: r["p"])
+                aucs = [r["auc"] for r in fs_rows if r["auc"] is not None]
+                up_lo, up_hi = min(r["up_share"] for r in fs_rows), max(r["up_share"] for r in fs_rows)
+                st.caption(
+                    f"{len(fs_rows) - 1} additions to the LSTM, same protocol. AUC ranges from {min(aucs):.3f} to {max(aucs):.3f}; the smallest p-value against "
+                    f"'always up' is {p_min['p']:.2f} ({'not significant' if p_min['p'] >= 0.05 else 'below 0.05, see Track record before reading anything into it'}). "
+                    f"Checked directly, the model predicts 'up' on {up_lo:.0%}-{up_hi:.0%} of days whichever features it gets, "
+                    "which is why accuracy can move while AUC does not."
+                )
+                if len({r["n"] for r in fs_rows}) > 1:
+                    st.warning("These rows were evaluated on different test windows (see the Test days column), so they are not strictly comparable.", icon="⚠️")
+                st.dataframe(pd.DataFrame([
+                    {"Feature set": r["label"], "Test days": r["n"], "Direction acc.": f"{r['acc']:.1%}", "AUC": "–" if r["auc"] is None else f"{r['auc']:.3f}",
+                     "p vs always-up": f"{r['p']:.2f}", "R² (returns)": "–" if r["r2"] is None else f"{r['r2']:+.3f}", "Predicts 'up' on": f"{r['up_share']:.0%} of days"}
+                    for r in fs_rows]).set_index("Feature set"), width="stretch")
+                st.caption("Full results: `daily/results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/`, `with_cot/`.")
+            else:
+                st.caption("Feature-search results are not available in this deployment.")
 
         st.caption("Sections below describe the original pipeline (60-day window, price-level target), kept for the record.")
 
@@ -828,7 +846,7 @@ with tab_method:
             )
             fig_volq = go.Figure(go.Bar(x=df["date"], y=vol, marker_color=COLORS["volume"], marker_line_width=0))
             fig_volq.update_layout(height=280, margin=dict(t=10, b=10), yaxis_title="Volume", xaxis=dict(rangeslider=dict(visible=True)))
-            st.plotly_chart(fig_volq, use_container_width=True)
+            st.plotly_chart(fig_volq, width="stretch")
         else:
             st.caption("The `volume` column isn't present in this table — excluded from feature engineering regardless.")
 

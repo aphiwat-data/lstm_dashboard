@@ -259,18 +259,27 @@ def _days_since(index: pd.DatetimeIndex, event_dates: list[str]) -> tuple[pd.Ser
     return pd.Series(is_event.astype(float), index=index), pd.Series(pos - last_event_pos, index=index)
 
 
-def make_calendar_features(index: pd.DatetimeIndex) -> pd.DataFrame:
-    """Three US macro-calendar event proxies, all causal by construction: NFP release day (first Friday of
+CALENDAR_EVENTS = ("nfp", "fomc", "cpi")
+
+
+def make_calendar_features(index: pd.DatetimeIndex, events: tuple[str, ...] = CALENDAR_EVENTS) -> pd.DataFrame:
+    """Up to three US macro-calendar event proxies, all causal by construction: NFP release day (first Friday of
     the month — a deterministic BLS convention), FOMC decision days, and CPI release days (both from
-    fixed historical/announced-in-advance lists above, sourced from federalreserve.gov and bls.gov)."""
+    fixed historical/announced-in-advance lists above, sourced from federalreserve.gov and bls.gov).
+    `events` selects which to include (the Phase 9 comparison adds them one at a time)."""
+    unknown = set(events) - set(CALENDAR_EVENTS)
+    assert not unknown, f"unknown calendar events: {unknown}"
     f = pd.DataFrame(index=index)
-    is_first_friday = (index.dayofweek == 4) & (index.day <= 7)
-    f["f_nfp_day"] = is_first_friday.astype(float)
-    pos = np.arange(len(index), dtype=float)
-    last_nfp_pos = pd.Series(np.where(is_first_friday, pos, np.nan), index=index).ffill().to_numpy()
-    f["f_days_since_nfp"] = pos - last_nfp_pos  # NaN until the first NFP day in the sample; causal (backward-only)
-    f["f_fomc_day"], f["f_days_since_fomc"] = _days_since(index, FOMC_DATES)
-    f["f_cpi_day"], f["f_days_since_cpi"] = _days_since(index, CPI_DATES)
+    if "nfp" in events:
+        is_first_friday = (index.dayofweek == 4) & (index.day <= 7)
+        f["f_nfp_day"] = is_first_friday.astype(float)
+        pos = np.arange(len(index), dtype=float)
+        last_nfp_pos = pd.Series(np.where(is_first_friday, pos, np.nan), index=index).ffill().to_numpy()
+        f["f_days_since_nfp"] = pos - last_nfp_pos  # NaN until the first NFP day in the sample; causal (backward-only)
+    if "fomc" in events:
+        f["f_fomc_day"], f["f_days_since_fomc"] = _days_since(index, FOMC_DATES)
+    if "cpi" in events:
+        f["f_cpi_day"], f["f_days_since_cpi"] = _days_since(index, CPI_DATES)
     return f
 
 
@@ -340,7 +349,7 @@ def assign_splits(index: pd.DatetimeIndex) -> pd.Series:
 
 
 def build(src: str, use_macro: bool = False, macro_cache: Path | None = None, use_calendar: bool = False,
-          use_cot: bool = False, cot_cache: Path | None = None) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+          use_cot: bool = False, cot_cache: Path | None = None, calendar_events: tuple[str, ...] = CALENDAR_EVENTS) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
     """Returns (labelled dataset, report, latest feature rows). The latest rows include the newest day, whose
     next-day label does not exist yet, so a forecast for tomorrow can be made from them."""
     d, rep = clean_and_report(load_silver(src))
@@ -353,8 +362,9 @@ def build(src: str, use_macro: bool = False, macro_cache: Path | None = None, us
         rep["macro"]["tickers"] = MACRO_TICKERS
     rep["calendar"] = {"enabled": use_calendar}
     if use_calendar:
-        feats_all = feats_all.join(make_calendar_features(d.index))
-        rep["calendar"]["note"] = "NFP (first-Friday-of-month rule) + FOMC/CPI from fixed historical date lists (federalreserve.gov, bls.gov)"
+        feats_all = feats_all.join(make_calendar_features(d.index, calendar_events))
+        rep["calendar"]["events"] = list(calendar_events)
+        rep["calendar"]["note"] = "NFP (first-Friday-of-month rule); FOMC/CPI from fixed historical date lists (federalreserve.gov, bls.gov)"
     rep["cot"] = {"enabled": use_cot}
     if use_cot:
         cot_raw = fetch_cot(cot_cache)
@@ -385,11 +395,13 @@ def main() -> None:
     ap.add_argument("--macro", action="store_true", help="add cross-asset/macro features (DXY, silver, SPX, VIX, 10Y yield, TIP)")
     ap.add_argument("--macro-cache", type=Path, default=Path("data/macro_cache.parquet"))
     ap.add_argument("--calendar", action="store_true", help="add NFP/FOMC/CPI release-day calendar features")
+    ap.add_argument("--calendar-events", default=",".join(CALENDAR_EVENTS), help="which calendar events --calendar adds (comma separated: nfp,fomc,cpi)")
     ap.add_argument("--cot", action="store_true", help="add CFTC Commitment of Traders (gold positioning) features")
     ap.add_argument("--cot-cache", type=Path, default=Path("data/cot_cache.parquet"))
     args = ap.parse_args()
     df, rep, latest = build(args.silver, use_macro=args.macro, macro_cache=args.macro_cache if args.macro else None,
-                             use_calendar=args.calendar, use_cot=args.cot, cot_cache=args.cot_cache if args.cot else None)
+                             use_calendar=args.calendar, use_cot=args.cot, cot_cache=args.cot_cache if args.cot else None,
+                             calendar_events=tuple(args.calendar_events.split(",")))
     args.out_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(args.out_dir / "xauusd_d1_features.parquet")
     latest.to_parquet(args.out_dir / "xauusd_d1_latest_features.parquet")
