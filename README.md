@@ -571,6 +571,11 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   OS in dark mode got the dark page) and has no option to default to light. The config is now a single `[theme]` with `base = "light"` (sidebar colours in `[theme.sidebar]`). In the frontend
   a lone custom theme replaces Streamlit's presets and is applied whatever the OS or a remembered "Dark" preference says; verified on 1.56 and 1.66.1 with the OS emulated as dark and
   `localStorage` `stActiveTheme-/-v2` set to `"Dark"`. The cost is that viewers have no dark option. A running local server keeps the old theme after `config.toml` is edited: restart it.
+- **Less text (advisor feedback, 30 Oct).** The advisor found the page too wordy for a general reader. Text visible without opening anything fell from about 1,300 to about 390 words
+  (counted with Streamlit's `AppTest` on the same data, expanders and popovers excluded). Section and chart captions moved into `help=` tooltips (the small ? next to a heading, a metric or a chart
+  title), each scorecard row keeps one short line with the detail in its metric tooltip, the "honest result" box on *About* was dropped because the verdict already sits on *How reliable?*,
+  the five method expanders became one, and the pipeline steps are a few words each. Rule: a heading may carry a tooltip, a caption is at most one short line, and anything longer goes in a
+  tooltip, popover or expander. Tooltips open on hover; tapping them on a phone was not tested (the owner said mobile does not matter).
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
   `requirements.txt` rendered identically; live URL checked after the push.
 
@@ -1333,7 +1338,7 @@ subsection is what a reader sees today.
   `forecast_log.csv`, `bronze/streaming/xauusd_daily_incremental.csv` and `silver/xauusd_daily_clean.parquet` for the price history.
 - **Rules that came from real bugs:** native Streamlit elements only; `width="stretch"` instead of `use_container_width`; escape dollar signs in markdown and `st.metric` as `\$`; wrapping
   containers instead of `st.columns` where the open sidebar would squeeze content, and stretch only for `st.metric` cards (text-heavy cards and charts are squeezed instead of wrapping);
-  charts use the system font; check every layout change at several widths on Streamlit 1.56 and 1.66 and on the live URL (see Phase 12).
+  charts use the system font; keep visible text short (explanations go in `help=` tooltips, popovers or expanders, and `$` in a tooltip must be escaped like anywhere else); check every layout change at several widths on Streamlit 1.56 and 1.66 and on the live URL (see Phase 12).
 
 **Hosting decision.** Streamlit Community Cloud is free. The real AWS cost risk in this project is compute left running continuously
 (not S3 reads or occasional inference), so the dashboard is deliberately not deployed to always-on AWS compute.

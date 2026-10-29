@@ -18,8 +18,7 @@ INDICATORS = {"f_ret_5": "5-day return", "f_ret_20": "20-day return", "f_vol_20"
 
 @st.fragment
 def _price(px: pd.DataFrame) -> None:
-    st.subheader("Gold price history")
-    st.caption(f"COMEX gold futures (GC=F), daily close since {px['date'].min().year}.")
+    st.subheader("Gold price history", help=f"COMEX gold futures (GC=F), daily close since {px['date'].min().year}. Volume is for context only: it is often missing, so the model uses prices alone.")
     window = st.segmented_control("Window", list(PRICE_WINDOWS), default="5Y", key="px_window", label_visibility="collapsed") or "5Y"
     d = px if PRICE_WINDOWS[window] is None else px[px["date"] >= px["date"].max() - pd.Timedelta(days=PRICE_WINDOWS[window])]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=0.04)
@@ -32,12 +31,10 @@ def _price(px: pd.DataFrame) -> None:
     fig.update_yaxes(tickprefix="$", tickformat=",.0f", row=1, col=1)
     fig.update_yaxes(title_text="Volume", title_font_size=11, row=2, col=1)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    st.caption("Volume is shown for context only: it is often missing for this contract, so the model uses prices alone.")
 
 
 def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
-    st.subheader("Volatility")
-    st.caption("How much the price typically moves in a day. The 90% range in the header is a volatility forecast: wider when markets are jumpy.")
+    st.subheader("Volatility", help="How much the price typically moves in a day. The 90% range in the header is a volatility forecast: wider when markets are jumpy.")
     if vol is not None:
         vdf, comparison = vol
         lo, hi = cur["interval_90_close"]
@@ -47,19 +44,19 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
             st.metric("Annualised", f"{sigma * np.sqrt(252):.1f}%", border=True, width="stretch", help="Daily move × √252 trading days.")
             st.metric("VIX (US stock market)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", border=True, width="stretch",
                       help="Shown for context. We tested it as an input and it did not improve the gold forecast.")
+        st.markdown("**Daily move vs. expected range**", help="Bars: how far gold actually moved each test day. Line: how far the model expected it could move; 90% of days should stay below the line.")
         fig = go.Figure()
         fig.add_trace(go.Bar(x=vdf["date"], y=vdf["abs_return_pct"], name="Actual daily move", marker_color=COLORS["naive"], opacity=0.5, marker_line_width=0, hovertemplate="%{x|%d %b %Y}<br>%{y:.2f}%<extra></extra>"))
         fig.add_trace(go.Scatter(x=vdf["date"], y=1.6449 * vdf["sigma_ewma_pct"], name="Expected 90% half-width", line=dict(color=COLORS["model"], width=2.4), hovertemplate="%{y:.2f}%<extra></extra>"))
         finish(fig, 300, legend=True)
         fig.update_yaxes(ticksuffix="%")
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-        st.caption("Bars: how far gold actually moved each test day. Line: how far the model expected it could move (90% of days should stay below the line).")
         with st.expander("Which volatility model works best?", icon=":material/query_stats:"):
             rows = [{"Model": r["model"], "Score": r["qlike"], "vs. the one used": r["qlike_vs_ewma"], "p-value": r["dm_p_vs_ewma"]} for r in comparison["variance_forecasts"]]
             st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, column_config={
                 "Score": st.column_config.NumberColumn(format="%.3f", help="QLIKE: lower is better"), "vs. the one used": st.column_config.NumberColumn(format="%+.3f"),
                 "p-value": st.column_config.NumberColumn(format="%.2f")})
-            st.caption("Scored on every test day against the realised move (QLIKE, lower is better). The simple weighted average used here was not beaten by GARCH, by the VIX, or by models that add the VIX.")
+            st.caption("Lower score is better. The simple weighted average used here was not beaten.")
     r = px.set_index("date")["close"].pct_change()
     rolling = r.rolling(30).std() * np.sqrt(252) * 100
     fig2 = go.Figure(go.Scatter(x=rolling.index, y=rolling, line=dict(color=COLORS["model"], width=1.6), fill="tozeroy", fillcolor="rgba(42,120,214,0.12)", hovertemplate="%{x|%d %b %Y}<br>%{y:.1f}%<extra></extra>"))
@@ -70,7 +67,8 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
 
 
 def _returns(px: pd.DataFrame) -> None:
-    st.subheader("Daily changes")
+    st.subheader("Daily changes", help="How many days gold moved by each percentage: tightly centred on zero with occasional large moves, whether gold trades at \\$400 or \\$5,000. "
+                 "This daily change is what the model predicts.")
     ret = (px["close"].pct_change() * 100).dropna()
     fig = go.Figure(go.Histogram(x=ret, nbinsx=120, marker_color=COLORS["dist"], marker_line_width=0, hovertemplate="%{x:.2f}%<br>%{y} days<extra></extra>"))
     fig.add_vline(x=0, line_dash="dash", line_color="rgba(128,128,128,.7)", line_width=1)
@@ -78,8 +76,7 @@ def _returns(px: pd.DataFrame) -> None:
     fig.update_xaxes(ticksuffix="%")
     fig.update_yaxes(title_text="Days", title_font_size=11)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    st.caption(f"Each bar counts how many days gold moved by that percentage. Average {ret.mean():+.3f}%, typical swing {ret.std():.2f}%: tightly centred on zero with occasional large moves, "
-               "whether gold trades at \\$400 or \\$5,000. This daily change is what the model actually predicts.")
+    st.caption(f"Average {ret.mean():+.3f}% · typical swing {ret.std():.2f}%")
 
 
 @st.fragment
@@ -87,8 +84,7 @@ def _indicators(px: pd.DataFrame) -> None:
     feats = indicators(px.set_index("date")["close"])
     if feats is None:
         return
-    st.subheader("What the model looks at")
-    st.caption("The model sees only these kinds of numbers, all computed from past prices: recent returns, volatility, momentum and distance from moving averages.")
+    st.subheader("What the model looks at", help="The model sees only numbers computed from past prices: recent returns, volatility, momentum and distance from moving averages. Shown: the last two years.")
     key = st.segmented_control("Indicator", list(INDICATORS), format_func=INDICATORS.get, default="f_ret_20", key="indicator", label_visibility="collapsed") or "f_ret_20"
     s = feats[key].dropna().tail(504)
     pct = key.startswith(("f_ret", "f_vol", "f_ma"))
@@ -97,7 +93,6 @@ def _indicators(px: pd.DataFrame) -> None:
     finish(fig, 280)
     fig.update_yaxes(ticksuffix="%" if pct else "")
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    st.caption(f"{INDICATORS[key]}, last two years.")
 
 
 def render(px: pd.DataFrame | None, cur: dict, vol: tuple | None) -> None:

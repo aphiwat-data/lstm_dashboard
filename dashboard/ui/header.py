@@ -56,10 +56,9 @@ def forecast_chart(hist: pd.DataFrame, cur: dict, days: int) -> go.Figure:
 @st.fragment
 def _chart(hist: pd.DataFrame, cur: dict) -> None:
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-        st.caption("**Price history and forecast**")
+        st.caption("**Price history and forecast**", help="Orange line: actual daily close. Blue diamond: tomorrow's forecast, with the bar showing its 90% range.")
         window = st.segmented_control("History shown", list(WINDOWS), default="3M", key="hero_window", label_visibility="collapsed") or "3M"
     st.plotly_chart(forecast_chart(hist, cur, WINDOWS[window]), width="stretch", config={"displayModeBar": False})
-    st.caption("Orange line: actual daily close. Blue diamond: tomorrow's forecast, with the bar showing its 90% range.")
 
 
 def _trust_strip(res: dict, preds: pd.DataFrame, reg: dict | None) -> None:
@@ -73,19 +72,19 @@ def _trust_strip(res: dict, preds: pd.DataFrame, reg: dict | None) -> None:
         st.metric("Typical error", usd(lstm["mae_usd"]), f"{pct_l:.2f}% of the price", delta_color="off", delta_arrow="off", border=True, width="stretch",
                   help=f"Average gap between the forecast and the actual next-day close, measured over the whole test period ({res['protocol']['n_test']} trading days).")
         if cov is not None:
-            st.metric("Range accuracy", f"{cov:.1%}", f"Target 90% · {n_cov} test days", delta_color="green" if abs(cov - 0.9) <= 0.02 else "orange", delta_arrow="off", border=True, width="stretch",
-                      help="How often the actual close really landed inside the 90% range, using only information known before each forecast. 90% is ideal.")
-        st.metric("Beats “tomorrow = today”?", VERDICT_WORDS[verdict], f"{signed_usd(diff)} typical error · p = {lstm['dm_p_vs_naive']:.2f}", delta_color=edge_color(verdict, diff), delta_arrow="off",
-                  border=True, width="stretch", help="“Tomorrow = today” is the standard benchmark for prices. Green or red only when the difference is statistically clear (p < 0.05); orange or blue means within noise.")
+            st.metric("Range accuracy", f"{cov:.1%}", "Target 90%", delta_color="green" if abs(cov - 0.9) <= 0.02 else "orange", delta_arrow="off", border=True, width="stretch",
+                      help=f"How often the actual close landed inside the 90% range over {n_cov} test days, using only information known before each forecast. 90% is ideal.")
+        st.metric("Beats “tomorrow = today”?", VERDICT_WORDS[verdict], f"{signed_usd(diff)} typical error", delta_color=edge_color(verdict, diff), delta_arrow="off",
+                  border=True, width="stretch", help=f"“Tomorrow = today” repeats today's price and is the standard benchmark. The chip is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
 
 
 def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame | None, reg: dict | None) -> None:
     label, color, icon = freshness(cur)
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         st.markdown("## Gold Price Forecast")
-        st.badge(label, icon=icon, color=color)
+        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 08:00 (Thailand time).")
         st.badge("Research project", color="gray")
-    st.caption("Tomorrow's XAU/USD close, forecast by an LSTM model · refreshed every day at 08:00 (Thailand time)")
+    st.caption("Tomorrow's XAU/USD close · LSTM model")
 
     fc, last, lo, hi = cur["predicted_next_close"], cur["latest_close"], cur["interval_90_close"][0], cur["interval_90_close"][1]
     change, pct = fc - last, (fc / last - 1) * 100
@@ -98,15 +97,14 @@ def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame 
                 st.markdown(f"# {usd(fc)}")
                 st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)] vs. last close {usd(last)} on {pd.Timestamp(cur['as_of_date']).strftime('%d %b')}")
             with st.container(width="content"):
-                st.caption("LIKELY RANGE (90%)")
+                st.caption("LIKELY RANGE (90%)", help="The close should land inside this range 9 days out of 10.")
                 st.markdown(f"### {usd(lo, 0)} – {usd(hi, 0)}")
-                st.caption("The close should land inside this range 9 days out of 10.")
         st.divider()
         _chart(hist, cur)
     if res is not None and preds is not None:
         _trust_strip(res, preds, reg)
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-            st.caption("**In short:** read this as “about today's close, within the range shown”. Research forecast, not trading advice.")
+            st.caption("Read it as “about today's close, within the range”. Research only, not trading advice.")
             with st.popover("How to read this", icon=":material/help:"):
                 st.markdown(
                     "- **Forecast:** the model's estimate of tomorrow's closing price.\n"

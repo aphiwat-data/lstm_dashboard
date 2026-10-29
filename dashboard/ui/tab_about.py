@@ -8,15 +8,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from .data import REPO_URL, feature_rows, horizons
-from .logic import PHRASE, price_verdict
-from .theme import COLORS, ERROR_UNDER, finish, usd
+from .theme import COLORS, ERROR_UNDER, finish
 
 STEPS = [
-    ("Collect", "Every day at 08:00 (Thailand time) a scheduled AWS Lambda function downloads the latest settled gold futures bar from Yahoo Finance."),
-    ("Check", "The new bar goes through data-quality checks. If something looks wrong, no forecast is published that day."),
-    ("Forecast", "An LSTM neural network reads the last 20 days (returns, volatility, momentum, moving averages) and predicts tomorrow's price change. Its weights are retrained every week."),
-    ("Add the range", "A 90% range is drawn around the forecast from the model's own recent errors, so it widens when the market gets jumpy."),
-    ("Publish and score", "The forecast is saved to Amazon S3 and shown on this page. When the real close arrives it is scored, and the result joins the live record."),
+    ("Collect", "the latest gold price from Yahoo Finance, daily at 08:00 (Thailand time)"),
+    ("Check", "automatic data-quality checks"),
+    ("Forecast", "an LSTM reads the last 20 days (retrained weekly)"),
+    ("Add the range", "a 90% range from the model's recent errors"),
+    ("Publish and score", "saved to Amazon S3, scored when the real close arrives"),
 ]
 SHORT = {"+ macro and cross-asset prices": "+ macro prices", "+ NFP release days": "+ NFP days", "+ FOMC and CPI release days": "+ FOMC and CPI days", "+ CFTC positioning": "+ positioning (COT)"}
 GLOSSARY = [
@@ -33,27 +32,16 @@ GLOSSARY = [
 ]
 
 
-def _intro(res: dict | None, reg: dict | None) -> None:
+def _intro() -> None:
     st.subheader("About this project")
-    st.markdown("A senior project in Computer Engineering at Mae Fah Luang University. It forecasts the **next trading day's closing price of gold (XAU/USD)** with an LSTM neural network, "
-                "publishes the forecast with a 90% range every day, and then checks, as strictly as it can, how good that forecast really is.")
-    if res is None:
-        return
-    lstm = res["models"]["lstm"]
-    text = (f"**The honest result.** Over {res['protocol']['n_test']} test days the model's typical error was {usd(lstm['mae_usd'])}, against {usd(lstm['naive_mae_usd'])} for a “tomorrow = today” guess. "
-            f"Statistically, the model {PHRASE[price_verdict(lstm)]} that simple guess.")
-    if reg:
-        e = reg["interval"]["lstm_ewma_gaussian"]
-        text += f" What does hold up is the range: the actual close landed inside it on {e['coverage']:.1%} of days (target 90%), so it is a trustworthy measure of uncertainty."
-    st.info(text, icon=":material/flag:")
+    st.markdown("A senior project at Mae Fah Luang University: a daily forecast of **tomorrow's gold price (XAU/USD)** with an LSTM, a 90% range, and an honest test against simple baselines.")
 
 
 def _pipeline() -> None:
-    st.subheader("How the forecast is made")
-    st.caption("A fully automatic pipeline on AWS runs every day, without anyone pressing a button.")
+    st.subheader("How the forecast is made", help="A fully automatic pipeline on AWS (Lambda and S3) runs every day, without anyone pressing a button.")
     with st.container(border=True):
         for i, (title, text) in enumerate(STEPS, 1):
-            st.markdown(f":blue-badge[{i}] **{title}.** {text}")
+            st.markdown(f":blue-badge[{i}] **{title}** · {text}")
 
 
 def _experiments(res: dict) -> pd.DataFrame:
@@ -73,8 +61,8 @@ def _experiments(res: dict) -> pd.DataFrame:
 
 
 def _scoreboard(res: dict | None) -> None:
-    st.subheader("What we tried")
-    st.caption("Every idea was judged the same way: the typical price error against “tomorrow = today”, on the same test days.")
+    st.subheader("What we tried", help="Every idea was judged the same way: the typical price error against “tomorrow = today”, on the same test days. The same holds for the range: "
+                 "five ways of drawing it, a GARCH model, the VIX and a network trained on the range itself all failed to beat a simple weighted average of recent errors.")
     if res is None:
         st.info("The evaluation results are not available in this deployment.")
         return
@@ -89,9 +77,7 @@ def _scoreboard(res: dict | None) -> None:
     fig.update_yaxes(autorange="reversed", automargin=True, showgrid=False)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     better, worse = (d["verdict"] == "Better").sum(), (d["verdict"] == "Worse").sum()
-    st.caption("Grey bars are differences too small to tell apart from luck." + (" Red bars are clearly worse than “tomorrow = today”." if worse else "") + (" Green bars are clearly better." if better else "")
-               + (" Nothing came out clearly better." if not better else "")
-               + " The same holds for the range: five ways of drawing it, a GARCH model, the VIX and a network trained on the range itself all failed to beat a simple weighted average of recent errors.")
+    st.caption("Grey: within noise" + (" · Red: clearly worse" if worse else "") + (" · Green: clearly better" if better else "") + (". Nothing came out clearly better." if not better else "."))
     if d.loc[d["group"] != "Longer horizon", "n"].nunique() > 1:
         st.warning("These rows were evaluated on different test windows (see the table), so they are not strictly comparable.", icon=":material/warning:")
     with st.expander("See the numbers", icon=":material/table:"):
@@ -99,34 +85,26 @@ def _scoreboard(res: dict | None) -> None:
         st.dataframe(table, width="stretch", hide_index=True, column_config={
             "Typical error": st.column_config.NumberColumn(format="$%.2f"), "“Tomorrow = today”": st.column_config.NumberColumn(format="$%.2f"),
             "Difference": st.column_config.NumberColumn(format="%+.1f%%"), "p-value": st.column_config.NumberColumn(format="%.2f"), "Test days": st.column_config.NumberColumn(format="%d")})
-        st.caption("Longer-horizon rows use overlapping forecasts, so their p-values are adjusted for that. Details in the README.")
+        st.caption("Longer-horizon p-values are adjusted for overlapping forecasts.")
 
 
 def _method(res: dict | None, reg: dict | None, px: pd.DataFrame | None) -> None:
-    st.subheader("The method in plain words")
-    with st.expander("Why does the model predict a change instead of a price?"):
-        st.markdown("The first version predicted the price directly. When gold climbed to levels it had never seen in training, its error exploded (about \\$640, against about \\$51 for “tomorrow = today”), "
-                    "because a neural network cannot extrapolate beyond the range it was trained on. The current model predicts the day's percentage change from scale-free inputs "
-                    "(returns, ratios and oscillators) and turns it into a price: **forecast = today's close × e^(predicted change)**.")
-    with st.expander("Why is every test on days the model has not seen?"):
-        st.markdown("Every 7 trading days the model is retrained on the latest 365 days, then judged on the days that follow, exactly as it would be used in real life. "
-                    "The scalers are fitted inside each training window and every input uses past data only; automated tests check that nothing from the future leaks in.")
-    with st.expander("How is the 90% range computed?"):
-        cov = f" Its hit rate of {reg['interval']['lstm_ewma_gaussian']['coverage']:.1%} is therefore an honest, out-of-sample number." if reg else ""
-        st.markdown("From the model's own past errors: an exponentially weighted average of recent squared errors (decay 0.94, fixed before testing) gives a typical size for tomorrow's miss, "
-                    "and the range is the forecast ± 1.645 times that size. It uses only errors known before each forecast." + cov)
-    with st.expander("Why isn't trading volume an input?"):
-        if px is not None and "volume" in px:
-            vol = pd.to_numeric(px["volume"], errors="coerce")
-            bad = int((vol.isna() | (vol <= 0)).sum())
-            st.markdown(f"**{bad / len(vol):.0%} of days ({bad:,} of {len(vol):,}) show zero or missing volume** in Yahoo Finance's gold futures data, a known gap in the source. "
-                        "So every input is computed from the closing price alone.")
-        else:
-            st.markdown("Volume is often zero or missing in Yahoo Finance's gold futures data, so every input is computed from the closing price alone.")
-    with st.expander("Why is up/down accuracy only a side check?"):
-        up = f" It says “up” on {reg['models']['lstm']['says_up_share']:.0%} of test days, so its score mostly follows how often gold rose." if reg else ""
-        st.markdown("A price forecast is judged by how far off it is, not by a yes/no call, so the price error comes first. Direction is still reported as a labelled secondary check, "
-                    "because the original proposal phrased its target that way and because it shows how the model behaves." + up)
+    cov = f", so its {reg['interval']['lstm_ewma_gaussian']['coverage']:.1%} hit rate is honest" if reg else ""
+    up = f" The model says “up” on {reg['models']['lstm']['says_up_share']:.0%} of test days, so its score mostly follows how often gold rose." if reg else ""
+    if px is not None and "volume" in px:
+        vol = pd.to_numeric(px["volume"], errors="coerce")
+        bad = int((vol.isna() | (vol <= 0)).sum())
+        volume = f"{bad / len(vol):.0%} of days show zero or missing volume in Yahoo Finance's data, so every input comes from the closing price alone."
+    else:
+        volume = "Volume is often zero or missing in Yahoo Finance's data, so every input comes from the closing price alone."
+    with st.expander("The method in plain words", icon=":material/lightbulb:"):
+        st.markdown(
+            "**Why a change, not a price?** The first version predicted the price and broke when gold reached levels it had never seen (error about \\$640 against about \\$51 for “tomorrow = today”). "
+            "Now the model predicts the day's percentage change and converts it: forecast = today's close × e^(predicted change).\n\n"
+            "**Why is every test on unseen days?** The model is retrained every 7 trading days on the latest 365 days and judged only on the days that follow. Inputs use past data only; automated tests check it.\n\n"
+            f"**How is the 90% range computed?** Forecast ± 1.645 × the typical recent miss (a weighted average of past errors, decay 0.94). It uses only errors known before each forecast{cov}.\n\n"
+            f"**Why isn't volume an input?** {volume}\n\n"
+            f"**Why is up/down only a side check?** A price forecast is judged by how far off it is, not by a yes/no call.{up}")
 
 
 def _glossary() -> None:
@@ -139,11 +117,11 @@ def _footer() -> None:
     with st.container(horizontal=True, gap="small"):
         st.link_button("Source code", REPO_URL, icon=":material/code:")
         st.link_button("Full write-up (README)", f"{REPO_URL}/blob/main/README.md", icon=":material/description:")
-    st.caption("A research and education project. Nothing here is financial advice. Prices: COMEX gold futures (GC=F) via Yahoo Finance.")
+    st.caption("Research project, not financial advice · Prices: Yahoo Finance (GC=F)")
 
 
 def render(res: dict | None, reg: dict | None, px: pd.DataFrame | None) -> None:
-    _intro(res, reg)
+    _intro()
     st.write("")
     _pipeline()
     st.write("")
