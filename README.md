@@ -50,6 +50,11 @@ with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" ba
 secondary check (it is how the proposal phrased the ~70% target, and it exposes the model's majority-class behaviour). The dashboard
 already does this, and so does Chapter 3 (price accuracy first, direction as a secondary table).
 
+**Dashboard structure (2026-10-30, Phase 12).** `dashboard/app.py` is a 30-line entry point; the page lives in `dashboard/ui/` (`data.py` cached loaders, `header.py`, `sidebar.py`,
+one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py` verdict rules). It no longer imports TensorFlow (requirements: streamlit, boto3, pandas, numpy,
+plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
+refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
+
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
 called by `walk_forward.py`) computes from `wf_predictions.csv`: MAE, RMSE, MAPE, relative MAE and Diebold-Mariano p (lags 0 and 24; LSTM
 p = 0.38-0.41 either way, Ridge 0.023-0.052, so borderline), R², out-of-sample R² vs. the rolling mean (LSTM -0.011), IC, and interval
@@ -93,8 +98,8 @@ classifier, momentum rule. Statistics: binomial test against the always-up rate,
 no-change, Spearman IC, R² on returns, and a 90% interval from the LSTM residuals. Features come from
 `daily/build_daily_dataset.py` and are causal and scale-free by construction (`daily/test_no_lookahead_daily.py` checks it).
 
-**How to run things** (the S3 silver table and the dashboard's original-pipeline views need AWS credentials; pass `--silver <local
-parquet>` to keep the daily scripts off S3):
+**How to run things** (the S3 silver table and the dashboard's live forecast and price history need AWS credentials, and the dashboard falls back to the repository
+files when S3 cannot be read; pass `--silver <local parquet>` to keep the daily scripts off S3):
 
 ```bash
 python3 -m streamlit run dashboard/app.py          # dashboard on http://localhost:8501 (repo root)
@@ -537,6 +542,34 @@ Honest status: deployed and invoked manually on 2026-10-29; the schedule is ENAB
 only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the IAM user `Auto` lacks SNS/CloudWatch permissions and the permissions were not widened); the empty ECR repo from September was deleted on request (2026-10-29). Cost: Lambda (a few seconds a day) and S3 are far inside the free tier. Operating it: `python3 automation/deploy.py apply` (safe to repeat),
 `python3 automation/retrain.py` weekly, `python3 automation/deploy.py teardown` removes everything except the S3 data.
 
+### Phase 12: a readable, professional dashboard (October 30, 2026)
+
+Request: make the UI much easier to read and as professional as possible. The old `app.py` had grown to 1055 lines, imported TensorFlow and awswrangler, and loaded the
+Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views of the superseded price-level pipeline. It was rebuilt rather than patched.
+
+- **Structure.** `dashboard/app.py` (30 lines) wires `dashboard/ui/`: `data.py` (cached loaders: results from `daily/results`, the live forecast, track record and price history from S3),
+  `logic.py` (price and direction verdicts), `theme.py` (colours, `usd()`, one shared Plotly style), `header.py`, `sidebar.py`, `tab_track.py`, `tab_market.py`, `tab_reliability.py`
+  and `tab_about.py`. The original-pipeline views (60-day price-level LSTM, AR(5) baselines, Gold-table feature explorer) were removed from the page; this README is their record.
+  `requirements.txt` dropped tensorflow, awswrangler and scikit-learn and gained pyarrow. A warm page paints in about a second; segmented controls are `st.fragment`s, so changing a
+  chart window re-runs only that chart.
+- **Design system, native theming only.** `.streamlit/config.toml` sets the Inter font, rounder corners, a heading scale where `h1` is the forecast price, and separate light and dark
+  palettes with semantic colours (green/orange/red/blue chips). Charts keep the project's colour-blind-safe hues (orange = actual price, blue = the model, grey = "tomorrow = today").
+- **Information design.** Always visible: title and freshness badge, then the forecast card (price, change chip, 90% range, 1M/3M/6M/1Y chart with the forecast and its range bar), then
+  three trust cards (typical error, range accuracy, beats "tomorrow = today"?) and a "How to read this" popover. Tabs: *Track record* (the live record first, then the 449-day backtest),
+  *Data explorer* (price and volume with the test-period marker, volatility forecast vs. realised with a QLIKE comparison, 30-day volatility, daily changes, the model's own inputs),
+  *How reliable?* (verdict callout, a three-row scorecard, price-error and range-accuracy charts, the secondary direction check and the full statistics table) and *About* (what the
+  project is, the five pipeline steps, a "what we tried" chart of every experiment against "tomorrow = today" read from the result files, the method in plain words, a glossary).
+- **Honesty kept.** The page leads with price error against the baseline; red/green chips only when p < 0.05; the "What we tried" chart shows Ridge and gradient boosting as clearly
+  worse and everything else as within noise. Captions are generated from the data (verdict wording, which bars are better or worse), so they cannot drift from the numbers.
+- **Layout findings (Streamlit 1.56 and 1.66.1, Plotly 6.8 and 7.1, checked at 390, 760, 900, 1024, 1280 and 1440 px, light and dark).** In a horizontal container a `width="stretch"`
+  child gets `flex: 1 1 128px` with `min-width: 16px`. `st.metric` cards are protected by their own text and wrap cleanly (3 across, then 2+1, then a column), but text-heavy cards and
+  charts were squeezed instead of wrapping (900 px: three 130 px cards, two 180 px charts with rotated labels). So metric cards use stretch, the evidence is a scorecard of rows (number
+  left, explanation right, wrapping under the number on a phone) and the two bar charts are full width. Plotly measures text once and caches it, so a web font that loads a moment
+  later clipped legend entries; charts therefore use the system UI font (`CHART_FONT`). Streamlit remembers the sidebar state in `localStorage` (`stSidebarCollapsed-`): clear it when
+  testing narrow widths, otherwise an open drawer hides the page.
+- **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
+  `requirements.txt` rendered identically; live URL checked after the push.
+
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
 2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
@@ -555,6 +588,8 @@ only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the I
 11. Check that a conclusion survives the arbitrary choices in the test (e.g. the Diebold-Mariano lag), and when several alternatives are compared on
     one test window, say so: the winner's score is slightly optimistic.
 12. Test the evaluator, not only the model: the metrics module has tests that fail on look-ahead and on wrong formulas.
+13. Check how a layout primitive behaves at several widths before building on it: Streamlit's stretch children squeeze rather than wrap unless their content has a minimum size.
+    Generate prose from the data, so wording cannot drift from the numbers.
 
 ### Where things live
 | Path | What |
@@ -562,7 +597,7 @@ only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the I
 | `notebooks/`, `automation/` | Original daily pipeline (notebooks 01-06) and the Lambda automation, which is designed but not deployed and still runs the old price-level model |
 | `daily/` | Corrected daily dataset builder, causality tests, walk-forward evaluation, regression-first metrics (`regression_metrics.py`), multi-day walk-forward (`walk_forward_horizon.py`) and the interval experiments (`interval_experiment.py`, `lstm_quantile.py`, `interval_vix.py`). `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
 | `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check and the cross-asset test (`results/with_aux_mid/`); `results/summary_hourly_findings.png` is the one-page summary |
-| `dashboard/app.py` | Streamlit app (deployed on Streamlit Community Cloud from `main`); `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
+| `dashboard/app.py`, `dashboard/ui/` | Streamlit app (deployed on Streamlit Community Cloud from `main`): `app.py` is the entry point, `ui/` the header, sidebar, one module per tab, cached data loaders and the chart style; `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
 | `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
 
 ### Status and next steps
@@ -616,9 +651,10 @@ lstm_dashboard/
 │   ├── 05_LSTM_Training.ipynb
 │   └── 06_Model_Evaluation.ipynb
 ├── dashboard/
-│   ├── app.py                   ← Streamlit dashboard (deployed on Streamlit Community Cloud; reads S3 + daily/results) — see §10
+│   ├── app.py                   ← Streamlit dashboard entry point (deployed on Streamlit Community Cloud; reads S3 + daily/results) — see §10
+│   ├── ui/                      ← the page: data.py, logic.py, theme.py, header.py, sidebar.py, tab_track.py, tab_market.py, tab_reliability.py, tab_about.py (Phase 12)
 │   ├── assets/                  ← mfu_logo.png, adt_logo.png (sidebar header)
-│   ├── requirements.txt         ← sets a streamlit>=1.56 floor (Cloud installs the newest release)
+│   ├── requirements.txt         ← streamlit>=1.56 (Cloud installs the newest release), boto3, pandas, numpy, plotly, pyarrow; no TensorFlow
 │   └── .python-version          ← 3.11
 ├── .streamlit/config.toml       ← theme colour and minimal toolbar
 ├── .claude/launch.json          ← preview-server config for Claude Code sessions (optional)
@@ -1238,6 +1274,10 @@ brief:
 
 ## 10. Streamlit Dashboard (deployed on Streamlit Community Cloud)
 
+> **Update (30 Oct 2026): rebuilt for readability (Journey, Phase 12).** The page is now `dashboard/app.py` plus the `dashboard/ui/` package, uses only the result files, the live
+> pipeline's S3 output and the price history, and no longer loads TensorFlow or the original-pipeline views mentioned in the updates below; the "Current dashboard" subsection
+> describes what is deployed today. The older notes are kept for the record.
+>
 > **Update (Sep 2026):** the dashboard is also deployed on Streamlit Community Cloud (Python 3.11; AWS credentials in the
 > app's Secrets, never in git). The KPIs and the Model Evaluation tab now lead with the corrected evaluation read from
 > `daily/results/`; the original views live in an expander ("Original pipeline"). The layout description below covers the
@@ -1269,27 +1309,27 @@ brief:
 **STATUS: live and redesigned (October 2026).** Further iteration is welcome (nothing here is frozen), but the structure in the next
 subsection is what a reader sees today.
 
-### Current dashboard (October 2026)
-- **Hosting.** Streamlit Community Cloud, app path `dashboard/app.py`, Python 3.11, redeployed automatically from `main`. AWS credentials
-  live in the app's Secrets (never in git). For local runs use `python3 -m streamlit run dashboard/app.py` (needs AWS credentials for
-  the S3 reads).
-- **Sidebar (credits first).** MFU and ADT logos side by side, project title, degree and school, authors with student IDs, advisor and
-  committee, then data freshness and a "Model and data details" expander.
-- **Header (the forecast is the product).** Next-day forecast price (the largest element), change vs. last close, 90% likely range and
-  last close, a 1M/3M/6M/1Y chart with the forecast and its range drawn on it, then three cards: typical daily miss (MAE in dollars),
-  typical miss as a share of the price (MAPE) and the data-through date. Chips are green or red only when the difference from
-  "tomorrow = today" is statistically clear (p < 0.05), orange or blue when it is within noise.
-- **Tabs, in order.** *Track record* (forecast vs. actual and the daily miss); *Data explorer* (price history with volume, 30-day
-  volatility, return distribution, feature explorer); *How reliable?* (verdict, price error, R² and IC, typical miss per model vs.
-  "tomorrow = today", a secondary up/down expander, a full-metrics expander, and the original pipeline kept for the record);
-  *Method* (bottom line, what changed after review, the "Also tested, still null" table read from `daily/results/with_*`, and the
-  original methodology notes).
-- **Data it reads.** `daily/results/walk_forward_results.json`, `wf_predictions.csv` and `latest_forecast.json` (cache keyed on file
-  mtime, so a refresh shows up without a restart), the four feature-search folders, and the S3 Gold/model artifacts for the original
-  pipeline views.
-- **Rules that came from real bugs:** native Streamlit elements only; `width="stretch"` instead of `use_container_width`; escape
-  dollar signs in markdown as `\$`; wrapping containers instead of `st.columns` where the open sidebar would squeeze content; check
-  every layout change at several widths and on the live URL (see the lessons above).
+### Current dashboard (30 October 2026)
+- **Hosting.** Streamlit Community Cloud, app path `dashboard/app.py`, Python 3.11, redeployed automatically from `main`. AWS credentials live in the app's Secrets (never in git).
+  Local run: `python3 -m streamlit run dashboard/app.py` from the repo root (AWS credentials are needed for the live forecast and the price history; without them the page falls back to
+  the committed result files). Requirements: streamlit, boto3, pandas, numpy, plotly, pyarrow.
+- **Code layout.** `app.py` sets the page up and calls `ui/header.py`, `ui/sidebar.py` and one `ui/tab_*.py` per tab; `ui/data.py` holds every cached loader, `ui/logic.py` the verdict
+  rules, `ui/theme.py` the colours, `usd()` and the shared chart style. Theme, font and light/dark palettes are in `.streamlit/config.toml`.
+- **Sidebar (credits first).** MFU and ADT logos side by side, project title, degree and school, authors with student IDs, advisor, committee, then a status badge (live or backtest data,
+  data-through date, model-trained-through date) and a link to the source code.
+- **Header (the forecast is the product).** Title with a freshness badge, the next-day forecast price (largest element), change chip vs. last close, the 90% range, a 1M/3M/6M/1Y chart
+  with the forecast and its range bar, then three trust cards (typical error, range accuracy, "beats tomorrow = today?"; chips are green or red only when p < 0.05, orange or blue
+  within noise) and a "How to read this" popover. The forecast is the live pipeline's `latest_forecast.json` whenever it is newer than the one stored with the last walk-forward run.
+- **Tabs, in order.** *Track record* (live record first, then the backtest with the miss per day and a CSV download); *Data explorer* (price and volume with the test-period marker,
+  volatility forecast vs. realised with the QLIKE comparison, 30-day volatility, daily changes, the model's own inputs); *How reliable?* (verdict callout, scorecard, price-error and
+  range-accuracy charts, the secondary up/down check, the full statistics table); *About* (project summary, the five pipeline steps, the "what we tried" chart read from `daily/results`
+  including the `with_*` and `horizon_h*` folders, the method in plain words, glossary).
+- **Data it reads.** `daily/results/walk_forward_results.json`, `wf_predictions.csv`, `regression_metrics.json`, `volatility_*`, `interval_*`, `horizon_h5/` and `horizon_h20/`, the four
+  `with_*` folders (cache keyed on file mtime, so a refresh shows up without a restart); from S3 (`gold-lstm-forecast`): `gold/xauusd_daily/predictions/latest_forecast.json` and
+  `forecast_log.csv`, `bronze/streaming/xauusd_daily_incremental.csv` and `silver/xauusd_daily_clean.parquet` for the price history.
+- **Rules that came from real bugs:** native Streamlit elements only; `width="stretch"` instead of `use_container_width`; escape dollar signs in markdown and `st.metric` as `\$`; wrapping
+  containers instead of `st.columns` where the open sidebar would squeeze content, and stretch only for `st.metric` cards (text-heavy cards and charts are squeezed instead of wrapping);
+  charts use the system font; check every layout change at several widths on Streamlit 1.56 and 1.66 and on the live URL (see Phase 12).
 
 **Hosting decision.** Streamlit Community Cloud is free. The real AWS cost risk in this project is compute left running continuously
 (not S3 reads or occasional inference), so the dashboard is deliberately not deployed to always-on AWS compute.
@@ -1422,24 +1462,19 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
-`requirements.txt`:
+`dashboard/requirements.txt` (since Phase 12; the original design also needed awswrangler, tensorflow and scikit-learn for the views that were removed):
 ```
-streamlit>=1.32
-awswrangler>=3.7
+streamlit>=1.56
 boto3>=1.34
 pandas>=2.0
-numpy>=1.24,<2.0
+numpy>=1.24
 plotly>=5.18
-tensorflow>=2.15
-scikit-learn>=1.3
+pyarrow>=14
 ```
-Apple Silicon (M1/M2/M3/M4): current `tensorflow` on PyPI supports `arm64`
-directly via `pip install tensorflow`. If that fails, fall back to
-`tensorflow-macos` + `tensorflow-metal`.
 
 **4. Run**:
 ```bash
-streamlit run app.py
+python3 -m streamlit run dashboard/app.py
 ```
 Opens at `http://localhost:8501`. Close the process when done — nothing on
 AWS keeps running as a result (S3 is storage-only and billed negligibly at
@@ -1506,7 +1541,7 @@ genuine unknown future. The Lambda avoids this structurally by building its
 forecast window from Silver's un-shifted close series instead of Gold. The
 same fix has **not** yet been ported back into `dashboard/app.py` — flagged
 as a known, understood, deliberately-deferred follow-up rather than
-silently patched; see `automation/README.md` §5 for the full explanation.
+silently patched; see `automation/README.md` §5 for the full explanation. (Superseded in Phase 12: the dashboard no longer reads the Gold table; its forecast comes from the pipeline's `latest_forecast.json`.)
 
 **Cost**: Lambda's free tier covers roughly 720 invocations/month at this
 function's size by several orders of magnitude — expected real cost is

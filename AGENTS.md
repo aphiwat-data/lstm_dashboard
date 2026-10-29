@@ -19,12 +19,15 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
 - **The project is open to new approaches.** The old proposal and its targets (including the ~70% direction accuracy) are superseded; the advisor
   allows trying anything. The earlier feature searches (macro, NFP, FOMC+CPI, COT; daily and hourly) were null: treat that as evidence, not a
   prohibition. Judge every new idea with the regression-first metrics and the causal, same-window protocol, and report nulls honestly.
-- **Dashboard (`dashboard/app.py`).** Native Streamlit elements only (no `unsafe_allow_html`), `width="stretch"`, escape dollar signs
-  in markdown as `\$`, and use `st.container(horizontal=True)` instead of `st.columns` where the open sidebar would squeeze content.
-  Streamlit Cloud installs a newer Streamlit than local development used, so check layout changes at 1280, 1024, 900, 760 and 390 px
-  and on the live URL after pushing.
+- **Dashboard (`dashboard/app.py` and `dashboard/ui/`).** `app.py` is only the entry point; the page is the `ui/` package (loaders in `data.py`,
+  one `tab_*.py` per tab, colours and the shared chart style in `theme.py`). Native Streamlit elements only (no `unsafe_allow_html`),
+  `width="stretch"`, escape dollar signs in markdown and `st.metric` as `\$` (use `ui.theme.usd`), and use `st.container(horizontal=True)` instead of
+  `st.columns` where the open sidebar would squeeze content. In a horizontal container only `st.metric` cards survive `width="stretch"`; text-heavy
+  cards and charts get squeezed instead of wrapping, so put those in rows or full width. Keep prose generated from the result files, and do not import
+  TensorFlow in the dashboard. Streamlit Cloud installs a newer Streamlit than local development used, so check layout changes at 1280, 1024, 900,
+  760 and 390 px (clear `localStorage` key `stSidebarCollapsed-` first: it keeps an open sidebar on a narrow screen) and on the live URL after pushing.
 - **`main` is the deployed branch.** Every push redeploys the public app within about a minute. Make small commits and run
-  `python3 -m py_compile dashboard/app.py` before pushing.
+  `python3 -m py_compile dashboard/app.py dashboard/ui/*.py` before pushing.
 - **Document results in `README.md` only.** The owner will rewrite the paper from scratch, so do not edit Chapter 3 or other Word files; keep the
   README (Journey / Phase notes, scoreboard, Handoff) current after every piece of work.
 
