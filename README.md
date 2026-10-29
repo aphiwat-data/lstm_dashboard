@@ -490,6 +490,11 @@ Each Word edit kept a dated backup beside `Chapter3.docx`.
 **10.6 Repository housekeeping.** README Handoff block at the top; `AGENTS.md` with the project rules for any coding agent;
 `daily/horizon_always_up.py` reproduces the Phase 8 horizon table; README repo tree, "where things live", §10 (dashboard), §12 and §14 brought up to date.
 
+**10.7 Small items closed (29 Oct).** README row counts re-verified read-only from S3 (Silver 5,606 rows to 2026-09-21; Gold 5,546 rows to 2026-09-18; the
+proposal's 4,887/544 split is not reproducible, new counts are in section 6 and section 12 item 3); the old thesis checklist (section 12 item 1) marked superseded;
+three of the four missing hourly ask months downloaded (see section 12 item 13). Deliberately not done: the S3 silver table was not refreshed (it is the friend's AWS account;
+this belongs with the Lambda decision), and the static-training variants (`model_results_lstm_w*`) were not re-run (they are an older side experiment, flagged in Phase 7).
+
 **Scoreboard of everything tried for next-day price forecasting (all on the 449-day window unless noted).** Nothing beats "tomorrow = today" on the
 point forecast: LSTM, ridge, gradient boosting, ensembling, macro/cross-asset inputs, NFP/FOMC/CPI calendar, COT positioning, hourly cross-asset
 features (own window), 5- and 20-day horizons. What does work is the evaluation and the calibrated interval (EWMA band, 89.5% coverage).
@@ -682,7 +687,7 @@ here.
 | 3 | Walk-forward retraining uses a **30-day sequence window**, and early stopping monitors **training loss** with patience 5 (§3.6.2) | Walk-forward retraining actually uses **`SEQ_LEN = 60`** (matching the main preprocessing window in §3.5.3, not 30), and `EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)` against a **chronological 15%-of-window validation split** carved out of each retraining window | The `SEQ_LEN=30` figure in §3.6.2 appears to be left over from an earlier draft — the code has consistently used 60 (matching §3.5.3) everywhere it's actually configured (`04_Preprocessing.ipynb` and `05_LSTM_Training.ipynb` both declare `SEQ_LEN = 60`). Separately, monitoring plain training loss for early stopping provides no real overfitting protection (training loss keeps improving as long as training continues), so the code was fixed to carve out the most recent 15% of each 365-day training window as a validation slice and monitor `val_loss` instead — a **more rigorous** approach than what's currently written, not a shortcut. **Action needed**: correct §3.6.2 to say 60-day window and describe the val_loss/15%-holdout early-stopping mechanism actually used. |
 | 4 | §3.7 narrative (baselines, metrics, results discussion) is written and — helpfully — already **matches** the corrected pipeline's numbers, including LSTM's 51.5% directional accuracy | Same, confirmed independently from a fresh run — see §8 below | No action needed here beyond adding the actual numeric table (MAE/RMSE for all four models), which the current proposal text describes narratively but doesn't tabulate. Draft table is in §8.4. |
 | 5 | Chapter 4 discussion (§4.2) compares LSTM against "ARIMA, Linear Regression, Decision Tree, and Random Forest" | Only three baselines are actually implemented: **Naive Persistence, AR(5) via Linear Regression, and Linear Regression** on the full feature set. No ARIMA, Decision Tree, or Random Forest model exists in the code. | AR(5) (an autoregressive linear model on 5 lagged closes) is sometimes loosely described elsewhere as "ARIMA-like," but it is not a fitted ARIMA(p,d,q) model — this naming slip was flagged earlier in the project and should be corrected. Decision Tree/Random Forest are named in the Chapter 4 discussion as if they were run, but they are not present in `06_Model_Evaluation.ipynb`. **Action needed**: either implement Decision Tree/Random Forest as additional baselines to match the discussion, or edit §4.2 to only discuss the baselines that were actually run (Naive, AR(5), Linear Regression) plus a general discussion of *why* ARIMA/tree-based methods are expected to underperform (which can stay as literature-grounded discussion without claiming they were empirically run in this project). |
-| 6 | §3.4 Feature Engineering / §3.5 dataset sizes: Silver = 5,491 rows (Jun 2004–Apr 2026), Gold = 5,431 rows after dropping 61 rows, train = 4,887 rows, test = 544 rows | Not independently re-verified numerically in this session against a fresh run, but the *code* that produces these (60-row drop for MA60 + 1-row drop for undefined target = 61; split at `2024-12-31`) matches the proposal's description exactly | No known deviation — listed here for completeness since every other numeric claim in the proposal was checked. If the dataset has been re-collected since (new trading days appended), these exact row counts will drift slightly and should be re-printed from a fresh run before finalizing the report. |
+| 6 | §3.4 Feature Engineering / §3.5 dataset sizes: Silver = 5,491 rows (Jun 2004–Apr 2026), Gold = 5,431 rows after dropping 61 rows, train = 4,887 rows, test = 544 rows (the proposal's figures, from a collection through Apr 2026) | **Re-verified 2026-10-29: Verified from S3 on 2026-10-29: Silver = 5,606 rows (2004-06-01 to 2026-09-21), Gold = 5,546 rows (2004-08-25 to 2026-09-18); split at `2024-12-31` by date gives train = 5,115 and test = 431 rows. The proposal's 4,887/544 split cannot be reproduced from the date rule, so use the verified numbers.** The *code* that produces these (60-row drop for MA60 + 1-row drop for undefined target = 61; split at `2024-12-31`) matches the proposal's description exactly | No known deviation — listed here for completeness since every other numeric claim in the proposal was checked. If the dataset has been re-collected since (new trading days appended), these exact row counts will drift slightly and should be re-printed from a fresh run before finalizing the report. |
 
 ---
 
@@ -893,14 +898,14 @@ statistics genuinely would look ahead.
 
 **Row removal**: 61 rows dropped via `dropna()` — 60 from the start
 (insufficient history for `ma60`), 1 from the end (the final day has no
-"next day" to define `target`). Gold dataset: 5,431 rows.
+"next day" to define `target`). Gold dataset: 5,431 rows when first built (through Apr 2026); 5,546 rows through 2026-09-18 when re-checked on S3 on 2026-10-29.
 
 ### 04_Preprocessing.ipynb — the leakage-critical stage
 
 Config: `SEQ_LEN = 60`, `FEATURES = ['close','return','ma7','ma14','ma30','ma60','volatility_7','momentum_7']`, `TARGET = 'target'`.
 
-1. **Chronological split** at `split_date = '2024-12-31'` — train = 4,887
-   rows (2004–2024), test = 544 rows (2025–Apr 2026). Never random/shuffled
+1. **Chronological split** at `split_date = '2024-12-31'` — originally reported as train = 4,887
+   rows, test = 544 rows (2025–Apr 2026); on the S3 data of 2026-10-29 the same rule gives train = 5,115 rows, test = 431 rows (2025-01-02 to 2026-09-18). Never random/shuffled
    — a random split would let the model train on days *after* a test day
    it's evaluated on, silently inflating apparent accuracy (data leakage).
 2. **Scaling fit on train only.** `StandardScaler().fit(train[...])`, then
@@ -1483,7 +1488,7 @@ that discipline matters most), and teardown instructions are all in
 
 ## 12. Pending / Not Yet Done
 
-1. **Thesis write-up.** *Status (Oct 2026): the advisor allowed rewriting, so the old proposal is superseded and a new report is
+1. ~~**Thesis write-up.**~~ **Superseded (2026-10-29): the paper will be rewritten from scratch, so this checklist is kept only for the record and the Word files are no longer maintained; results are documented in this README.** *Earlier status (Oct 2026): the advisor allowed rewriting, so the old proposal is superseded and a new report is
    being written. `Chapter3.docx` already has Table 3.2 replaced with the corrected results, §3.6.2's window fixed, and §3.7.4 with
    Tables 3.3-3.5 (R²/IC, feature sets, horizons) added, all on the 449-day window; backups sit next to the file. The checklist
    below is the original list for the old proposal; apply what is still relevant to the new report.*
@@ -1511,9 +1516,7 @@ that discipline matters most), and teardown instructions are all in
    corrected LSTM's R² is **-0.014** (worse than predicting zero return every
    day, R² = -0.003). See Journey, Phase 7 addendum for the full table
    (R² and IC for every model).
-3. **Re-verify the exact row counts** in §2.2/§6 (5,491 Silver rows, 5,431
-   Gold rows, 4,887/544 train/test) against a fresh run if the dataset has
-   grown since (new trading days keep appending via `yfinance`).
+3. ~~Re-verify the exact row counts~~ **Done (2026-10-29), read-only from S3:** Verified from S3 on 2026-10-29: Silver = 5,606 rows (2004-06-01 to 2026-09-21), Gold = 5,546 rows (2004-08-25 to 2026-09-18); split at `2024-12-31` by date gives train = 5,115 and test = 431 rows. The older counts (5,491 / 5,431 / 4,887 / 544) are kept in §3 and §6 as the proposal's figures.
 4. **Verify the pre-existing EC2/RDS recurring-charge concern** flagged
    earlier in the project is actually resolved — check AWS Billing / Cost
    Explorer for anything still accruing charges outside the SageMaker
@@ -1562,8 +1565,8 @@ that discipline matters most), and teardown instructions are all in
     without COT), p vs. always-up = 0.367 — closer than every other variant but never significant; adding COT
     on top made it worse (AUC 0.498). This particular feature search found nothing; other ideas remain open. The hourly version of
     cross-asset features (silver, EURUSD, S&P 500, DXY as hourly bars) was run too and is also null (hourly
-    addendum in the Journey); re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
-    Dukascopy's rate limit allows.
+    addendum in the Journey). Of the four missing hourly ask months, 2014-04, 2015-07 and 2016-08 were downloaded on 2026-10-29 (`hourly/download_dukascopy.py xauusd --start 2014-04 --price ask --raw-dir data/raw_ask`);
+    2026-09 and 2026-10 failed after retries and are still missing (retry later). The hourly datasets and results were **not** rebuilt with the new months.
 14. ~~Agree with the advisor what "~70% accuracy" refers to~~ **Resolved (2026-10-29, decided by the project owner):** the ~70% direction
     figure was an early expectation, not a written objective, and is not adopted. Objective wording for the final report: *a next-day gold
     closing-price forecast, judged by regression metrics (MAE, RMSE, MAPE, Diebold-Mariano) against the no-change benchmark, with a 90% forecast
