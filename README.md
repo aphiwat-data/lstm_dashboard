@@ -60,6 +60,13 @@ honestly it covered 85.9%. The shipped band is now Gaussian with sigma = EWMA(la
 (Table 3.2 price accuracy, 3.3 R²/IC, 3.4 secondary direction check, 3.5 feature sets, 3.6 horizons; interval paragraph added) now follow it;
 the Chapter 3 backup before this change is `Chapter3_before_regression_first_backup.docx`.
 
+**Interval-method comparison (2026-10-29, `daily/interval_experiment.py`, `daily/lstm_quantile.py`, results in `daily/results/interval_comparison.json`).**
+Same 389 scored test days, every band uses only earlier information; target coverage 90%. EWMA Gaussian (the shipped band) covers 89.5%
+(width \$223, interval score 317, Kupiec p = 0.73); GARCH(1,1) Gaussian 85.6% (\$203, 322, p = 0.006) and with filtered historical simulation
+85.3% (p = 0.004); empirical quantiles of all past errors 85.9% (p = 0.010); an LSTM trained with pinball loss to output the 5%/95%
+quantiles directly (same walk-forward protocol, 2 seeds) only 63.5% (\$129, score 457). No method beats EWMA, so the dashboard band is unchanged. Caveat: the
+EWMA decay was fixed in advance, but the alternatives were compared on the same test window, so 89.5% is slightly optimistic.
+
 **Evaluation protocol (daily).** `daily/walk_forward.py` retrains every 7 trading days on the trailing 365 days: input window 20 days,
 LSTM(32) with two heads (next-day log-return and direction), 3 seeds averaged, scalers re-fit inside every window; the forecast price
 is `close * exp(predicted log-return)`. Baselines on identical rows: rolling drift (= always up), ridge, HistGB regressor and

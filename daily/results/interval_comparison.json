@@ -1,0 +1,80 @@
+[
+ {
+  "method": "EWMA Gaussian, lambda 0.94 (current)",
+  "n": 389,
+  "coverage": 0.8946015424164524,
+  "mean_width_usd": 222.54212852208065,
+  "mean_width_pct": 5.281000478484696,
+  "interval_score_usd": 317.1797494432837,
+  "kupiec_p": 0.7247332700112954,
+  "cov_first_half": 0.8814432989690721,
+  "cov_second_half": 0.9076923076923077,
+  "score_diff_vs_ewma": 0.0,
+  "score_diff_p": 1.0
+ },
+ {
+  "method": "Empirical quantiles, all past errors",
+  "n": 389,
+  "coverage": 0.8586118251928021,
+  "mean_width_usd": 193.9025706068509,
+  "mean_width_pct": 4.67845383742709,
+  "interval_score_usd": 333.76846225573576,
+  "kupiec_p": 0.009919539806244382,
+  "cov_first_half": 0.8608247422680413,
+  "cov_second_half": 0.8564102564102564,
+  "score_diff_vs_ewma": 16.58871281245212,
+  "score_diff_p": 0.16288231895822802
+ },
+ {
+  "method": "GARCH(1,1), Gaussian",
+  "n": 389,
+  "coverage": 0.8560411311053985,
+  "mean_width_usd": 202.9312859385604,
+  "mean_width_pct": 4.797011946881061,
+  "interval_score_usd": 322.4591683563735,
+  "kupiec_p": 0.006318348363612114,
+  "cov_first_half": 0.8298969072164949,
+  "cov_second_half": 0.882051282051282,
+  "score_diff_vs_ewma": 5.279418913089827,
+  "score_diff_p": 0.23645291764549725
+ },
+ {
+  "method": "GARCH(1,1), filtered historical sim.",
+  "n": 389,
+  "coverage": 0.8534704370179949,
+  "mean_width_usd": 200.14608281834515,
+  "mean_width_pct": 4.737486136809388,
+  "interval_score_usd": 322.0375787745125,
+  "kupiec_p": 0.0039496536719518804,
+  "cov_first_half": 0.8298969072164949,
+  "cov_second_half": 0.8769230769230769,
+  "score_diff_vs_ewma": 4.85782933122882,
+  "score_diff_p": 0.3082513206760942
+ },
+ {
+  "method": "No-change centre, EWMA (reference)",
+  "n": 389,
+  "coverage": 0.8868894601542416,
+  "mean_width_usd": 220.99953353818535,
+  "mean_width_pct": 5.244762708949784,
+  "interval_score_usd": 314.1417893234844,
+  "kupiec_p": 0.39750850531535376,
+  "cov_first_half": 0.865979381443299,
+  "cov_second_half": 0.9076923076923077,
+  "score_diff_vs_ewma": -3.0379601197993056,
+  "score_diff_p": 0.32225152262233614
+ },
+ {
+  "method": "LSTM quantile (pinball loss)",
+  "n": 389,
+  "coverage": 0.6349614395886889,
+  "mean_width_usd": 128.9571394670104,
+  "mean_width_pct": 3.036319715190227,
+  "interval_score_usd": 457.38430728358566,
+  "kupiec_p": 0.0,
+  "cov_first_half": 0.6288659793814433,
+  "cov_second_half": 0.6410256410256411,
+  "score_diff_vs_ewma": 140.20455784030196,
+  "score_diff_p": 3.780722244162149e-07
+ }
+]
