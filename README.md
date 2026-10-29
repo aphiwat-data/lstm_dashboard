@@ -132,6 +132,8 @@ dashboard's feature-search table reads the `with_*` folders by itself).
   installs a newer Streamlit than local development used (1.66 vs 1.56), so check every layout change at 1280, 1024, 900, 760 and
   390 px and on the live URL after the push (§10, lessons).
 - The owner pushes small commits straight to `main`. Every push redeploys the public app, so a broken `app.py` is public at once.
+- Report status (2026-10-29): Chapter 3 is final. `Report_Abstract_Ch1_Ch4.docx` (next to it, outside the repo) holds the revised Abstract, Chapter 1 sections 1.2/1.3/1.6,
+  Chapter 4 (conclusion and discussion) and the additional references. Chapter 2 (literature review) is the proposal's original text and has not been revised.
 - Chapter 3 tables were updated programmatically from the results JSONs with python-docx (each table cell is a single run: set
   `run.text` to keep the formatting). Keep a backup next to the file and compare every number with the README.
 
