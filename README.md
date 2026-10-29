@@ -532,8 +532,7 @@ a warm Lambda container kept the old weights (it now checks the object's ETag); 
 time a new COMEX session has started and Yahoo shows a partial bar for it (only bars whose session ended, 17:00 New York, are accepted).
 
 Honest status: deployed and invoked manually on 2026-10-29; the schedule is ENABLED and its first unattended run is 2026-10-30 01:00 UTC. The live track record starts with the forecast for 2026-10-28 and
-only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the IAM user `Auto` lacks SNS/CloudWatch permissions and the permissions were not widened); the empty ECR repo from September was not deleted
-(the deletion was blocked as irreversible; delete it by hand if wanted). Cost: Lambda (a few seconds a day) and S3 are far inside the free tier. Operating it: `python3 automation/deploy.py apply` (safe to repeat),
+only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the IAM user `Auto` lacks SNS/CloudWatch permissions and the permissions were not widened); the empty ECR repo from September was deleted on request (2026-10-29). Cost: Lambda (a few seconds a day) and S3 are far inside the free tier. Operating it: `python3 automation/deploy.py apply` (safe to repeat),
 `python3 automation/retrain.py` weekly, `python3 automation/deploy.py teardown` removes everything except the S3 data.
 
 ### Lessons learned
@@ -1586,9 +1585,8 @@ that discipline matters most), and teardown instructions are all in
     (e.g. weekly) scheduled job that re-runs full walk-forward retraining
     — see `automation/README.md` §9 for why this is scoped out for now.
 
-11. **Clean up the old AWS leftovers** (Journey, phase 4): the Lambda is now finished (item 8), so only the unused, empty ECR
-    repository `gold-lstm-forecast-daily-refresh` remains to delete by hand, and the policies `AmazonEC2ContainerRegistryFullAccess` and (if not needed) the
-    broad ones below can be detached. Earlier text: the ECR
+11. **Clean up the old AWS leftovers** (Journey, phase 4): the Lambda is now finished (item 8) and the unused, empty ECR repository was deleted (2026-10-29);
+    only the broad policies below (`AmazonEC2ContainerRegistryFullAccess` is no longer needed) can still be detached. Earlier text: the ECR
     repository `gold-lstm-forecast-daily-refresh` and the policies
     `AWSLambda_FullAccess`, `AmazonEC2ContainerRegistryFullAccess`,
     `AmazonEventBridgeSchedulerFullAccess` attached to `Auto` are standing changes
