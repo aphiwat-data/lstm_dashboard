@@ -5,8 +5,9 @@
   "predicted_next_close": 4045.61,
   "p_up": 0.5360317826271057,
   "interval_90_close": [
-    3938.15,
-    4149.06
+    3966.27,
+    4126.53
   ],
-  "generated_at": "2026-10-27T08:46:37+00:00"
+  "generated_at": "2026-10-27T08:46:37+00:00",
+  "interval_method": "Gaussian, sigma = EWMA(lambda 0.94) of all past test errors, z = 1.645"
 }

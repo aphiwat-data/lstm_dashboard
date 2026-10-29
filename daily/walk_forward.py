@@ -29,6 +29,7 @@ from sklearn.preprocessing import StandardScaler  # noqa: E402
 
 from baseline import make_models  # noqa: E402
 from train_models import build_rnn, price_report, windows  # noqa: E402
+from regression_metrics import EWMA_LAMBDA, Z90, latest_band, write_metrics  # noqa: E402
 
 
 def fit_predict(F: np.ndarray, y_ret: np.ndarray, y_dir: np.ndarray, tr: np.ndarray, targets: np.ndarray, args) -> dict[str, tuple[np.ndarray, np.ndarray | None]]:
@@ -137,11 +138,13 @@ def main() -> None:
     results["latest_forecast"] = {
         "as_of_date": str(latest.index[-1].date()), "latest_close": round(last_close, 2),
         "predicted_return": r_hat, "predicted_next_close": round(last_close * float(np.exp(r_hat)), 2), "p_up": p_hat,
-        "interval_90_close": [round(last_close * float(np.exp(r_hat + lo90)), 2), round(last_close * float(np.exp(r_hat + hi90)), 2)],
+        "interval_90_close": latest_band(resid, last_close, r_hat),
+        "interval_method": f"Gaussian, sigma = EWMA(lambda {EWMA_LAMBDA}) of all past test errors, z = {Z90:.3f}",
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     (args.out_dir / "walk_forward_results.json").write_text(json.dumps(results, indent=2, default=float))
     (args.out_dir / "latest_forecast.json").write_text(json.dumps(results["latest_forecast"], indent=2))
+    write_metrics(args.out_dir)  # regression_metrics.json: price error, out-of-sample R2, causal interval coverage
 
     up = results["models"]["drift"]["direction_from_sign"]["always_up_acc"]
     print(f"\n== WALK-FORWARD daily (test {results['protocol']['test_start']} -> {results['protocol']['test_end']}, n={len(ev)}) | always-up {up:.4f} | naive MAE ${results['models']['drift']['naive_mae_usd']:.2f} ==")

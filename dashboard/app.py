@@ -140,6 +140,15 @@ def load_v2(results_mtime: float):
         return None, None
 
 
+@st.cache_data(show_spinner=False)
+def load_reg(results_mtime: float):
+    """daily/regression_metrics.py output (price error, out-of-sample R², causal interval coverage); None when absent."""
+    try:
+        return json.loads((V2_DIR / "regression_metrics.json").read_text())
+    except Exception:
+        return None
+
+
 FEATURE_SEARCH = [  # label, results sub-folder under daily/results ("" = the main price-only run)
     ("Price history only", ""),
     ("+ cross-asset/macro (6 series)", "with_macro"),
@@ -263,7 +272,9 @@ model_last_retrained = get_model_last_retrained()
 days_since_retrain    = (pd.Timestamp.now(tz="UTC").tz_localize(None) - model_last_retrained).days
 lambda_forecast       = get_lambda_forecast()
 _v2_file = V2_DIR / "walk_forward_results.json"
-v2, v2_preds          = load_v2(_v2_file.stat().st_mtime if _v2_file.exists() else 0.0)  # mtime in the cache key: a refresh shows up without a restart
+v2, v2_preds          = load_v2(_v2_file.stat().st_mtime if _v2_file.exists() else 0.0)
+_reg_file = V2_DIR / "regression_metrics.json"
+reg = load_reg(_reg_file.stat().st_mtime if _reg_file.exists() else 0.0)  # mtime in the cache key: a refresh shows up without a restart
 
 # 30-day rolling volatility, computed on the fly for the dashboard view (the
 # model itself trains on the 7-day volatility_7 feature — see Feature Explorer)
@@ -379,7 +390,9 @@ def render_hero(fi: dict) -> None:
                 with st.container(width="content"):
                     st.caption(f"LAST CLOSE · {pd.Timestamp(fi['as_of']).strftime('%d %b').upper()}")
                     st.markdown(f"#### \\${last:,.2f}")
-        st.caption("Actual closes fell inside the range on 90% of test days. Research forecast, not trading advice.")
+        cov = reg["interval"]["lstm_ewma_gaussian"]["coverage"] if reg else None
+        st.caption((f"Bands built the same way, from earlier errors only, held the actual close on {cov:.1%} of test days (target 90%). " if cov else "")
+                   + "Research forecast, not trading advice.")
 
 
 def forecast_chart(fi: dict, window_days: int) -> go.Figure:
@@ -481,9 +494,16 @@ def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
         f"- **Return fit:** R² {lstm['r2_returns']:+.3f} (a constant zero-return forecast scores {lstm['naive_r2_returns']:+.3f}); rank correlation IC {lstm['ic_spearman']:+.3f} (p = {lstm['ic_p']:.2f}).\n"
         if "r2_returns" in lstm else ""
     )
+    lreg = reg["models"]["lstm"] if reg else None
+    os_line = (f"- **Out-of-sample R²:** {lreg['r2_os_vs_rolling_mean']:+.3f} against a rolling-mean forecast ({lreg['r2_os_vs_zero']:+.3f} against “no change”); below 0 means worse than that forecast.\n"
+               if lreg else "")
+    iv = reg["interval"] if reg else None
+    band_line = (f"- **Range:** the 90% band, built only from earlier errors, held the actual close on {iv['lstm_ewma_gaussian']['coverage']:.1%} of {iv['lstm_ewma_gaussian']['n']} test days "
+                 f"(target 90%) and is as wide as a no-change band (\\${iv['lstm_ewma_gaussian']['mean_width_usd']:,.0f} vs. \\${iv['no_change_ewma_gaussian']['mean_width_usd']:,.0f}), so the model does not narrow the uncertainty.\n"
+                 if iv else "")
     st.markdown(
         f"- **Price error:** typical miss \\${lstm['mae_usd']:,.2f} per day ({pct_lstm:.2f}% of the price; RMSE \\${lstm['rmse_usd']:,.2f}). The model {phrase[price_edge]} a “tomorrow = today” guess (\\${lstm['naive_mae_usd']:,.2f}, {pct_naive:.2f}%; Diebold-Mariano p = {lstm['dm_p_vs_naive']:.2f}).\n"
-        f"{r2_line}"
+        f"{r2_line}{os_line}{band_line}"
         f"- **Sample size:** {proto['n_test']} test days ({proto['test_start']} to {proto['test_end']}), so small differences between models are within noise."
     )
 
@@ -535,10 +555,12 @@ def render_scorecard(v2: dict, p: pd.DataFrame) -> None:
                 "MAE ($)": r.get("mae_usd"), "MAE skill vs no-change": r.get("mae_skill_vs_naive"), "DM p (vs no-change)": r.get("dm_p_vs_naive"),
                 "Direction acc. (%)": d["acc"] * 100, "vs always-up (pt)": (d["acc"] - d["always_up_acc"]) * 100, "p (vs always-up)": d["p_vs_always_up"],
                 "AUC": (r.get("direction_from_head") or {}).get("auc"), "IC (rank corr.)": r.get("ic_spearman"), "R² (returns)": r.get("r2_returns"),
+                "RMSE ($)": r.get("rmse_usd"), "MAPE (%)": (reg["models"].get(key) or {}).get("mape_pct") if reg else None,
+                "R² out-of-sample": (reg["models"].get(key) or {}).get("r2_os_vs_rolling_mean") if reg else None,
             }
         table = pd.DataFrame(rows).T.astype(float)  # None -> NaN so missing cells render as a dash
         fmt = {"MAE ($)": "{:.2f}", "MAE skill vs no-change": "{:+.4f}", "DM p (vs no-change)": "{:.3f}", "Direction acc. (%)": "{:.1f}",
-               "vs always-up (pt)": "{:+.1f}", "p (vs always-up)": "{:.3f}", "AUC": "{:.3f}", "IC (rank corr.)": "{:+.3f}", "R² (returns)": "{:+.4f}"}
+               "vs always-up (pt)": "{:+.1f}", "p (vs always-up)": "{:.3f}", "AUC": "{:.3f}", "IC (rank corr.)": "{:+.3f}", "R² (returns)": "{:+.4f}", "RMSE ($)": "{:.2f}", "MAPE (%)": "{:.3f}", "R² out-of-sample": "{:+.4f}"}
         shown = table.apply(lambda col: col.map(lambda v: "–" if pd.isna(v) else fmt[col.name].format(v)))  # display copy; `table` keeps the numbers
         st.dataframe(shown, width="stretch")
         st.download_button("Download metrics table (CSV)", data=table.to_csv().encode("utf-8"), file_name="daily_walk_forward_metrics.csv", mime="text/csv")
