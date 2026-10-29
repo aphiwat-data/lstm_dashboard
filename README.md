@@ -152,6 +152,7 @@ also visible in the commit history.
 | Does the LSTM beat a trivial baseline at next-day direction? | **No.** Daily: 51.9% vs "always up" 55.2% (test 2025-01-09 to 2026-10-23, n=449). |
 | Does hourly data help (1, 4 and 24 bars ahead)? | **No.** Accuracy about 50–54% vs "always up" 51.5% / 52.9% / 55.1%; AUC 0.50–0.52. |
 | Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, not by combining models, and not by adding macro/cross-asset inputs.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52 on price history alone; adding DXY/silver/S&P 500/VIX/yields/TIP (Phase 9) still lands at AUC ~0.50. Ensembling or feeding in more inputs cannot manufacture a signal that none of them has. "Always up" alone reaches 55% at 1 day, 62.0% at 20 days and 75.6% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
+| Do other horizons, interval methods or VIX change that? | **No.** 5 and 20 days ahead: no significant gain over no-change (p = 0.43, 0.59). The shipped 90% band (EWMA, 89.5% causal coverage) beat GARCH (85.6%), an LSTM quantile model (63.5%) and a VIX model (86.1-86.4%) (Phase 10). |
 | Is the price forecast usable? | It matches a no-change forecast (daily MAE \$46.83 vs \$46.63). Read it as "about today's close, within the interval". |
 | What was the big bug? | A price-level target and price-level inputs with train-only scalers: once gold left the training range in 2025-26, MAE reached ≈ \$640. Fixed with a return target and scale-free features. |
 
@@ -429,6 +430,67 @@ is discussed in the closing paragraph above). (The "predicted down" subset alone
 the small-sample, look-at-the-confident-subset trap Phase 6's bid-ask artifact already burned this project
 on once — not reported as a finding.) Full results in `daily/results/with_macro_calendar_full/`.
 
+### Phase 10: dashboard redesign, regression-first metrics and price-forecast experiments (October 27-29, 2026)
+
+What was done, in order, with the commits that carry it (`git log` has the full diffs).
+
+**10.1 Data refresh and one results window (27 Oct; `8b27ddc`, `b4da450`).** 25 new trading days were appended locally to the silver table (S3 was not
+modified; 22 overlapping days were checked against it), growing the test window from 424 to 449 days (2025-01-09 to 2026-10-23). R² and IC were
+moved into the code (`price_report`), the main run was refreshed, and **all four feature-search variants were re-run on exactly the same rows**
+(macro, +NFP, +FOMC/CPI, +COT) so every daily number compares like with like. The 424-day outputs are kept in `daily/results/snapshot_2026-09-18/`.
+Result unchanged: no variant beats always-up (best FOMC+CPI 57.5%, AUC 0.520, p = 0.37; COT pulls AUC back to 0.498); LSTM AUCs moved by +0.004 to
++0.011. README Phase 9, the thesis tables and the dashboard's "Also tested, still null" table (it reads the `with_*` folders) were updated together.
+
+**10.2 Dashboard: forecast-first redesign and the bugs found on the way (27 Oct; `bbc4173`, `66096ba`, `60570a6`, `18a8499`, `5be730a`).**
+- The first redesign drew the forecast card with raw HTML/CSS. It broke twice in practice (a stale browser tab showed the markup as text after a
+  redeploy; the price wrapped at laptop widths). Replaced by **native Streamlit elements only**; `width="stretch"` replaces the deprecated
+  `use_container_width`; `streamlit>=1.56` floor because Cloud installs a newer release (1.66) than local development used (1.56).
+- A second bug was found only by testing with the sidebar open at about 800-1100 px: the three-column hero crushed the price into `$4,045` / `.61`,
+  because `st.columns` stacks by *viewport* width while the open sidebar takes ~300 px. The hero and the metric cards now sit in wrapping
+  `st.container(horizontal=True)` blocks, which wrap by *content* width. Verified on Streamlit 1.56 and 1.66.1 at 1280, 1024, 900, 800 and 375 px.
+- Sidebar now opens with the project credits (MFU and School of Applied Digital Technology logos side by side, title, degree, school, authors with
+  student IDs, advisor, committee). Logos are served at full resolution (`st.image(width=...)` would downscale the file and look soft on Retina).
+- Tab order: Track record, Data explorer, How reliable?, Method.
+- Advisor feedback (accuracy is a classification metric): the "Up/down calls correct" card was replaced by typical miss as % of price (MAPE); "How
+  reliable?" now leads with price error, R², IC and a typical-miss-per-model chart, with up/down accuracy in a labelled secondary expander; delta
+  chips are coloured by the statistical verdict (green/red only when p < 0.05, orange/blue when within noise).
+
+**10.3 Metric audit and the regression-first rewrite (27-29 Oct; `3854e49`, `d515d16`, `05f8992`).** Auditing what each metric actually measures found:
+1. The model table mixed regression and classification models under a "Direction accuracy" headline. Fixed: Table 3.2 is now price accuracy for the
+   five models that forecast a price (MAE, RMSE, MAPE, MAE vs. no-change, Diebold-Mariano), direction/AUC moved to a secondary table with all six models.
+2. **The "90% likely range" was circular.** Its quantiles came from the whole test window's errors, so "the actual close fell inside on 90% of test
+   days" was true by construction. Scored causally (errors known before each forecast only) it covered **85.9%**.
+3. The Diebold-Mariano lag (24) was inherited from the hourly pipeline. Checked: the LSTM-vs-no-change conclusion does not depend on it
+   (p = 0.38-0.41 for lags 0 to 24); Ridge is borderline (p = 0.023-0.052).
+4. R² (sklearn definition) is centred on the test-period mean; added out-of-sample R² against the no-change and rolling-mean forecasts (Campbell and
+   Thompson 2008). LSTM: -0.011 against the rolling mean.
+New code: `daily/regression_metrics.py` (point metrics, out-of-sample R², DM at lags 0 and 24, IC, causal interval coverage / width / interval
+score), `daily/test_regression_metrics.py` (6 tests that can fail, incl. a test that bands use only past errors), output `regression_metrics.json` in
+every results folder, called by `walk_forward.py`. The shipped band is now Gaussian with sigma = EWMA(lambda 0.94, RiskMetrics default, fixed in
+advance) of past errors: **89.5% coverage (n = 389)**, width $223. The dashboard caption, "How reliable?" and the metrics table use these numbers.
+
+**10.4 Price-forecast experiments (29 Oct).** The project is a *price* forecast, so the remaining ideas were tested on price and its interval:
+
+| Experiment (script, results) | Result |
+|---|---|
+| 90% interval method comparison (`interval_experiment.py`, `lstm_quantile.py`; `interval_comparison.json`) | EWMA 89.5% (Kupiec p 0.73) beats empirical quantiles 85.9%, GARCH(1,1) 85.6% / FHS 85.3%, and an LSTM trained with pinball loss (63.5%, far too narrow). The LSTM band is as wide as a no-change band ($223 vs. $221): no sharpness gain |
+| Price 5 and 20 trading days ahead (`walk_forward_horizon.py`; `horizon_h5/`, `horizon_h20/`) | 5 days: MAE $109.50 vs. $109.19 (p = 0.43). 20 days: $216.95 vs. $219.40 (+1.1%, p = 0.59, only 21 independent windows). Ridge and HistGB worse than no-change at both |
+| VIX in the interval model (`interval_vix.py`; `interval_vix.json`) | Refit without VIX 87.1%, with same-day VIX 86.1%, with yesterday's VIX 86.4%, same interval score (322); VIX alone 77.1%. VIX has a positive coefficient (~0.2) but adds nothing out of sample |
+
+**10.5 Writing and decisions.** Chapter 3 of the thesis was restructured regression-first (Tables 3.2-3.6, interval paragraph, multi-day paragraph,
+VIX/alternatives sentences) and stays on the 449-day window; the final-report objective was reworded (next-day closing-price forecast judged by
+regression metrics against the no-change benchmark with a calibrated 90% interval; **no directional-accuracy target**, thesis §3.7.4 explains why).
+The old proposal is superseded and the advisor allows trying anything, so nothing in the Journey is a prohibition. `Report_Abstract_Ch1_Ch4.docx`
+(outside the repo) holds the revised Abstract, Chapter 1 sections 1.2/1.3/1.6, Chapter 4 and additional references; Chapter 2 is untouched.
+Each Word edit kept a dated backup beside `Chapter3.docx`.
+
+**10.6 Repository housekeeping.** README Handoff block at the top; `AGENTS.md` with the project rules for any coding agent;
+`daily/horizon_always_up.py` reproduces the Phase 8 horizon table; README repo tree, "where things live", §10 (dashboard), §12 and §14 brought up to date.
+
+**Scoreboard of everything tried for next-day price forecasting (all on the 449-day window unless noted).** Nothing beats "tomorrow = today" on the
+point forecast: LSTM, ridge, gradient boosting, ensembling, macro/cross-asset inputs, NFP/FOMC/CPI calendar, COT positioning, hourly cross-asset
+features (own window), 5- and 20-day horizons. What does work is the evaluation and the calibrated interval (EWMA band, 89.5% coverage).
+
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
 2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
@@ -438,13 +500,21 @@ on once — not reported as a finding.) Full results in `daily/results/with_macr
    also Phase 9's accuracy-without-AUC gain, explained by the model mostly predicting the majority class).
 5. Verify inputs, not just models: silent partial downloads, invalid OHLC rows, columns that contain the future.
 6. "Fixed" means re-checking the full period, not the latest weeks.
-7. Look at the rendered page: some bugs are invisible to headless tests.
+7. Look at the rendered page: some bugs are invisible to headless tests (raw HTML shown as text; a price crushed by an open sidebar).
+8. A coverage or accuracy claim must be scored with information available *before* each forecast. "Covers 90% of test days" was true by construction
+   when the band was built from the test window's own errors.
+9. Keep one results window for everything (README, dashboard, thesis). A refresh re-runs the main run and every variant on the same rows.
+10. Judge a forecast with the metric family that matches its type: price forecasts by price error against the no-change benchmark; direction
+    accuracy is a secondary classification check.
+11. Check that a conclusion survives the arbitrary choices in the test (e.g. the Diebold-Mariano lag), and when several alternatives are compared on
+    one test window, say so: the winner's score is slightly optimistic.
+12. Test the evaluator, not only the model: the metrics module has tests that fail on look-ahead and on wrong formulas.
 
 ### Where things live
 | Path | What |
 |---|---|
 | `notebooks/`, `automation/` | Original daily pipeline (notebooks 01-06) and the Lambda automation, which is designed but not deployed and still runs the old price-level model |
-| `daily/` | Corrected daily dataset builder, causality tests and walk-forward evaluation. `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
+| `daily/` | Corrected daily dataset builder, causality tests, walk-forward evaluation, regression-first metrics (`regression_metrics.py`), multi-day walk-forward (`walk_forward_horizon.py`) and the interval experiments (`interval_experiment.py`, `lstm_quantile.py`, `interval_vix.py`). `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
 | `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check and the cross-asset test (`results/with_aux_mid/`); `results/summary_hourly_findings.png` is the one-page summary |
 | `dashboard/app.py` | Streamlit app (deployed on Streamlit Community Cloud from `main`); `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
 | `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
@@ -520,6 +590,9 @@ lstm_dashboard/
 │   ├── test_no_lookahead_daily.py
 │   ├── walk_forward.py          ← walk-forward LSTM (retrain every 7 days, 365-day window) + baselines + tomorrow's forecast
 │   ├── horizon_always_up.py     ← always-up accuracy by horizon (Phase 8 table)
+│   ├── regression_metrics.py, test_regression_metrics.py   ← price error, out-of-sample R², causal interval coverage (Phase 10)
+│   ├── walk_forward_horizon.py  ← price 5 / 20 trading days ahead vs. no-change (results/horizon_h5, horizon_h20)
+│   ├── interval_experiment.py, lstm_quantile.py, interval_vix.py   ← 90% interval method comparison and the VIX test
 │   ├── requirements.txt
 │   └── results/                 ← main run (449-day window): walk_forward_results.json, wf_predictions.csv, latest_forecast.json (read by the dashboard)
 │       ├── with_macro/, with_macro_calendar/, with_macro_calendar_full/, with_cot/   ← Phase 9 feature-search runs on the same rows
