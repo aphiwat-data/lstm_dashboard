@@ -67,6 +67,19 @@ Same 389 scored test days, every band uses only earlier information; target cove
 quantiles directly (same walk-forward protocol, 2 seeds) only 63.5% (\$129, score 457). No method beats EWMA, so the dashboard band is unchanged. Caveat: the
 EWMA decay was fixed in advance, but the alternatives were compared on the same test window, so 89.5% is slightly optimistic.
 
+**Multi-day price forecasts (2026-10-29, `daily/walk_forward_horizon.py`, results in `daily/results/horizon_h5/` and `horizon_h20/`).** Same
+protocol as the daily run (retrain every 7 days on the latest 365 labelled days, LSTM(32), 3 seeds), forecasting the price h trading days ahead
+and judged against "price in h days = price today". Labels overlap, so p-values use n_eff = n / h and a HAC Diebold-Mariano variance.
+
+| Horizon (days) | n / n_eff | No-change MAE (\$) | LSTM MAE (\$) | LSTM vs no-change | DM p | R² out-of-sample | IC (p) |
+|---|---|---|---|---|---|---|---|
+| 5 | 444 / 88 | 109.19 | 109.50 | -0.3% | 0.43 | -0.040 | -0.018 (0.87) |
+| 20 | 429 / 21 | 219.40 | 216.95 | +1.1% | 0.59 | +0.034 | +0.085 (0.72) |
+
+No significant skill at either horizon. At 20 days the LSTM is 1.1% better in MAE with a positive out-of-sample R² (+0.034), but with only
+21 independent windows nothing is distinguishable from zero (DM p = 0.59, IC p = 0.72); Ridge and HistGB are worse than no-change at both
+horizons. Training rows stop h days before each block because a label is only known h days later.
+
 **Evaluation protocol (daily).** `daily/walk_forward.py` retrains every 7 trading days on the trailing 365 days: input window 20 days,
 LSTM(32) with two heads (next-day log-return and direction), 3 seeds averaged, scalers re-fit inside every window; the forecast price
 is `close * exp(predicted log-return)`. Baselines on identical rows: rolling drift (= always up), ridge, HistGB regressor and
