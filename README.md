@@ -80,6 +80,12 @@ No significant skill at either horizon. At 20 days the LSTM is 1.1% better in MA
 21 independent windows nothing is distinguishable from zero (DM p = 0.59, IC p = 0.72); Ridge and HistGB are worse than no-change at both
 horizons. Training rows stop h days before each block because a label is only known h days later.
 
+**Does VIX improve the 90% interval? (2026-10-29, `daily/interval_vix.py`, `daily/results/interval_vix.json`).** Scale model sigma = exp(a + b log EWMA + c log VIX),
+fitted by Gaussian quasi-ML on the last 1000 days known at each refit (every 7 days), same 389 scored days. Shipped EWMA band: coverage 89.5%, score 317.
+Refit without VIX: 87.1% (score 322); with same-day VIX: 86.1% (322); with yesterday's VIX: 86.4% (322); VIX alone: 77.1% (359). VIX gets a positive
+coefficient (c about 0.2) but adds nothing out of sample (score 322 with and without it; no difference from EWMA is significant), and the
+Gaussian fit under-covers because returns have fat tails. The shipped EWMA band is unchanged.
+
 **Evaluation protocol (daily).** `daily/walk_forward.py` retrains every 7 trading days on the trailing 365 days: input window 20 days,
 LSTM(32) with two heads (next-day log-return and direction), 3 seeds averaged, scalers re-fit inside every window; the forecast price
 is `close * exp(predicted log-return)`. Baselines on identical rows: rolling drift (= always up), ridge, HistGB regressor and

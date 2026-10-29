@@ -1,0 +1,85 @@
+[
+ {
+  "method": "EWMA lambda 0.94 (current)",
+  "n": 389,
+  "coverage": 0.8946015424164524,
+  "mean_width_usd": 222.54212852208065,
+  "mean_width_pct": 5.281000478484696,
+  "interval_score_usd": 317.1797494432837,
+  "kupiec_p": 0.7247332700112954,
+  "cov_first_half": 0.8814432989690721,
+  "cov_second_half": 0.9076923076923077,
+  "score_diff_vs_ewma": 0.0,
+  "score_diff_p": 1.0
+ },
+ {
+  "method": "EWMA, intercept+slope refit (no VIX)",
+  "n": 389,
+  "coverage": 0.87146529562982,
+  "mean_width_usd": 208.1488276867129,
+  "mean_width_pct": 4.9143429589122105,
+  "interval_score_usd": 321.6996525087972,
+  "kupiec_p": 0.07105050182976647,
+  "cov_first_half": 0.8402061855670103,
+  "cov_second_half": 0.9025641025641026,
+  "score_diff_vs_ewma": 4.519903065513546,
+  "score_diff_p": 0.3100811152687051,
+  "mean_coefs": [
+   -1.5583311152900663,
+   0.6553459559599644
+  ]
+ },
+ {
+  "method": "EWMA + VIX (same-day close)",
+  "n": 389,
+  "coverage": 0.8611825192802056,
+  "mean_width_usd": 202.88241651551328,
+  "mean_width_pct": 4.783876847084902,
+  "interval_score_usd": 321.9519908183917,
+  "kupiec_p": 0.015281332433639494,
+  "cov_first_half": 0.8298969072164949,
+  "cov_second_half": 0.8923076923076924,
+  "score_diff_vs_ewma": 4.772241375108121,
+  "score_diff_p": 0.28785897159367835,
+  "mean_coefs": [
+   -0.8502398255117738,
+   0.6026368160819287,
+   0.21481777733935267
+  ]
+ },
+ {
+  "method": "EWMA + VIX (previous day)",
+  "n": 389,
+  "coverage": 0.8637532133676092,
+  "mean_width_usd": 203.19460264242116,
+  "mean_width_pct": 4.7918089316212304,
+  "interval_score_usd": 321.53443246972455,
+  "kupiec_p": 0.02309694201414847,
+  "cov_first_half": 0.8298969072164949,
+  "cov_second_half": 0.8974358974358975,
+  "score_diff_vs_ewma": 4.354683026440922,
+  "score_diff_p": 0.32130643416925597,
+  "mean_coefs": [
+   -0.986536560320415,
+   0.6038202970237422,
+   0.18285127731729284
+  ]
+ },
+ {
+  "method": "VIX only (previous day)",
+  "n": 389,
+  "coverage": 0.7712082262210797,
+  "mean_width_usd": 147.8918661899123,
+  "mean_width_pct": 3.5595016140385725,
+  "interval_score_usd": 358.88502007160673,
+  "kupiec_p": 1.4344081478157023e-13,
+  "cov_first_half": 0.788659793814433,
+  "cov_second_half": 0.7538461538461538,
+  "score_diff_vs_ewma": 41.70527062832303,
+  "score_diff_p": 0.013716392448472448,
+  "mean_coefs": [
+   -2.9080897468526774,
+   0.36556873047287286
+  ]
+ }
+]
