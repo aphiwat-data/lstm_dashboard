@@ -6,7 +6,7 @@ the forecast comes from the daily pipeline on AWS and the evaluation from the re
 """
 import streamlit as st
 
-st.set_page_config(page_title="Gold Price Forecast", page_icon=":material/show_chart:", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Gold Price Forecast", page_icon=":material/show_chart:", layout="wide", initial_sidebar_state=320)  # a width in pixels: "auto" behaviour with a sidebar of that width
 
 from ui import data, header, sidebar, tab_about, tab_market, tab_reliability, tab_track  # noqa: E402  (after set_page_config)
 
@@ -25,8 +25,8 @@ track, explorer, reliable, about = st.tabs([":material/history: Track record", "
 with track:
     tab_track.render(preds, data.live_log())
 with explorer:
-    tab_market.render(data.prices(), cur, data.volatility())
+    tab_market.render(data.prices())
 with reliable:
-    tab_reliability.render(res, preds, reg, *data.interval_tests())
+    tab_reliability.render(res, preds, reg)
 with about:
-    tab_about.render(res, reg, data.prices())
+    tab_about.render(res)

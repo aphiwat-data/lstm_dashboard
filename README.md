@@ -580,8 +580,16 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   needed scrolling (1,184 px of content in an 857 px window). `theme.baseFontSize = 14` scales every rem-based size down 12.5% (headings, metric values and spacing follow), and the forecast chart is
   280 px tall, so the title, the forecast, the chart and the three trust cards now fit the first screen. The sidebar holds only the credits: smaller logos, the school lines condensed to three, each
   credit block is one element with small bold names and the student IDs on their own lines, the status moved into the header badge's tooltip and the source link lives on *About*. It measures about
-  555 px (Streamlit 1.56) and 578 px (1.66.1) below a 67 px header, so it also fits a 650 px-tall window without scrolling. Streamlit 1.66 sizes the sidebar in rem (263 px at a 14 px base) while 1.56 keeps
-  300 px, so names that fitted on 1.56 wrapped on 1.66: check both. A local preview server must be restarted after editing `config.toml` or a `ui/` module (a plain reload showed stale code several times).
+  555 px (Streamlit 1.56) and 578 px (1.66.1) below a 67 px header. The owner then found it a little small, so the sidebar is now a fixed 320 px wide (`st.set_page_config(initial_sidebar_state=320)`;
+  1.66 would otherwise size it in rem, 263 px at a 14 px base, while 1.56 keeps 300 px), the logos are bigger, the title is a heading, and the names and student IDs are body size. It measures about 595 px:
+  plenty of room in an 857 px window, a few pixels of scroll in a 650 px one. A local preview server must be restarted after editing `config.toml` or a `ui/` module (a plain reload showed stale code several times).
+- **Plain wording and only what a general reader needs (30 Oct, owner feedback).** One name per idea everywhere: *baseline* ("tomorrow = today", also called the naive baseline), *this model* (the LSTM
+  shown in the header), *typical error*, *range hit rate*. Vague labels were replaced ("Used here", "No clear edge", "Range accuracy", "half-width", cryptic input names). Parts a general reader does not
+  need were **removed from the page** (the numbers stay in this README and in `daily/results/`): R², rank correlation, AUC and the full statistics table, the up/down side check, the comparison of other
+  models and of range methods (GARCH, VIX, quantile LSTM), the volatility-model comparison, volume, the daily-change histogram, the model-input charts and the experiment chart. What remains: *Track record*
+  (live record and one backtest chart, "Actual close" against "Forecast made the day before"), *Data explorer* (price history and how much gold moves per day), *How reliable?* (verdict, two numbers of
+  evidence and a two-bar error chart) and *About* (steps, one line on the other ideas tried, short glossary). Chart text no longer collides: bar values sit beside the bars, there are no reference lines
+  crossing labels, and every chart is checked with a script that compares the bounding boxes of all its text (no overlaps found).
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
   `requirements.txt` rendered identically; live URL checked after the push.
 

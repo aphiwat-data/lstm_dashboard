@@ -26,8 +26,10 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
   cards and charts get squeezed instead of wrapping, so put those in rows or full width. Keep prose generated from the result files, and do not import
   TensorFlow in the dashboard. Keep visible text short (advisor feedback): a heading, metric or chart title carries its explanation in `help=` (the ? icon),
   a caption is at most one short line, and anything longer goes in a tooltip, popover or expander; `help=` strings are markdown, so escape `$` there too.
-  The look is tuned for a 14 px base font (`theme.baseFontSize`) and the owner's screen, a viewport of about 1512x857: the sidebar must fit without scrolling there and at 1366x650 on both
-  Streamlit versions (1.66 makes it 263 px wide at this base size, 1.56 keeps 300 px). Restart the local preview server after editing `config.toml` or a `ui/` module. Streamlit Cloud installs a newer Streamlit than local development used, so check layout changes at 1280, 1024, 900,
+  Show only what a general reader needs (forecast, range, track record, verdict); statistics, other models and method detail belong in the README. Use one name per idea (baseline, this model, typical error,
+  range hit rate), never vague labels, and keep chart text from overlapping (values beside bars, no reference line through a label).
+  The look is tuned for a 14 px base font (`theme.baseFontSize`) and the owner's screen, a viewport of about 1512x857: the sidebar (a fixed 320 px, set in `set_page_config`) must fit without scrolling there; keep the credits readable, not tiny. Check both
+  Streamlit versions. Restart the local preview server after editing `config.toml` or a `ui/` module. Streamlit Cloud installs a newer Streamlit than local development used, so check layout changes at 1280, 1024, 900,
   760 and 390 px (clear `localStorage` key `stSidebarCollapsed-` first: it keeps an open sidebar on a narrow screen) and on the live URL after pushing.
   The theme is one light theme in `.streamlit/config.toml` on purpose (the advisor prefers light mode): adding `[theme.light]`/`[theme.dark]` makes Streamlit follow each
   visitor's system setting, so do not bring dark back unless asked. Restart the local server after editing the config.

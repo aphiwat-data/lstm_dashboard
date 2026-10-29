@@ -10,13 +10,7 @@ COLORS = {
     "actual": "#EB6834",   # orange: the real price series
     "model": "#2A78D6",    # blue: the LSTM
     "naive": "#8A8F98",    # gray: the "tomorrow = today" baseline
-    "ridge": "#E87BA4",    # magenta
-    "hgb": "#EDA100",      # yellow
-    "good": "#1BAF7A",     # aqua
-    "volume": "#8B7FD1",   # soft purple
-    "dist": "#1BAF7A",
 }
-ERROR_OVER, ERROR_UNDER = "#2A78D6", "#E34948"  # model too high (cool) / too low (warm)
 GRID = "rgba(128,128,128,0.16)"
 # Plotly measures text once with whatever font exists at first paint and caches it, so a web font that loads a moment later would clip legends: charts use the system UI font.
 CHART_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"

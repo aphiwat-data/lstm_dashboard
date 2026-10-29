@@ -3,7 +3,6 @@ Nothing here needs TensorFlow: every loader degrades to None / an empty frame wh
 from __future__ import annotations
 
 import json
-import sys
 from io import BytesIO
 from pathlib import Path
 
@@ -91,17 +90,6 @@ def regression() -> dict | None:
     return _load("regression_metrics.json", _stamp("regression_metrics.json"))
 
 
-def volatility() -> tuple[pd.DataFrame, dict] | None:
-    s = _stamp("volatility_forecast.csv", "volatility_comparison.json")
-    frame, comp = _load("volatility_forecast.csv", s), _load("volatility_comparison.json", s)
-    return (frame, comp) if frame is not None and comp is not None else None
-
-
-def interval_tests() -> tuple[list | None, list | None]:
-    s = _stamp("interval_comparison.json", "interval_vix.json")
-    return _load("interval_comparison.json", s), _load("interval_vix.json", s)
-
-
 def horizons() -> dict:
     out = {}
     for h in (5, 20):
@@ -161,17 +149,5 @@ def run_age_hours(cur: dict) -> float | None:
     try:
         ts = pd.Timestamp(cur["generated_at"]).tz_localize(None)
         return (pd.Timestamp.now(tz="UTC").tz_localize(None) - ts).total_seconds() / 3600
-    except Exception:
-        return None
-
-
-def indicators(close: pd.Series) -> pd.DataFrame | None:
-    """The model's own input features (from daily/build_daily_dataset.py), computed from the close series."""
-    try:
-        sys.path.insert(0, str(ROOT / "daily"))
-        from build_daily_dataset import make_features
-
-        d = pd.DataFrame({"close": close.to_numpy(float)}, index=pd.DatetimeIndex(close.index))
-        return make_features(d)
     except Exception:
         return None
