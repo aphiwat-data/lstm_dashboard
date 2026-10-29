@@ -26,6 +26,8 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
   cards and charts get squeezed instead of wrapping, so put those in rows or full width. Keep prose generated from the result files, and do not import
   TensorFlow in the dashboard. Streamlit Cloud installs a newer Streamlit than local development used, so check layout changes at 1280, 1024, 900,
   760 and 390 px (clear `localStorage` key `stSidebarCollapsed-` first: it keeps an open sidebar on a narrow screen) and on the live URL after pushing.
+  The theme is one light theme in `.streamlit/config.toml` on purpose (the advisor prefers light mode): adding `[theme.light]`/`[theme.dark]` makes Streamlit follow each
+  visitor's system setting, so do not bring dark back unless asked. Restart the local server after editing the config.
 - **`main` is the deployed branch.** Every push redeploys the public app within about a minute. Make small commits and run
   `python3 -m py_compile dashboard/app.py dashboard/ui/*.py` before pushing.
 - **Document results in `README.md` only.** The owner will rewrite the paper from scratch, so do not edit Chapter 3 or other Word files; keep the

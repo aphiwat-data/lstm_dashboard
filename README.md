@@ -552,8 +552,8 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   and `tab_about.py`. The original-pipeline views (60-day price-level LSTM, AR(5) baselines, Gold-table feature explorer) were removed from the page; this README is their record.
   `requirements.txt` dropped tensorflow, awswrangler and scikit-learn and gained pyarrow. A warm page paints in about a second; segmented controls are `st.fragment`s, so changing a
   chart window re-runs only that chart.
-- **Design system, native theming only.** `.streamlit/config.toml` sets the Inter font, rounder corners, a heading scale where `h1` is the forecast price, and separate light and dark
-  palettes with semantic colours (green/orange/red/blue chips). Charts keep the project's colour-blind-safe hues (orange = actual price, blue = the model, grey = "tomorrow = today").
+- **Design system, native theming only.** `.streamlit/config.toml` sets the Inter font, rounder corners, a heading scale where `h1` is the forecast price, and one light theme with
+  semantic colours (green/orange/red/blue chips); see the light-theme bullet below. Charts keep the project's colour-blind-safe hues (orange = actual price, blue = the model, grey = "tomorrow = today").
 - **Information design.** Always visible: title and freshness badge, then the forecast card (price, change chip, 90% range, 1M/3M/6M/1Y chart with the forecast and its range bar), then
   three trust cards (typical error, range accuracy, beats "tomorrow = today"?) and a "How to read this" popover. Tabs: *Track record* (the live record first, then the 449-day backtest),
   *Data explorer* (price and volume with the test-period marker, volatility forecast vs. realised with a QLIKE comparison, 30-day volatility, daily changes, the model's own inputs),
@@ -561,12 +561,16 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   project is, the five pipeline steps, a "what we tried" chart of every experiment against "tomorrow = today" read from the result files, the method in plain words, a glossary).
 - **Honesty kept.** The page leads with price error against the baseline; red/green chips only when p < 0.05; the "What we tried" chart shows Ridge and gradient boosting as clearly
   worse and everything else as within noise. Captions are generated from the data (verdict wording, which bars are better or worse), so they cannot drift from the numbers.
-- **Layout findings (Streamlit 1.56 and 1.66.1, Plotly 6.8 and 7.1, checked at 390, 760, 900, 1024, 1280 and 1440 px, light and dark).** In a horizontal container a `width="stretch"`
+- **Layout findings (Streamlit 1.56 and 1.66.1, Plotly 6.8 and 7.1, checked at 390, 760, 900, 1024, 1280 and 1440 px).** In a horizontal container a `width="stretch"`
   child gets `flex: 1 1 128px` with `min-width: 16px`. `st.metric` cards are protected by their own text and wrap cleanly (3 across, then 2+1, then a column), but text-heavy cards and
   charts were squeezed instead of wrapping (900 px: three 130 px cards, two 180 px charts with rotated labels). So metric cards use stretch, the evidence is a scorecard of rows (number
   left, explanation right, wrapping under the number on a phone) and the two bar charts are full width. Plotly measures text once and caches it, so a web font that loads a moment
   later clipped legend entries; charts therefore use the system UI font (`CHART_FONT`). Streamlit remembers the sidebar state in `localStorage` (`stSidebarCollapsed-`): clear it when
   testing narrow widths, otherwise an open drawer hides the page.
+- **Light theme only (30 Oct, later the same day).** The advisor prefers light mode. With both `[theme.light]` and `[theme.dark]` defined, Streamlit follows each visitor's system setting (an
+  OS in dark mode got the dark page) and has no option to default to light. The config is now a single `[theme]` with `base = "light"` (sidebar colours in `[theme.sidebar]`). In the frontend
+  a lone custom theme replaces Streamlit's presets and is applied whatever the OS or a remembered "Dark" preference says; verified on 1.56 and 1.66.1 with the OS emulated as dark and
+  `localStorage` `stActiveTheme-/-v2` set to `"Dark"`. The cost is that viewers have no dark option. A running local server keeps the old theme after `config.toml` is edited: restart it.
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
   `requirements.txt` rendered identically; live URL checked after the push.
 
@@ -1314,7 +1318,7 @@ subsection is what a reader sees today.
   Local run: `python3 -m streamlit run dashboard/app.py` from the repo root (AWS credentials are needed for the live forecast and the price history; without them the page falls back to
   the committed result files). Requirements: streamlit, boto3, pandas, numpy, plotly, pyarrow.
 - **Code layout.** `app.py` sets the page up and calls `ui/header.py`, `ui/sidebar.py` and one `ui/tab_*.py` per tab; `ui/data.py` holds every cached loader, `ui/logic.py` the verdict
-  rules, `ui/theme.py` the colours, `usd()` and the shared chart style. Theme, font and light/dark palettes are in `.streamlit/config.toml`.
+  rules, `ui/theme.py` the colours, `usd()` and the shared chart style. The theme (one light theme, the advisor's preference) and the font are in `.streamlit/config.toml`.
 - **Sidebar (credits first).** MFU and ADT logos side by side, project title, degree and school, authors with student IDs, advisor, committee, then a status badge (live or backtest data,
   data-through date, model-trained-through date) and a link to the source code.
 - **Header (the forecast is the product).** Title with a freshness badge, the next-day forecast price (largest element), change chip vs. last close, the 90% range, a 1M/3M/6M/1Y chart

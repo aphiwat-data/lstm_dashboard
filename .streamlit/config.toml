@@ -2,7 +2,10 @@
 toolbarMode = "minimal"
 
 # One design system for the whole dashboard (native Streamlit theming only, no custom CSS).
+# A single light theme on purpose: with both [theme.light] and [theme.dark], Streamlit follows each visitor's system
+# setting and offers no way to make light the default.
 [theme]
+base = "light"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 baseRadius = "0.75rem"
 buttonRadius = "0.6rem"
@@ -13,8 +16,6 @@ metricValueFontSize = "1.75rem"
 # h1 is the forecast price, h2 the page title, h3 section headings
 headingFontSizes = ["2.9rem", "1.6rem", "1.25rem", "1.05rem", "0.95rem", "0.85rem"]
 headingFontWeights = [700, 700, 600, 600, 600, 600]
-
-[theme.light]
 primaryColor = "#1F5FBF"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F3F5F9"
@@ -27,23 +28,6 @@ blueColor = "#2A78D6"
 greenColor = "#12A150"
 grayColor = "#98A2B3"
 
-[theme.light.sidebar]
+[theme.sidebar]
 backgroundColor = "#F3F5F9"
 secondaryBackgroundColor = "#E8ECF3"
-
-[theme.dark]
-primaryColor = "#5B9DF0"
-backgroundColor = "#0B1220"
-secondaryBackgroundColor = "#131C30"
-textColor = "#E6EAF2"
-borderColor = "#27324A"
-redColor = "#F97066"
-orangeColor = "#FDB022"
-yellowColor = "#FEC84B"
-blueColor = "#5B9DF0"
-greenColor = "#32D583"
-grayColor = "#98A2B3"
-
-[theme.dark.sidebar]
-backgroundColor = "#0F1729"
-secondaryBackgroundColor = "#17223A"
