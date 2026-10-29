@@ -37,6 +37,7 @@ SEQ_LEN    = 60
 SPLIT_DATE = "2024-12-31"
 RETRAIN_EVERY_DAYS = 7  # matches notebook 05's walk-forward RETRAIN_EVERY (simulated trading days)
 FORECAST_KEY = "gold/xauusd_daily/predictions/latest_forecast.json"  # written by automation/lambda_function.py
+FORECAST_LOG_KEY = "gold/xauusd_daily/predictions/forecast_log.csv"
 
 FEATURE_LABELS = {
     "return": "Daily Return",
@@ -121,6 +122,16 @@ def get_lambda_forecast():
     try:
         obj = boto3.client("s3").get_object(Bucket=S3_BUCKET, Key=FORECAST_KEY)
         return json.loads(obj["Body"].read())
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_live_log():
+    """forecast_log.csv written by the Lambda (one row per forecast, scored once the next close is known); None when absent."""
+    try:
+        obj = boto3.client("s3").get_object(Bucket=S3_BUCKET, Key=FORECAST_LOG_KEY)
+        return pd.read_csv(obj["Body"], parse_dates=["as_of_date"])
     except Exception:
         return None
 
@@ -995,36 +1006,33 @@ with tab_method:
         )
 
     st.divider()
-    with st.expander("Daily automation forecast (Lambda inference-refresh)", expanded=False):
-        st.caption("Note: this automation runs the ORIGINAL price-level model; it has not been updated to the corrected return-target model.")
+    with st.expander("Live pipeline (AWS Lambda): daily forecast and live track record", expanded=False):
         st.caption(
-            "The KPI above is computed fresh on every page load from the canonical "
-            "Gold-layer data and model in S3. Separately, a scheduled Lambda "
-            "(`automation/lambda_function.py`) runs once daily to keep a forecast "
-            "ready between full pipeline re-runs — shown here for comparison."
+            "A scheduled AWS Lambda runs every day at 08:00 Thailand time: it fetches the latest settled gold bar, checks the data quality, "
+            "forecasts the next close with the return-target LSTM (weights retrained weekly) and logs the forecast. Each logged forecast is scored "
+            "once its next close is known, so this record cannot be revised after the fact."
         )
         if lambda_forecast is None:
-            st.caption(
-                "No automation output found yet at "
-                f"`s3://{S3_BUCKET}/{FORECAST_KEY}` — either the Lambda hasn't been "
-                "deployed/run yet, or it hasn't found a new trading day to process. "
-                "This is expected until it's set up; the KPI above is unaffected."
-            )
+            st.caption(f"No pipeline output found yet at `s3://{S3_BUCKET}/{FORECAST_KEY}`. The forecast above is unaffected.")
         else:
             generated_at = pd.Timestamp(lambda_forecast["generated_at"]).tz_localize(None)
             age_hours = (pd.Timestamp.now(tz="UTC").tz_localize(None) - generated_at).total_seconds() / 3600
-            lc1, lc2, lc3 = st.columns(3)
-            lc1.metric("Automation forecast (as of " + lambda_forecast["as_of_date"] + ")",
-                       f"${lambda_forecast['predicted_next_close']:,.2f}",
-                       f"{lambda_forecast['delta']:+,.2f}")
-            lc2.metric("Agrees with on-the-fly forecast?",
-                       "Yes" if abs(lambda_forecast["predicted_next_close"] - next_day_pred) < 1.0 else "Differs")
-            lc3.metric("Generated", f"{age_hours:.1f}h ago")
-            if age_hours > 48:
-                st.warning(
-                    "This automation output is over 48 hours old — the scheduled "
-                    "Lambda may not be running (check EventBridge Scheduler / Lambda "
-                    "logs in AWS). Not necessarily an error on a weekend/market "
-                    "holiday, when no new close posts.",
-                    icon="⚠️",
-                )
+            lo_l, hi_l = lambda_forecast["interval_90_close"]
+            with st.container(horizontal=True, gap="medium"):
+                st.metric(f"Forecast (as of {lambda_forecast['as_of_date']})", f"${lambda_forecast['predicted_next_close']:,.2f}", width=230)
+                st.metric("90% range", f"\\${lo_l:,.0f}–\\${hi_l:,.0f}", width=230)
+                st.metric("Last run", f"{age_hours:.1f} h ago", width=230, help=f"Model trained through {lambda_forecast.get('model_trained_through', 'n/a')} (version {lambda_forecast.get('model_version', 'n/a')}).")
+            if age_hours > 72:
+                st.warning("The last pipeline run is more than 72 hours old: check EventBridge Scheduler and the Lambda logs (a long weekend can explain up to ~3 days).", icon="⚠️")
+        live = get_live_log()
+        scored = live.dropna(subset=["actual_next_close"]) if live is not None else None
+        if scored is None or scored.empty:
+            st.caption("Live track record: no forecast has been scored yet (it needs the next trading day's close).")
+        else:
+            abs_model = (scored["actual_next_close"] - scored["predicted_next_close"]).abs().mean()
+            abs_naive = (scored["actual_next_close"] - scored["latest_close"]).abs().mean()
+            inside = scored["inside_90"].astype(str).str.lower().eq("true").mean()
+            st.markdown(f"**Live track record:** {len(scored)} forecasts scored. Typical miss \\${abs_model:,.2f} (a “tomorrow = today” guess: \\${abs_naive:,.2f}); the 90% range held the actual close on {inside:.0%} of them.")
+            show = scored.tail(10)[["as_of_date", "latest_close", "predicted_next_close", "actual_next_close", "lo_90", "hi_90"]].rename(
+                columns={"as_of_date": "Forecast made", "latest_close": "Close that day", "predicted_next_close": "Forecast", "actual_next_close": "Actual next close", "lo_90": "Low 90%", "hi_90": "High 90%"})
+            st.dataframe(show.round(2), width="stretch", hide_index=True)

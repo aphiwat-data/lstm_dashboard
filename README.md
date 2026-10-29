@@ -499,6 +499,43 @@ this belongs with the Lambda decision), and the static-training variants (`model
 point forecast: LSTM, ridge, gradient boosting, ensembling, macro/cross-asset inputs, NFP/FOMC/CPI calendar, COT positioning, hourly cross-asset
 features (own window), 5- and 20-day horizons. What does work is the evaluation and the calibrated interval (EWMA band, 89.5% coverage).
 
+### Phase 11: the daily pipeline on AWS and a live track record (October 29, 2026)
+
+The old Lambda design (price-level model exported to TFLite, container image) was dropped: it ran the model whose scale error Phase 7 had found, never
+retrained, and its Docker build had failed. Replaced by a pipeline split the way a real data team would split it (ingestion / training / serving):
+
+```
+EventBridge Scheduler (cron 01:00 UTC = 08:00 Thailand, daily)
+   -> Lambda gold-lstm-forecast-daily-refresh (python3.12 zip + AWS SDK for pandas layer, 1 GB, ~1.5 s per run)
+        1. fetch settled daily bars (Yahoo chart endpoint, stdlib urllib; range widens automatically after an outage)
+        2. append new bars to bronze/streaming/xauusd_daily_incremental.csv (idempotent, keyed by date; Silver is never rewritten)
+        3. data-quality checks -> gold/xauusd_daily/predictions/dq_report.json (critical failure: no forecast, run fails, metric Failure=1)
+        4. features -> LSTM forward pass in plain numpy -> forecast + 90% EWMA band -> latest_forecast.json
+        5. upsert forecast_log.csv: every earlier forecast is scored once its next close is known (the live track record)
+        6. CloudWatch metrics (embedded metric format: NewRows, DQWarnings, Failure, ForecastsScored, RunSeconds) and a run log
+   weekly, by hand or any scheduler with TensorFlow: automation/retrain.py  (Silver + stream log -> final LSTM -> s3://.../model/serving/serving_model.npz)
+   dashboard: Method tab, "Live pipeline" expander (latest forecast, last run age, live track record)
+```
+
+Files: `daily/serving.py` (latest features, numpy LSTM, EWMA band), `daily/export_serving_model.py` (train the final model and export weights, 100 KB),
+`daily/serving_artifacts/` (seed model + Keras reference outputs), `automation/lambda_function.py` (v2; the old one is `lambda_function_v1_price_level.py.old`),
+`automation/deploy.py` (idempotent boto3: `plan` / `apply` / `teardown`), `automation/retrain.py`, `automation/iam_permissions_policy.json` (least privilege).
+
+Verification: `daily/test_serving.py` (numpy forward pass matches Keras to about 1e-8; the band equals the evaluation band; features from a 200-row tail equal those from the
+full history) and `automation/test_lambda_function.py` (end-to-end against an in-memory S3: idempotent replays, scoring of the previous forecast, critical data-quality failure
+publishes nothing, unsettled bars dropped, model reloaded when the object changes). On AWS: the first run back-filled 27 missing bars (22 Sep to 28 Oct) and the prices matched the local
+yfinance data on all 25 overlapping days (max difference 0.0).
+
+Problems found while deploying (all fixed): the first test run on AWS failed because without `s3:ListBucket` S3 answers AccessDenied instead of NoSuchKey for a log that does not exist yet (the
+least-privilege policy now grants ListBucket on the bucket, object access stays prefix-limited); `deploy.py` re-uploaded the seed model over the retrained one (it now only seeds a missing object);
+a warm Lambda container kept the old weights (it now checks the object's ETag); an all-empty CSV column was read back as float and broke the second day's scoring (caught by the tests); at 08:00 Thailand
+time a new COMEX session has started and Yahoo shows a partial bar for it (only bars whose session ended, 17:00 New York, are accepted).
+
+Honest status: deployed and invoked manually on 2026-10-29; the schedule is ENABLED and its first unattended run is 2026-10-30 01:00 UTC. The live track record starts with the forecast for 2026-10-28 and
+only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the IAM user `Auto` lacks SNS/CloudWatch permissions and the permissions were not widened); the empty ECR repo from September was not deleted
+(the deletion was blocked as irreversible; delete it by hand if wanted). Cost: Lambda (a few seconds a day) and S3 are far inside the free tier. Operating it: `python3 automation/deploy.py apply` (safe to repeat),
+`python3 automation/retrain.py` weekly, `python3 automation/deploy.py teardown` removes everything except the S3 data.
+
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
 2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
@@ -588,16 +625,15 @@ lstm_dashboard/
 ├── .python-version              ← 3.11
 ├── automation/                  ← daily inference-refresh Lambda — see §11 and automation/README.md
 │   ├── README.md                ← full design rationale + deploy/teardown steps
-│   ├── lambda_function.py       ← the daily handler (inference-only, no training)
-│   ├── convert_and_export.py    ← one-time: Keras -> TFLite + scaler param export
-│   ├── Dockerfile, requirements-lambda.txt
-│   ├── deploy.sh                ← idempotent: ECR + Lambda + EventBridge Scheduler
+│   ├── lambda_function.py       ← the daily handler v2 (ingest, data quality, numpy LSTM forecast, live log); test_lambda_function.py tests it against an in-memory S3
+│   ├── deploy.py, retrain.py    ← idempotent boto3 deploy (plan/apply/teardown) and the weekly retrain; v1 files (convert_and_export.py, Dockerfile, deploy.sh, *.py.old) are kept for the record
 │   └── iam_*.json, scheduler_*.json  ← least-privilege policies for the Lambda's own role
 ├── daily/                       ← corrected daily pipeline (Sep 2026) — see Journey and §8.0
 │   ├── build_daily_dataset.py   ← scale-free features + log-return targets from the Silver table; --macro / --calendar / --cot add the Phase 9 feature sets
 │   ├── test_no_lookahead_daily.py
 │   ├── walk_forward.py          ← walk-forward LSTM (retrain every 7 days, 365-day window) + baselines + tomorrow's forecast
 │   ├── horizon_always_up.py     ← always-up accuracy by horizon (Phase 8 table)
+│   ├── serving.py, export_serving_model.py, test_serving.py, serving_artifacts/   ← numpy serving core, model export, seed model (Phase 11)
 │   ├── regression_metrics.py, test_regression_metrics.py   ← price error, out-of-sample R², causal interval coverage (Phase 10)
 │   ├── walk_forward_horizon.py  ← price 5 / 20 trading days ahead vs. no-change (results/horizon_h5, horizon_h20)
 │   ├── interval_experiment.py, lstm_quantile.py, interval_vix.py   ← 90% interval method comparison and the VIX test
@@ -1412,9 +1448,11 @@ this data volume; no compute cost from running the dashboard).
 
 ## 11. Daily Automation Pipeline (Lambda + EventBridge Scheduler)
 
-**Status: designed and code-complete in `automation/`, not yet deployed or
-run against the live AWS account** — it was built in an environment with no
-network path to AWS, so "ready to deploy" is the accurate claim, not
+**Status (2026-10-29): deployed and scheduled (see Journey, Phase 11).** The design below is the original v1 (price-level model, TFLite, container image),
+kept for the record; the running v2 serves the return-target model with numpy and is described in Phase 11 and in `automation/README.md`.
+**Original status text:** designed and code-complete in `automation/`, not yet deployed or
+run against the live AWS account — it was built in an environment with no
+network path to AWS, so "ready to deploy" was the accurate claim, not
 "currently running." Full design rationale, every file, and the deployment
 steps are in **[`automation/README.md`](automation/README.md)**; this
 section is the summary worth presenting.
@@ -1528,7 +1566,8 @@ that discipline matters most), and teardown instructions are all in
    ever needed outside a live session.
 7. ~~Keep iterating on the Streamlit dashboard~~ **Done for now (Oct 2026):** the forecast-first redesign, credits sidebar,
    regression-first metrics and responsive layout are live (§10). Further changes are optional and should follow the rules in §10.
-8. **Actually deploy and verify the daily automation** (§11) against the
+8. ~~Actually deploy and verify the daily automation~~ **Done (2026-10-29, Phase 11):** redesigned (numpy serving, zip + layer), deployed, invoked, schedule ENABLED.
+   Remaining: watch the first unattended runs (from 2026-10-30), run `retrain.py` weekly, optionally add alarms. *Original item:* deploy and verify the daily automation (§11) against the
    live AWS account — run `convert_and_export.py` + `deploy.sh`, confirm a
    real invocation writes a correct `latest_forecast.json`, then let it run
    for at least one real trading-day rollover before demoing it as "live"
@@ -1547,7 +1586,9 @@ that discipline matters most), and teardown instructions are all in
     (e.g. weekly) scheduled job that re-runs full walk-forward retraining
     — see `automation/README.md` §9 for why this is scoped out for now.
 
-11. **Clean up or finish the partial AWS deployment** (Journey, phase 4): the ECR
+11. **Clean up the old AWS leftovers** (Journey, phase 4): the Lambda is now finished (item 8), so only the unused, empty ECR
+    repository `gold-lstm-forecast-daily-refresh` remains to delete by hand, and the policies `AmazonEC2ContainerRegistryFullAccess` and (if not needed) the
+    broad ones below can be detached. Earlier text: the ECR
     repository `gold-lstm-forecast-daily-refresh` and the policies
     `AWSLambda_FullAccess`, `AmazonEC2ContainerRegistryFullAccess`,
     `AmazonEventBridgeSchedulerFullAccess` attached to `Auto` are standing changes

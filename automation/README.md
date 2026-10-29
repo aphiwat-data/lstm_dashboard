@@ -14,6 +14,10 @@ earlier draft of this used `rate(1 hour)`; see "Why 08:00 Thailand time
 specifically" below for why daily-at-a-chosen-time is both cheaper and a
 more defensible design than polling hourly "just in case."
 
+> **Update (2026-10-29): this folder's design was replaced and deployed.** The running v2 (zip + AWS SDK for pandas layer, return-target LSTM served with numpy, data-quality checks,
+> live forecast log, weekly retrain by `retrain.py`, `deploy.py` for deployment) is described in the main README, Journey Phase 11. Everything below is the original v1 design
+> (price-level model, TFLite, container image), kept for the record; its files are `lambda_function_v1_price_level.py.old`, `convert_and_export.py`, `Dockerfile`, `deploy.sh`.
+
 **Status, honestly**: designed, implemented, and internally consistent with
 the rest of the pipeline (formulas, paths, and shapes all cross-checked
 against `notebooks/03_Feature_Engineering.ipynb`, `04_Preprocessing.ipynb`,
