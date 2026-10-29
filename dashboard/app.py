@@ -17,7 +17,7 @@ if cur is None:
     st.error("No forecast is available right now. Please try again in a few minutes.", icon=":material/error:")
     st.stop()
 
-sidebar.render(cur)
+sidebar.render()
 header.render(cur, data.price_history(preds, cur), res, preds, reg)
 
 st.write("")

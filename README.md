@@ -576,6 +576,12 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   title), each scorecard row keeps one short line with the detail in its metric tooltip, the "honest result" box on *About* was dropped because the verdict already sits on *How reliable?*,
   the five method expanders became one, and the pipeline steps are a few words each. Rule: a heading may carry a tooltip, a caption is at most one short line, and anything longer goes in a
   tooltip, popover or expander. Tooltips open on hover; tapping them on a phone was not tested (the owner said mobile does not matter).
+- **Smaller text and a one-screen sidebar (30 Oct, owner feedback).** On the owner's screen (Safari on a 14-inch MacBook, viewport about 1512 x 857 px) the text looked too big and the sidebar
+  needed scrolling (1,184 px of content in an 857 px window). `theme.baseFontSize = 14` scales every rem-based size down 12.5% (headings, metric values and spacing follow), and the forecast chart is
+  280 px tall, so the title, the forecast, the chart and the three trust cards now fit the first screen. The sidebar holds only the credits: smaller logos, the school lines condensed to three, each
+  credit block is one element with small bold names and the student IDs on their own lines, the status moved into the header badge's tooltip and the source link lives on *About*. It measures about
+  555 px (Streamlit 1.56) and 578 px (1.66.1) below a 67 px header, so it also fits a 650 px-tall window without scrolling. Streamlit 1.66 sizes the sidebar in rem (263 px at a 14 px base) while 1.56 keeps
+  300 px, so names that fitted on 1.56 wrapped on 1.66: check both. A local preview server must be restarted after editing `config.toml` or a `ui/` module (a plain reload showed stale code several times).
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
   `requirements.txt` rendered identically; live URL checked after the push.
 

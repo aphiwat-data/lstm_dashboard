@@ -6,6 +6,7 @@ toolbarMode = "minimal"
 # setting and offers no way to make light the default.
 [theme]
 base = "light"
+baseFontSize = 14
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 baseRadius = "0.75rem"
 buttonRadius = "0.6rem"

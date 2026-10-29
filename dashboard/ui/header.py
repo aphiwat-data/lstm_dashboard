@@ -46,7 +46,7 @@ def forecast_chart(hist: pd.DataFrame, cur: dict, days: int) -> go.Figure:
     span = max((fc_date - h["date"].min()).days, 10)
     y_lo, y_hi = min(h["close"].min(), lo), max(h["close"].max(), hi)
     pad = (y_hi - y_lo) * 0.10
-    finish(fig, 320, hover="closest")
+    finish(fig, 280, hover="closest")
     fig.update_layout(margin=dict(r=64))  # room for the price label beside the forecast marker
     fig.update_xaxes(range=[h["date"].min(), fc_date + pd.Timedelta(days=max(1, int(span * 0.03)))], tickformat="%d %b")
     fig.update_yaxes(tickprefix="$", tickformat=",.0f", range=[y_lo - pad, y_hi + pad])
@@ -82,7 +82,9 @@ def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame 
     label, color, icon = freshness(cur)
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         st.markdown("## Gold Price Forecast")
-        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 08:00 (Thailand time).")
+        trained = cur.get("model_trained_through")
+        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 08:00 (Thailand time). "
+                 f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
         st.badge("Research project", color="gray")
     st.caption("Tomorrow's XAU/USD close · LSTM model")
 
