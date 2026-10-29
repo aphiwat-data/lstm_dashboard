@@ -46,23 +46,17 @@ The write-up is a well-instrumented negative result. The feature-search line is 
 **Metric policy (advisor, 2026-10-27).** Directional accuracy is a classification metric, not the yardstick for a price forecast. Lead
 with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" baseline and keep up/down accuracy only as a labelled
 secondary check (it is how the proposal phrased the ~70% target, and it exposes the model's majority-class behaviour). The dashboard
-already does this; the thesis tables still carry Direction Accuracy columns (§12 item 15).
+already does this, and so does Chapter 3 (price accuracy first, direction as a secondary table).
 
-**In progress: regression-first metric rewrite (started 2026-10-27, not finished).** *Done:* `daily/regression_metrics.py` (tests in
-`daily/test_regression_metrics.py`) computes from `wf_predictions.csv`, with no retraining: MAE, RMSE, MAPE, MAE skill and Theil's U vs.
-no-change, Diebold-Mariano p (lags 0 and 24; LSTM p = 0.38-0.41 either way), R², out-of-sample R² vs. zero and vs. the rolling mean
-(LSTM -0.011), IC, and interval coverage, width and interval score using only errors known before each forecast. It writes
-`regression_metrics.json` into `daily/results/` and every `with_*` folder (run `python3 regression_metrics.py` from `daily/` after each
-walk-forward). *Finding:* the shipped "90% likely range" was calibrated on the whole test window's errors, so "contained the actual close
-on 90% of test days" was true by construction; scored honestly (errors known beforehand only) it covered 85.9%. A Gaussian band scaled by
-an EWMA of past errors (lambda 0.94, the RiskMetrics default, fixed in advance) covers 89.5% (n = 389); the same JSON compares its width
-with a no-change band (`interval.no_change_ewma_gaussian`). *Left to do:* (1) call `write_metrics` and `latest_band` from
-`walk_forward.py`, then run `python3 regression_metrics.py --refresh-latest-interval` so the shipped band uses the EWMA method;
-(2) dashboard: read `regression_metrics.json` for MAPE, out-of-sample R² and coverage, replace the hero caption "Actual closes fell inside
-this band on 90% of test days" with the honest coverage, and add the new columns to the metrics expander; (3) Chapter 3: Table 3.2 becomes
-price accuracy (MAE, RMSE, MAPE, MAE vs. no-change, DM p) for the five models that forecast a price, Table 3.3 gains out-of-sample R²,
-direction accuracy and AUC move to a secondary table that keeps all six models, the feature-set table leads with price error and IC
-(renumber captions and cross-references), and an interval-calibration paragraph is added; (4) README §8.0 and the Phase 7 tables to match.
+**Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
+called by `walk_forward.py`) computes from `wf_predictions.csv`: MAE, RMSE, MAPE, relative MAE and Diebold-Mariano p (lags 0 and 24; LSTM
+p = 0.38-0.41 either way, Ridge 0.023-0.052, so borderline), R², out-of-sample R² vs. the rolling mean (LSTM -0.011), IC, and interval
+coverage, width and interval score from errors known before each forecast; output is `regression_metrics.json` in every results folder.
+*Finding:* the old "90% likely range" was calibrated on the whole test window, so "covers 90% of test days" was true by construction; scored
+honestly it covered 85.9%. The shipped band is now Gaussian with sigma = EWMA(lambda 0.94, fixed in advance) of past errors: 89.5% coverage
+(n = 389), as wide as a no-change band ($223 vs. $221), so the LSTM does not narrow uncertainty. The dashboard, README §8.0 and Chapter 3
+(Table 3.2 price accuracy, 3.3 R²/IC, 3.4 secondary direction check, 3.5 feature sets, 3.6 horizons; interval paragraph added) now follow it;
+the Chapter 3 backup before this change is `Chapter3_before_regression_first_backup.docx`.
 
 **Evaluation protocol (daily).** `daily/walk_forward.py` retrains every 7 trading days on the trailing 365 days: input window 20 days,
 LSTM(32) with two heads (next-day log-return and direction), 3 seeds averaged, scalers re-fit inside every window; the forecast price
@@ -232,15 +226,24 @@ multiple-comparisons correction), not reported as a finding.
 - Result (walk-forward, retrain every 7 days on 365 days, test 2025-01-09 to 2026-10-23, n=449; the earlier 424-day run is kept in
   `daily/results/snapshot_2026-09-18/`):
 
-| Model | MAE (USD) | MAE skill vs no-change | Direction accuracy | vs always-up (pt) | p vs always-up |
+| Model | MAE (USD) | RMSE (USD) | MAPE (%) | MAE vs no-change (%) | DM p |
 |---|---|---|---|---|---|
-| No-change (naive) | 46.63 | 0 | – | – | – |
-| Rolling drift (= always up) | 46.36 | +0.0057 | 55.2% | +0.0 | 1.000 |
-| Ridge | 47.87 | -0.0267 | 49.0% | -6.2 | 0.009 |
-| HistGB regressor | 50.68 | -0.0868 | 50.3% | -4.9 | 0.041 |
-| HistGB classifier | – | – | 52.6% | -2.7 | 0.255 |
-| **LSTM (walk-forward)** | 46.83 | -0.0043 | 51.9% | -3.3 | 0.155 |
-| Momentum rule | – | – | 45.2% | -10.0 | 0.000 |
+| No-change (naive) | 46.63 | 68.94 | 1.14 | – | – |
+| Rolling drift | 46.36 | 69.07 | 1.14 | -0.6 | 0.941 |
+| Ridge | 47.87 | 70.35 | 1.17 | +2.7 | 0.023 |
+| HistGB regressor | 50.68 | 75.05 | 1.24 | +8.7 | <0.001 |
+| **LSTM (walk-forward)** | 46.83 | 69.45 | 1.15 | +0.4 | 0.385 |
+
+Secondary, classification-style check (direction), all six models:
+
+| Model | Direction accuracy | vs always-up (pt) | p vs always-up | AUC |
+|---|---|---|---|---|
+| Rolling drift (= always up) | 55.2% | +0.0 | 1.000 | – |
+| Ridge | 49.0% | -6.2 | 0.009 | – |
+| HistGB regressor | 50.3% | -4.9 | 0.041 | – |
+| HistGB classifier | 52.6% | -2.7 | 0.255 | 0.498 |
+| **LSTM (walk-forward)** | 51.9% | -3.3 | 0.155 | 0.463 |
+| Momentum rule | 45.2% | -10.0 | 0.000 | – |
 
   The LSTM's price error is at the no-change level (Diebold-Mariano p = 0.38) and its direction accuracy
   (51.9%, 95% CI 47.3-56.5%) is not distinguishable from
@@ -957,15 +960,24 @@ next-day log-return from scale-free features with scalers re-fit in every window
 2025-01-09 to 2026-10-23 (449 days); all models are scored on the same days. Gold rose on
 55.2% of these days, so "always up" scores 55.2%.
 
-| Model | MAE (USD) | MAE skill vs no-change | Direction accuracy | vs always-up (pt) | p vs always-up |
+| Model | MAE (USD) | RMSE (USD) | MAPE (%) | MAE vs no-change (%) | DM p |
 |---|---|---|---|---|---|
-| No-change (naive) | 46.63 | 0 | – | – | – |
-| Rolling drift (= always up) | 46.36 | +0.0057 | 55.2% | +0.0 | 1.000 |
-| Ridge | 47.87 | -0.0267 | 49.0% | -6.2 | 0.009 |
-| HistGB regressor | 50.68 | -0.0868 | 50.3% | -4.9 | 0.041 |
-| HistGB classifier | – | – | 52.6% | -2.7 | 0.255 |
-| **LSTM (walk-forward)** | 46.83 | -0.0043 | 51.9% | -3.3 | 0.155 |
-| Momentum rule | – | – | 45.2% | -10.0 | 0.000 |
+| No-change (naive) | 46.63 | 68.94 | 1.14 | – | – |
+| Rolling drift | 46.36 | 69.07 | 1.14 | -0.6 | 0.941 |
+| Ridge | 47.87 | 70.35 | 1.17 | +2.7 | 0.023 |
+| HistGB regressor | 50.68 | 75.05 | 1.24 | +8.7 | <0.001 |
+| **LSTM (walk-forward)** | 46.83 | 69.45 | 1.15 | +0.4 | 0.385 |
+
+Secondary, classification-style check (direction), all six models:
+
+| Model | Direction accuracy | vs always-up (pt) | p vs always-up | AUC |
+|---|---|---|---|---|
+| Rolling drift (= always up) | 55.2% | +0.0 | 1.000 | – |
+| Ridge | 49.0% | -6.2 | 0.009 | – |
+| HistGB regressor | 50.3% | -4.9 | 0.041 | – |
+| HistGB classifier | 52.6% | -2.7 | 0.255 | 0.498 |
+| **LSTM (walk-forward)** | 51.9% | -3.3 | 0.155 | 0.463 |
+| Momentum rule | 45.2% | -10.0 | 0.000 | – |
 
 **Interpretation.** The corrected LSTM's price error is essentially the no-change level and its direction accuracy is not
 distinguishable from always-up (95% CI 47.3-56.5%, AUC 0.46). With 449 test days the interval is about ±5 points, so small
@@ -1447,8 +1459,7 @@ that discipline matters most), and teardown instructions are all in
     ~70% target is a secondary analysis (thesis §3.7.4: always-up alone passes 70% at long horizons without any model, and ~70% sign
     accuracy on daily returns would need a correlation near 0.59). Remaining: confirm with the advisor how the 70% objective should be
     worded in the final report.
-15. **Optional: restructure Chapter 3 regression-first.** Lead Table 3.2 with MAE, RMSE, MAPE, R² and IC against the no-change
-    baseline and move Direction Accuracy and AUC into a secondary table; all the numbers are in `daily/results/walk_forward_results.json`.
+15. ~~Restructure Chapter 3 regression-first~~ **Done (2026-10-29):** see the Handoff block.
 16. **Keep results, README, thesis and dashboard on one window.** Every daily number is on 2025-01-09 to 2026-10-23 (n = 449). A refresh
     regenerates the main run and all four variants together, updates the README (Journey, §8.0, Phase 8 and 9), Chapter 3
     Tables 3.2-3.5 and keeps the previous outputs in a dated `snapshot_*` folder.
