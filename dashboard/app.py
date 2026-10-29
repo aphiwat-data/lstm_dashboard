@@ -149,6 +149,16 @@ def load_reg(results_mtime: float):
         return None
 
 
+@st.cache_data(show_spinner=False)
+def load_vol(results_mtime: float):
+    """daily/volatility_experiment.py output: per-day realised move vs. forecast sigma, and the QLIKE comparison of volatility models."""
+    try:
+        return (pd.read_csv(V2_DIR / "volatility_forecast.csv", parse_dates=["date"]),
+                json.loads((V2_DIR / "volatility_comparison.json").read_text()))
+    except Exception:
+        return None
+
+
 FEATURE_SEARCH = [  # label, results sub-folder under daily/results ("" = the main price-only run)
     ("Price history only", ""),
     ("+ cross-asset/macro (6 series)", "with_macro"),
@@ -820,6 +830,27 @@ with tab_data:
     st.plotly_chart(fig_vol, width="stretch")
 
     st.divider()
+
+    vol_file = V2_DIR / "volatility_comparison.json"
+    vol = load_vol(vol_file.stat().st_mtime if vol_file.exists() else 0.0)
+    if vol is not None and v2 is not None:
+        vdf, vcmp = vol
+        lo_p, hi_p = v2["latest_forecast"]["interval_90_close"]
+        sigma_now = np.log(hi_p / lo_p) / (2 * 1.6449) * 100  # the shipped band is Gaussian: half-width = 1.645 sigma
+        st.subheader("Volatility: forecast vs. realised")
+        st.caption("The forecast range in the header is a volatility forecast. Bars are the actual daily move; the line is the 90% half-width the model expected that day (1.645 × sigma).")
+        with st.container(horizontal=True, gap="medium"):
+            st.metric("Expected daily move (1 sigma)", f"{sigma_now:.2f}%", width=230, help="Sigma behind the current 90% range: an exponentially weighted average of recent squared errors.")
+            st.metric("Annualised", f"{sigma_now * np.sqrt(252):.1f}%", width=230, help="Daily sigma × √252.")
+            st.metric("VIX (S&P 500, previous close)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", width=230, help="Implied volatility of the US stock market, shown for context: it did not improve the gold forecast (see below).")
+        fig_vol = go.Figure()
+        fig_vol.add_trace(go.Bar(x=vdf["date"], y=vdf["abs_return_pct"], name="Actual daily move (%)", marker_color="#8a8a86", opacity=0.55))
+        fig_vol.add_trace(go.Scatter(x=vdf["date"], y=1.6449 * vdf["sigma_ewma_pct"], name="Expected 90% half-width (%)", line=dict(color=COLORS["LSTM Walk-Forward"], width=2.4)))
+        fig_vol.update_layout(height=320, margin=dict(t=10, b=10), yaxis=dict(title="% of price"), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0), hovermode="x unified")
+        st.plotly_chart(fig_vol, width="stretch", config={"displayModeBar": False})
+        rows = [{"Volatility model": r["model"], "QLIKE (lower = better)": f"{r['qlike']:.3f}", "vs. EWMA": "–" if r["dm_p_vs_ewma"] is None else f"{r['qlike_vs_ewma']:+.3f} (p = {r['dm_p_vs_ewma']:.2f})"} for r in vcmp["variance_forecasts"]]
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.caption("Scored on every test day against the realised squared move. The simple exponentially weighted average used here was not beaten by GARCH, by the VIX alone, or by models that add the VIX, so the VIX is not part of the forecast.")
 
     st.subheader("Daily Return Distribution")
     st.caption("Day-over-day percentage change, the quantity the model actually predicts.")

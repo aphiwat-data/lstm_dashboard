@@ -1,0 +1,150 @@
+{
+ "variance_forecasts": [
+  {
+   "model": "EWMA 0.94 (current)",
+   "qlike": -7.355451531997373,
+   "qlike_vs_ewma": 0.0,
+   "dm_p_vs_ewma": null,
+   "mse_variance_1e8": 53.81104736310903,
+   "mean_sigma_pct": 1.509159198322586
+  },
+  {
+   "model": "EWMA 0.97",
+   "qlike": -7.324898267730666,
+   "qlike_vs_ewma": 0.030553264266706463,
+   "dm_p_vs_ewma": 0.2730741155561982,
+   "mse_variance_1e8": 53.75062054925983,
+   "mean_sigma_pct": 1.525929320475519
+  },
+  {
+   "model": "GARCH(1,1)",
+   "qlike": -7.288402947391277,
+   "qlike_vs_ewma": 0.06704858460609518,
+   "dm_p_vs_ewma": 0.06935690380372139,
+   "mse_variance_1e8": 54.12905068312121,
+   "mean_sigma_pct": 1.3856549301211563
+  },
+  {
+   "model": "VIX scaled (ratio refit)",
+   "qlike": -6.686030652835625,
+   "qlike_vs_ewma": 0.6694208791617472,
+   "dm_p_vs_ewma": 0.0647087640994124,
+   "mse_variance_1e8": 55.7408214639847,
+   "mean_sigma_pct": 1.0158697657992999
+  },
+  {
+   "model": "EWMA 0.94 + VIX",
+   "qlike": -7.292152044049433,
+   "qlike_vs_ewma": 0.06329948794793906,
+   "dm_p_vs_ewma": 0.17468151747253202,
+   "mse_variance_1e8": 53.95502525856705,
+   "mean_sigma_pct": 1.385378099386494
+  },
+  {
+   "model": "EWMA 0.94 + EWMA 0.985",
+   "qlike": -7.278431728213093,
+   "qlike_vs_ewma": 0.07701980378427929,
+   "dm_p_vs_ewma": 0.050097197736009846,
+   "mse_variance_1e8": 54.1633379218468,
+   "mean_sigma_pct": 1.4115110186848352
+  },
+  {
+   "model": "EWMA 0.94 + EWMA 0.985 + VIX",
+   "qlike": -7.267345524587644,
+   "qlike_vs_ewma": 0.08810600740972822,
+   "dm_p_vs_ewma": 0.07263349461679236,
+   "mse_variance_1e8": 54.21914580900552,
+   "mean_sigma_pct": 1.379526458836402
+  }
+ ],
+ "intervals": [
+  {
+   "method": "EWMA 0.94 (current), Gaussian z",
+   "n": 389,
+   "coverage": 0.8920308483290489,
+   "mean_width_usd": 221.24811687408206,
+   "mean_width_pct": 5.25050183495418,
+   "interval_score_usd": 316.8262411634138,
+   "kupiec_p": 0.604500322321464,
+   "score_diff_vs_current": 0.0,
+   "score_diff_p": 1.0
+  },
+  {
+   "method": "EWMA 0.94 (current), empirical z",
+   "n": 389,
+   "coverage": 0.9125964010282777,
+   "mean_width_usd": 236.36447124211026,
+   "mean_width_pct": 5.618068639770505,
+   "interval_score_usd": 321.39023563741426,
+   "kupiec_p": 0.3983936823446538,
+   "score_diff_vs_current": 4.563994474000471,
+   "score_diff_p": 0.12708989669578896
+  },
+  {
+   "method": "EWMA 0.94 + VIX, Gaussian z",
+   "n": 389,
+   "coverage": 0.8637532133676092,
+   "mean_width_usd": 203.20033455839183,
+   "mean_width_pct": 4.7919441293732525,
+   "interval_score_usd": 321.5332089678315,
+   "kupiec_p": 0.02309694201414847,
+   "score_diff_vs_current": 4.706967804417716,
+   "score_diff_p": 0.27640266644468214
+  },
+  {
+   "method": "EWMA 0.94 + VIX, empirical z",
+   "n": 389,
+   "coverage": 0.8946015424164524,
+   "mean_width_usd": 233.9111263450522,
+   "mean_width_pct": 5.522851016404503,
+   "interval_score_usd": 324.8052602712376,
+   "kupiec_p": 0.7247332700112954,
+   "score_diff_vs_current": 7.97901910782379,
+   "score_diff_p": 0.009233376087442569
+  },
+  {
+   "method": "EWMA 0.94 + EWMA 0.985 + VIX, Gaussian z",
+   "n": 389,
+   "coverage": 0.8611825192802056,
+   "mean_width_usd": 203.35736321125887,
+   "mean_width_pct": 4.7770230356967005,
+   "interval_score_usd": 324.03927710133115,
+   "kupiec_p": 0.015281332433639494,
+   "score_diff_vs_current": 7.213035937917365,
+   "score_diff_p": 0.12071179717759728
+  },
+  {
+   "method": "EWMA 0.94 + EWMA 0.985 + VIX, empirical z",
+   "n": 389,
+   "coverage": 0.9023136246786633,
+   "mean_width_usd": 239.03054882402924,
+   "mean_width_pct": 5.623524484177614,
+   "interval_score_usd": 328.15381255615915,
+   "kupiec_p": 0.8786879483421552,
+   "score_diff_vs_current": 11.327571392745337,
+   "score_diff_p": 0.005201272491828002
+  },
+  {
+   "method": "GARCH(1,1), Gaussian z",
+   "n": 389,
+   "coverage": 0.8560411311053985,
+   "mean_width_usd": 202.93700880913653,
+   "mean_width_pct": 4.797147225135696,
+   "interval_score_usd": 322.4577269273962,
+   "kupiec_p": 0.006318348363612336,
+   "score_diff_vs_current": 5.6314857639823686,
+   "score_diff_p": 0.1857078455989729
+  },
+  {
+   "method": "GARCH(1,1), empirical z",
+   "n": 389,
+   "coverage": 0.8894601542416453,
+   "mean_width_usd": 231.04893849614123,
+   "mean_width_pct": 5.468036509168907,
+   "interval_score_usd": 326.8384906566927,
+   "kupiec_p": 0.49487582640017613,
+   "score_diff_vs_current": 10.012249493278928,
+   "score_diff_p": 0.005222993612149951
+  }
+ ]
+}

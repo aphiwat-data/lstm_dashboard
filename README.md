@@ -451,6 +451,8 @@ Result unchanged: no variant beats always-up (best FOMC+CPI 57.5%, AUC 0.520, p 
 - Sidebar now opens with the project credits (MFU and School of Applied Digital Technology logos side by side, title, degree, school, authors with
   student IDs, advisor, committee). Logos are served at full resolution (`st.image(width=...)` would downscale the file and look soft on Retina).
 - Tab order: Track record, Data explorer, How reliable?, Method.
+- Data explorer has a "Volatility: forecast vs. realised" section (30 Oct): expected daily move (1 sigma), annualised, the previous VIX close, a chart of actual daily moves against the
+  90% half-width the model expected, and the QLIKE table of volatility models (reads `daily/results/volatility_*`).
 - Advisor feedback (accuracy is a classification metric): the "Up/down calls correct" card was replaced by typical miss as % of price (MAPE); "How
   reliable?" now leads with price error, R², IC and a typical-miss-per-model chart, with up/down accuracy in a labelled secondary expander; delta
   chips are coloured by the statistical verdict (green/red only when p < 0.05, orange/blue when within noise).
@@ -476,6 +478,7 @@ advance) of past errors: **89.5% coverage (n = 389)**, width $223. The dashboard
 | 90% interval method comparison (`interval_experiment.py`, `lstm_quantile.py`; `interval_comparison.json`) | EWMA 89.5% (Kupiec p 0.73) beats empirical quantiles 85.9%, GARCH(1,1) 85.6% / FHS 85.3%, and an LSTM trained with pinball loss (63.5%, far too narrow). The LSTM band is as wide as a no-change band ($223 vs. $221): no sharpness gain |
 | Price 5 and 20 trading days ahead (`walk_forward_horizon.py`; `horizon_h5/`, `horizon_h20/`) | 5 days: MAE $109.50 vs. $109.19 (p = 0.43). 20 days: $216.95 vs. $219.40 (+1.1%, p = 0.59, only 21 independent windows). Ridge and HistGB worse than no-change at both |
 | VIX in the interval model (`interval_vix.py`; `interval_vix.json`) | Refit without VIX 87.1%, with same-day VIX 86.1%, with yesterday's VIX 86.4%, same interval score (322); VIX alone 77.1%. VIX has a positive coefficient (~0.2) but adds nothing out of sample |
+| Volatility forecasting itself (`volatility_experiment.py`; `volatility_comparison.json`, `volatility_forecast.csv`) | Scored with QLIKE (Patton 2011) and a DM test against EWMA(0.94) on 449 days: EWMA 0.94 -7.356 is best; EWMA 0.97 -7.325, GARCH(1,1) -7.288 (p = 0.07), EWMA + VIX -7.292, VIX scaled -6.686, EWMA + slower EWMA + VIX -7.267. Empirical standardised quantiles instead of Gaussian z fix coverage (89-90%) but widen the band and worsen the interval score. No volatility model beats the simple EWMA; the VIX does not enter the forecast |
 
 **10.5 Writing and decisions.** Chapter 3 of the thesis was restructured regression-first (Tables 3.2-3.6, interval paragraph, multi-day paragraph,
 VIX/alternatives sentences) and stays on the 449-day window; the final-report objective was reworded (next-day closing-price forecast judged by
