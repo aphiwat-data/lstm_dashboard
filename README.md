@@ -514,6 +514,10 @@ already applied to these files, not just described in prose.
 ## 2. Project Objectives, Scope & Plan (from the proposal)
 
 ### 2.1 Objectives
+
+> **Superseded wording (2026-10-29):** the final report's objective is a next-day gold closing-price forecast judged by regression metrics against the
+> no-change benchmark, with a calibrated 90% interval; no directional-accuracy target (see §12 item 14). The text below is the original proposal.
+
 1. To develop an LSTM-based time-series model for predicting the next-day
    gold closing price.
 2. To present results through an interactive analytical dashboard.
@@ -1456,11 +1460,11 @@ that discipline matters most), and teardown instructions are all in
     cross-asset features (silver, EURUSD, S&P 500, DXY as hourly bars) was run too and is also null (hourly
     addendum in the Journey); re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
     Dukascopy's rate limit allows.
-14. ~~Agree with the advisor what "~70% accuracy" refers to~~ **Largely resolved (2026-10-27):** the advisor said accuracy is a
-    classification metric and not the yardstick for a price forecast, so the dashboard and Chapter 3 lead with price error and the
-    ~70% target is a secondary analysis (thesis §3.7.4: always-up alone passes 70% at long horizons without any model, and ~70% sign
-    accuracy on daily returns would need a correlation near 0.59). Remaining: confirm with the advisor how the 70% objective should be
-    worded in the final report.
+14. ~~Agree with the advisor what "~70% accuracy" refers to~~ **Resolved (2026-10-29, decided by the project owner):** the ~70% direction
+    figure was an early expectation, not a written objective, and is not adopted. Objective wording for the final report: *a next-day gold
+    closing-price forecast, judged by regression metrics (MAE, RMSE, MAPE, Diebold-Mariano) against the no-change benchmark, with a 90% forecast
+    interval whose coverage is close to nominal.* Direction accuracy stays a secondary check (Chapter 3, Table 3.4); thesis §3.7.4 explains why
+    (always-up already scores 55.2%, and ~70% sign accuracy on daily returns would need a correlation near 0.59, an R² near 0.35).
 15. ~~Restructure Chapter 3 regression-first~~ **Done (2026-10-29):** see the Handoff block.
 16. **Keep results, README, thesis and dashboard on one window.** Every daily number is on 2025-01-09 to 2026-10-23 (n = 449). A refresh
     regenerates the main run and all four variants together, updates the README (Journey, §8.0, Phase 8 and 9), Chapter 3
