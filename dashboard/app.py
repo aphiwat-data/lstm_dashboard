@@ -38,6 +38,7 @@ SPLIT_DATE = "2024-12-31"
 RETRAIN_EVERY_DAYS = 7  # matches notebook 05's walk-forward RETRAIN_EVERY (simulated trading days)
 FORECAST_KEY = "gold/xauusd_daily/predictions/latest_forecast.json"  # written by automation/lambda_function.py
 FORECAST_LOG_KEY = "gold/xauusd_daily/predictions/forecast_log.csv"
+STREAM_LOG_KEY = "bronze/streaming/xauusd_daily_incremental.csv"
 
 FEATURE_LABELS = {
     "return": "Daily Return",
@@ -124,6 +125,16 @@ def get_lambda_forecast():
         return json.loads(obj["Body"].read())
     except Exception:
         return None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_stream_closes():
+    """Closes the daily Lambda has appended after the last walk-forward run (bronze/streaming log); empty when unavailable."""
+    try:
+        obj = boto3.client("s3").get_object(Bucket=S3_BUCKET, Key=STREAM_LOG_KEY)
+        return pd.read_csv(obj["Body"], parse_dates=["date"])[["date", "close"]]
+    except Exception:
+        return pd.DataFrame(columns=["date", "close"])
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -296,6 +307,9 @@ _v2_file = V2_DIR / "walk_forward_results.json"
 v2, v2_preds          = load_v2(_v2_file.stat().st_mtime if _v2_file.exists() else 0.0)
 _reg_file = V2_DIR / "regression_metrics.json"
 reg = load_reg(_reg_file.stat().st_mtime if _reg_file.exists() else 0.0)  # mtime in the cache key: a refresh shows up without a restart
+# The daily pipeline's forecast is shown whenever it is newer than the forecast stored with the last walk-forward run
+live_fc = lambda_forecast if (lambda_forecast is not None and v2 is not None and pd.Timestamp(lambda_forecast["as_of_date"]) > pd.Timestamp(v2["latest_forecast"]["as_of_date"])) else None
+cur_fc = live_fc if live_fc is not None else (v2["latest_forecast"] if v2 is not None else None)
 
 # 30-day rolling volatility, computed on the fly for the dashboard view (the
 # model itself trains on the 7-day volatility_7 feature — see Feature Explorer)
@@ -325,7 +339,7 @@ with st.sidebar:
     )
     st.divider()
     if v2 is not None:
-        st.caption(f"Data through **{v2['latest_forecast']['as_of_date']}** · generated {v2['latest_forecast']['generated_at'][:10]}")
+        st.caption(f"Data through **{cur_fc['as_of_date']}** · generated {cur_fc['generated_at'][:10]}")
     else:
         st.caption(f"Data through **{latest_row['date'].date()}**")
     with st.expander("Model and data details"):
@@ -381,8 +395,11 @@ def edge_color(edge: str, diff: float) -> str:
 
 def forecast_inputs() -> dict:
     if v2 is not None:
-        lf = v2["latest_forecast"]
+        lf = cur_fc
         hist = v2_preds[["date", "meta_close"]].rename(columns={"meta_close": "close"})
+        if live_fc is not None:  # closes the daily pipeline appended after the last walk-forward run
+            extra = get_stream_closes()
+            hist = pd.concat([hist, extra[extra["date"] > hist["date"].max()]], ignore_index=True)
         as_of = pd.Timestamp(lf["as_of_date"])
         if as_of > hist["date"].max():
             hist = pd.concat([hist, pd.DataFrame({"date": [as_of], "close": [lf["latest_close"]]})], ignore_index=True)
@@ -444,7 +461,7 @@ def forecast_chart(fi: dict, window_days: int) -> go.Figure:
 
 fi = forecast_inputs()
 st.markdown("### Next-Day Gold Price Forecast")
-st.caption("XAU/USD · LSTM model, retrained every 7 trading days")
+st.caption("XAU/USD · LSTM model, retrained every 7 trading days" + (" · updated daily by the AWS pipeline" if live_fc is not None else ""))
 render_hero(fi)
 win = st.radio("History shown", list(WINDOWS), index=1, horizontal=True, label_visibility="collapsed", key="hero_window")
 st.plotly_chart(forecast_chart(fi, WINDOWS[win]), width="stretch", config={"displayModeBar": False})
@@ -846,7 +863,7 @@ with tab_data:
     vol = load_vol(vol_file.stat().st_mtime if vol_file.exists() else 0.0)
     if vol is not None and v2 is not None:
         vdf, vcmp = vol
-        lo_p, hi_p = v2["latest_forecast"]["interval_90_close"]
+        lo_p, hi_p = cur_fc["interval_90_close"]
         sigma_now = np.log(hi_p / lo_p) / (2 * 1.6449) * 100  # the shipped band is Gaussian: half-width = 1.645 sigma
         st.subheader("Volatility: forecast vs. realised")
         st.caption("The forecast range in the header is a volatility forecast. Bars are the actual daily move; the line is the 90% half-width the model expected that day (1.645 × sigma).")

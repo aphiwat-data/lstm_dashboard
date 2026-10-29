@@ -531,6 +531,8 @@ least-privilege policy now grants ListBucket on the bucket, object access stays 
 a warm Lambda container kept the old weights (it now checks the object's ETag); an all-empty CSV column was read back as float and broke the second day's scoring (caught by the tests); at 08:00 Thailand
 time a new COMEX session has started and Yahoo shows a partial bar for it (only bars whose session ended, 17:00 New York, are accepted).
 
+Dashboard hero (29 Oct): the header forecast, range, sidebar "data through" line, volatility section and the history chart now use the Lambda's `latest_forecast.json` whenever its as-of date is newer than the forecast stored with the last walk-forward run (`daily/results/latest_forecast.json`); closes after that run are filled from the Lambda's streaming log, and the page falls back to the repository files if S3 cannot be read. The track record and metric cards still come from the walk-forward results.
+
 Honest status: deployed and invoked manually on 2026-10-29; the schedule is ENABLED and its first unattended run is 2026-10-30 01:00 UTC. The live track record starts with the forecast for 2026-10-28 and
 only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the IAM user `Auto` lacks SNS/CloudWatch permissions and the permissions were not widened); the empty ECR repo from September was deleted on request (2026-10-29). Cost: Lambda (a few seconds a day) and S3 are far inside the free tier. Operating it: `python3 automation/deploy.py apply` (safe to repeat),
 `python3 automation/retrain.py` weekly, `python3 automation/deploy.py teardown` removes everything except the S3 data.
