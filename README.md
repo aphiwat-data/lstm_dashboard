@@ -41,7 +41,9 @@ better:
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
-The write-up is a well-instrumented negative result. The feature-search line is closed (Phase 9); do not reopen it without a new idea.
+So far the write-up is a well-instrumented negative result. **The project is open to new approaches**: the old proposal and its ~70% target are superseded
+and the advisor allows trying anything. The feature searches in Phase 9 were null (evidence, not a prohibition); judge new ideas with the
+regression-first metrics and the same causal protocol.
 
 **Metric policy (advisor, 2026-10-27).** Directional accuracy is a classification metric, not the yardstick for a price forecast. Lead
 with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" baseline and keep up/down accuracy only as a labelled
@@ -1446,11 +1448,11 @@ that discipline matters most), and teardown instructions are all in
     path) to bring it forward, or pass a locally extended silver parquet to `--silver`. When refreshing, re-run the main walk-forward
     **and all four feature-search variants on the same rows**, and update the README, Chapter 3 and the dashboard together; delete or
     repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first, because a stale cache is reused as-is (see Handoff).
-13. **Daily-pipeline cross-asset + calendar + COT features: closed, done (Phase 9, all addenda), null** —
+13. **Daily-pipeline cross-asset + calendar + COT features: done (Phase 9, all addenda), null** —
     DXY, silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates), CPI (271 dates) and CFTC Commitment of
     Traders positioning all added to the daily model; best single result is LSTM AUC 0.520 (macro+NFP+FOMC+CPI,
     without COT), p vs. always-up = 0.367 — closer than every other variant but never significant; adding COT
-    on top made it worse (AUC 0.498). This line of investigation is considered closed. The hourly version of
+    on top made it worse (AUC 0.498). This particular feature search found nothing; other ideas remain open. The hourly version of
     cross-asset features (silver, EURUSD, S&P 500, DXY as hourly bars) was run too and is also null (hourly
     addendum in the Journey); re-download the four missing ask months (2014-04, 2015-07, 2016-08, 2026-09) once
     Dukascopy's rate limit allows.

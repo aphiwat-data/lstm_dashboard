@@ -16,7 +16,9 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
   re-runs the main run and all four feature-search variants on the same rows, then updates README, dashboard and thesis tables in
   the same change. Keep the previous outputs in a dated `daily/results/snapshot_*` folder, and delete stale
   `daily/data/*_cache.parquet` files first (they are reused without checking their end date).
-- **The feature-search line is closed** (macro, NFP, FOMC+CPI, COT on daily and hourly data: all null). Do not reopen it without a new idea.
+- **The project is open to new approaches.** The old proposal and its targets (including the ~70% direction accuracy) are superseded; the advisor
+  allows trying anything. The earlier feature searches (macro, NFP, FOMC+CPI, COT; daily and hourly) were null: treat that as evidence, not a
+  prohibition. Judge every new idea with the regression-first metrics and the causal, same-window protocol, and report nulls honestly.
 - **Dashboard (`dashboard/app.py`).** Native Streamlit elements only (no `unsafe_allow_html`), `width="stretch"`, escape dollar signs
   in markdown as `\$`, and use `st.container(horizontal=True)` instead of `st.columns` where the open sidebar would squeeze content.
   Streamlit Cloud installs a newer Streamlit than local development used, so check layout changes at 1280, 1024, 900, 760 and 390 px
