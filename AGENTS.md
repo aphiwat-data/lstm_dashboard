@@ -25,8 +25,8 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
   and on the live URL after pushing.
 - **`main` is the deployed branch.** Every push redeploys the public app within about a minute. Make small commits and run
   `python3 -m py_compile dashboard/app.py` before pushing.
-- **Thesis files live outside this repo** (Chapter 3 Word document and backups). If you edit them, keep a backup and make every number
-  match the README.
+- **Document results in `README.md` only.** The owner will rewrite the paper from scratch, so do not edit Chapter 3 or other Word files; keep the
+  README (Journey / Phase notes, scoreboard, Handoff) current after every piece of work.
 
 ## Commands
 
