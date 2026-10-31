@@ -6,9 +6,15 @@ import pandas as pd
 
 
 def price_verdict(lstm: dict) -> str:
-    """'better' | 'worse' | 'same' for the LSTM's price error against the baseline "tomorrow = today" (Diebold-Mariano p < 0.05)."""
+    """'better' | 'worse' | 'same' for the LSTM's price error against "tomorrow = today" (Diebold-Mariano p < 0.05)."""
     p, skill = lstm["dm_p_vs_naive"], lstm["mae_skill_vs_naive"]
     return "better" if p < 0.05 and skill > 0 else "worse" if p < 0.05 and skill < 0 else "same"
+
+
+def direction_verdict(lstm: dict, always_up: float) -> str:
+    hd = lstm["direction_from_head"]
+    p = hd["p_vs_always_up"]
+    return "better" if p < 0.05 and hd["acc"] > always_up else "worse" if p < 0.05 and hd["acc"] < always_up else "same"
 
 
 def pct_miss(preds: pd.DataFrame) -> tuple[float, float]:

@@ -25,8 +25,8 @@ track, explorer, reliable, about = st.tabs([":material/history: Track record", "
 with track:
     tab_track.render(preds, data.live_log())
 with explorer:
-    tab_market.render(data.prices())
+    tab_market.render(data.prices(), cur, data.volatility())
 with reliable:
-    tab_reliability.render(res, preds, reg)
+    tab_reliability.render(res, preds, reg, *data.interval_tests())
 with about:
-    tab_about.render(res)
+    tab_about.render(res, reg, data.prices())

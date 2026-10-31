@@ -583,13 +583,11 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   555 px (Streamlit 1.56) and 578 px (1.66.1) below a 67 px header. The owner then found it a little small, so the sidebar is now a fixed 320 px wide (`st.set_page_config(initial_sidebar_state=320)`;
   1.66 would otherwise size it in rem, 263 px at a 14 px base, while 1.56 keeps 300 px), the logos are bigger, the title is a heading, and the names and student IDs are body size. It measures about 595 px:
   plenty of room in an 857 px window, a few pixels of scroll in a 650 px one. A local preview server must be restarted after editing `config.toml` or a `ui/` module (a plain reload showed stale code several times).
-- **Plain wording and only what a general reader needs (30 Oct, owner feedback).** One name per idea everywhere: *baseline* ("tomorrow = today", also called the naive baseline), *this model* (the LSTM
-  shown in the header), *typical error*, *range hit rate*. Vague labels were replaced ("Used here", "No clear edge", "Range accuracy", "half-width", cryptic input names). Parts a general reader does not
-  need were **removed from the page** (the numbers stay in this README and in `daily/results/`): R², rank correlation, AUC and the full statistics table, the up/down side check, the comparison of other
-  models and of range methods (GARCH, VIX, quantile LSTM), the volatility-model comparison, volume, the daily-change histogram, the model-input charts and the experiment chart. What remains: *Track record*
-  (live record and one backtest chart, "Actual close" against "Forecast made the day before"), *Data explorer* (price history and how much gold moves per day), *How reliable?* (verdict, two numbers of
-  evidence and a two-bar error chart) and *About* (steps, one line on the other ideas tried, short glossary). Chart text no longer collides: bar values sit beside the bars, there are no reference lines
-  crossing labels, and every chart is checked with a script that compares the bounding boxes of all its text (no overlaps found).
+- **Plain wording, no overlapping chart text (30 Oct, owner feedback).** One name per idea everywhere: *baseline* ("tomorrow = today", also called the naive baseline), *this model* (the LSTM shown in the
+  header), *typical error*, *range hit rate*. Vague labels were replaced ("Used here", "No clear edge", "Range accuracy", "half-width"); the backtest legend reads "Actual close" and "Forecast made the
+  day before". Bar values now sit in the labels under the bars and reference lines are drawn behind the bars, so no text collides; every chart is checked with a script that compares the bounding boxes of all
+  its text. A first attempt also deleted the statistics, model comparisons, volatility and input charts to suit "general users"; the owner objected (too many charts gone), so that commit was reverted and all
+  charts are back. Do not remove charts without being asked.
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
   `requirements.txt` rendered identically; live URL checked after the push.
 

@@ -1,12 +1,13 @@
-"""Track record: the live record (forecasts logged by the daily pipeline, scored once the next close is known) and the backtest on past days."""
+"""Track record: the live record (forecasts logged by the daily pipeline, scored once the next close is known) and the walk-forward backtest."""
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 
-from .theme import COLORS, finish, usd
+from .theme import COLORS, ERROR_OVER, ERROR_UNDER, finish, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "All": None}
 
@@ -35,18 +36,25 @@ def _live(log: pd.DataFrame | None) -> None:
 
 @st.fragment
 def _backtest(preds: pd.DataFrame) -> None:
-    st.subheader(f"Backtest · {len(preds)} past days", help="How the model would have done on past days: it is retrained every 7 trading days and judged only on later days, as in real use. "
-                 "Each forecast was made the day before the close it predicts.")
+    st.subheader(f"Backtest · {len(preds)} test days", help="The model is retrained every 7 trading days and judged only on later days, as in real use. Each point is a forecast made the day before. "
+                 "Red bars: the price ended above the forecast; blue bars: below.")
     window = st.segmented_control("Window", list(WINDOWS), default="3M", key="bt_window", label_visibility="collapsed") or "3M"
     q = preds if WINDOWS[window] is None else preds.tail(WINDOWS[window])
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=q["date"], y=q["meta_next_close"], name="Actual close", line=dict(color=COLORS["actual"], width=2.2), hovertemplate="%{x|%d %b %Y}<br>Actual <b>$%{y:,.2f}</b><extra></extra>"))
-    fig.add_trace(go.Scatter(x=q["date"], y=q["meta_close"] * np.exp(q["pred_ret_lstm"]), name="Forecast made the day before", line=dict(color=COLORS["model"], width=2, dash="dash"),
-                             hovertemplate="Forecast <b>$%{y:,.2f}</b><extra></extra>"))
-    finish(fig, 380, legend=True)
-    fig.update_layout(legend=dict(x=0, xanchor="left"))
-    fig.update_yaxes(tickprefix="$", tickformat=",.0f")
+    forecast = q["meta_close"] * np.exp(q["pred_ret_lstm"])
+    miss = q["meta_next_close"] - forecast
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28], vertical_spacing=0.07,
+                        subplot_titles=("Next-day close", "Miss (actual − forecast, USD)"))
+    fig.add_trace(go.Scatter(x=q["date"], y=q["meta_next_close"], name="Actual close", line=dict(color=COLORS["actual"], width=2.2)), row=1, col=1)
+    fig.add_trace(go.Scatter(x=q["date"], y=forecast, name="Forecast made the day before", line=dict(color=COLORS["model"], width=2, dash="dash")), row=1, col=1)
+    fig.add_trace(go.Bar(x=q["date"], y=miss, marker_color=[ERROR_UNDER if m >= 0 else ERROR_OVER for m in miss], showlegend=False, name="Miss"), row=2, col=1)
+    fig.add_hline(y=0, line_color="rgba(128,128,128,.6)", line_width=1, row=2, col=1)
+    finish(fig, 470, legend=True)
+    fig.update_layout(legend=dict(x=1, xanchor="right"))
+    fig.update_yaxes(tickprefix="$", tickformat=",.0f", row=1, col=1)
+    fig.update_annotations(font_size=12, xanchor="left", x=0)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    st.download_button("Download CSV", data=preds.to_csv(index=False).encode("utf-8"), file_name="daily_walk_forward_predictions.csv", mime="text/csv",
+                       icon=":material/download:")
 
 
 def render(preds: pd.DataFrame | None, log: pd.DataFrame | None) -> None:
