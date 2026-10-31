@@ -23,8 +23,8 @@ def _live(log: pd.DataFrame | None) -> None:
     inside = scored["inside_90"].astype(str).str.lower().eq("true")
     with st.container(horizontal=True, gap="small"):
         st.metric("Forecasts scored", f"{len(scored)}", border=True, width="stretch")
-        st.metric("Typical error", usd(miss_model), f"baseline: {usd(miss_naive)}", delta_color="off", delta_arrow="off", border=True, width="stretch")
-        st.metric("Range hit rate", f"{int(inside.sum())} of {len(scored)}", f"{inside.mean():.0%} · target 90%", delta_color="off", delta_arrow="off", border=True, width="stretch")
+        st.metric("Average miss per day", usd(miss_model), f"simple guess: {usd(miss_naive)}", delta_color="off", delta_arrow="off", border=True, width="stretch")
+        st.metric("Price stayed in the range", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%} · goal 90%", delta_color="off", delta_arrow="off", border=True, width="stretch")
     show = scored.tail(15).iloc[::-1].assign(inside=lambda d: d["inside_90"].astype(str).str.lower().eq("true"))
     table = pd.DataFrame({"Forecast made": show["as_of_date"], "Forecast for": pd.to_datetime(show["next_date"]), "Forecast": show["predicted_next_close"],
                           "Actual close": show["actual_next_close"], "Actual − Forecast": (show["actual_next_close"] - show["predicted_next_close"]), "In range?": show["inside"]})

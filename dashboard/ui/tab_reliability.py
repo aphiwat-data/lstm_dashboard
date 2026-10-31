@@ -17,7 +17,7 @@ def _verdict(lstm: dict, verdict: str) -> None:
     elif verdict == "worse":
         st.error("**Worse than the simple baseline.** The typical error is clearly higher than repeating today's price.", icon=":material/cancel:")
     else:
-        st.info("**Not better than the baseline.** Level with “tomorrow = today”, so read it as *about today's close*. The range, however, is trustworthy.", icon=":material/balance:")
+        st.info("**Not better than a simple guess.** It does about as well as repeating today's price (the baseline), so read it as *about today's close*. The range, however, is trustworthy.", icon=":material/balance:")
 
 
 def _row(label: str, value: str, chip: str, color: str, line: str, help: str) -> None:
@@ -33,7 +33,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
     pct_n = pct_miss(preds)[1]
     st.subheader("The evidence", help=f"Based on {res['protocol']['n_test']} test days ({res['protocol']['test_start']} to {res['protocol']['test_end']}); small differences are within noise.")
     with st.container(border=True):
-        _row("Typical error", usd(lstm["mae_usd"]), f"{signed_usd(lstm['mae_usd'] - lstm['naive_mae_usd'])} vs. baseline", edge_color(verdict, lstm["mae_usd"] - lstm["naive_mae_usd"]),
+        _row("Average miss per day", usd(lstm["mae_usd"]), f"{signed_usd(lstm['mae_usd'] - lstm['naive_mae_usd'])} vs. baseline", edge_color(verdict, lstm["mae_usd"] - lstm["naive_mae_usd"]),
              f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])}.",
              f"That guess misses by {pct_n:.2f}% of the price. The model {PHRASE[verdict]} it (p = {lstm['dm_p_vs_naive']:.2f}; below 0.05 counts as a clear difference).")
         if reg:
@@ -45,7 +45,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
                  "Below 0 means no better than a simple average.",
                  f"Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: {m['ic_spearman']:+.3f} (p = {m['ic_p']:.2f}).")
             st.divider()
-            _row("Range hit rate", f"{e['coverage']:.1%}", "Target 90%", "green" if abs(e["coverage"] - 0.9) <= 0.02 else "orange",
+            _row("Price stayed in the range", f"{e['coverage']:.1%}", "Target 90%", "green" if abs(e["coverage"] - 0.9) <= 0.02 else "orange",
                  f"The range held on {round(e['coverage'] * e['n'])} of {e['n']} test days.",
                  f"Ideal: 90%. Its width, {usd(e['mean_width_usd'], 0)}, is the same as a no-change range ({usd(nc['mean_width_usd'], 0)}): the model does not narrow the uncertainty.")
 

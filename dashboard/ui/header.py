@@ -69,13 +69,13 @@ def _trust_strip(res: dict, preds: pd.DataFrame, reg: dict | None) -> None:
     cov = reg["interval"]["lstm_ewma_gaussian"]["coverage"] if reg else None
     n_cov = reg["interval"]["lstm_ewma_gaussian"]["n"] if reg else None
     with st.container(horizontal=True, gap="small"):
-        st.metric("Typical error", usd(lstm["mae_usd"]), f"{pct_l:.2f}% of the price", delta_color="off", delta_arrow="off", border=True, width="stretch",
+        st.metric("Average miss per day", usd(lstm["mae_usd"]), f"only {pct_l:.2f}% of the price", delta_color="off", delta_arrow="off", border=True, width="stretch",
                   help=f"Average gap between the forecast and the actual next-day close, measured over the whole test period ({res['protocol']['n_test']} trading days).")
         if cov is not None:
-            st.metric("Range hit rate", f"{cov:.1%}", "Target 90%", delta_color="green" if abs(cov - 0.9) <= 0.02 else "orange", delta_arrow="off", border=True, width="stretch",
+            st.metric("Price stayed in the range", f"{cov:.1%}", "of days · goal 90%", delta_color="green" if abs(cov - 0.9) <= 0.02 else "orange", delta_arrow="off", border=True, width="stretch",
                       help=f"How often the actual close landed inside the 90% range over {n_cov} test days, using only information known before each forecast. 90% is ideal.")
-        st.metric("Beats the baseline?", VERDICT_WORDS[verdict], f"{signed_usd(diff)} error vs. baseline", delta_color=edge_color(verdict, diff), delta_arrow="off",
-                  border=True, width="stretch", help=f"The baseline is the simplest forecast: repeat today's price (“tomorrow = today”). The chip is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
+        st.metric("Better than a simple guess?", VERDICT_WORDS[verdict], f"{signed_usd(diff)} miss vs. simple guess", delta_color=edge_color(verdict, diff), delta_arrow="off",
+                  border=True, width="stretch", help=f"The simple guess (the baseline) is: tomorrow's price = today's price. The chip is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
 
 
 def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame | None, reg: dict | None) -> None:
@@ -110,8 +110,8 @@ def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame 
             with st.popover("How to read this", icon=":material/help:"):
                 st.markdown(
                     "- **Forecast:** the model's estimate of tomorrow's closing price.\n"
-                    "- **Range:** where the close should land 9 days out of 10; a wider range means more uncertainty.\n"
-                    "- **Typical error:** how far off the forecast has been on average in testing.\n"
-                    "- **Beats the baseline?** The baseline is the simplest forecast: repeat today's price (“tomorrow = today”). A model is only useful if it does clearly better.\n\n"
+                    "- **Range / stayed in the range:** where the close should land 9 days out of 10, and how often it really did; a wider range means more uncertainty.\n"
+                    "- **Average miss per day:** how far off the forecast has been on average in testing.\n"
+                    "- **Better than a simple guess?** The simple guess (the baseline) just repeats today's price (“tomorrow = today”). A model is only useful if it does clearly better.\n\n"
                     "The **How reliable?** tab shows the evidence behind each number."
                 )

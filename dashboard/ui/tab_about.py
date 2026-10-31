@@ -20,12 +20,12 @@ STEPS = [
 SHORT = {"+ macro and cross-asset prices": "LSTM + other markets", "+ NFP release days": "LSTM + jobs-report days", "+ FOMC and CPI release days": "LSTM + Fed and inflation days", "+ CFTC positioning": "LSTM + trader positioning"}
 GLOSSARY = [
     ("LSTM", "A neural network built for sequences. Here it reads the last 20 days and predicts the next day's price change."),
-    ("Typical error (MAE)", "The average gap between the forecast and the actual close, in dollars. Lower is better."),
+    ("Average miss per day (typical error, MAE)", "The average gap between the forecast and the actual close, in dollars. Lower is better."),
     ("Baseline (“tomorrow = today”)", "The benchmark that simply repeats today's close, also called the naive or no-change forecast. A price forecast is only useful if it clearly beats this."),
     ("p-value", "How likely a difference this large would be to appear by luck alone. Below 0.05 counts as a clear difference; above it, the two are treated as equal."),
     ("R² (out-of-sample)", "The share of the daily price move the forecast explains. 0 means no better than a simple average; below 0 means worse."),
     ("Rank correlation (IC)", "Whether days with a higher forecast really had higher actual moves. 0 means no relationship, 1 a perfect match."),
-    ("90% range and coverage", "Where the close should land 9 days out of 10. Coverage is how often it really did; 90% is ideal."),
+    ("90% range and how often the price stayed in it", "Where the close should land 9 days out of 10, and how often it really did; 90% is ideal."),
     ("Walk-forward test", "Retrain on the past, test on the days that follow, then move forward and repeat, so the model never sees the days it is judged on."),
     ("EWMA", "Exponentially weighted moving average: recent values count more than old ones. Used to size the range."),
     ("VIX", "The “fear gauge” of the US stock market. Tested as an input; it did not help."),
