@@ -17,11 +17,11 @@ STEPS = [
     ("Add the range", "a 90% range from the model's recent errors"),
     ("Publish and score", "saved to Amazon S3, scored when the real close arrives"),
 ]
-SHORT = {"+ macro and cross-asset prices": "+ macro prices", "+ NFP release days": "+ NFP days", "+ FOMC and CPI release days": "+ FOMC and CPI days", "+ CFTC positioning": "+ positioning (COT)"}
+SHORT = {"+ macro and cross-asset prices": "LSTM + other markets", "+ NFP release days": "LSTM + jobs-report days", "+ FOMC and CPI release days": "LSTM + Fed and inflation days", "+ CFTC positioning": "LSTM + trader positioning"}
 GLOSSARY = [
     ("LSTM", "A neural network built for sequences. Here it reads the last 20 days and predicts the next day's price change."),
     ("Typical error (MAE)", "The average gap between the forecast and the actual close, in dollars. Lower is better."),
-    ("“Tomorrow = today”", "The benchmark that simply repeats today's close. A price forecast is only useful if it clearly beats this."),
+    ("Baseline (“tomorrow = today”)", "The benchmark that simply repeats today's close, also called the naive or no-change forecast. A price forecast is only useful if it clearly beats this."),
     ("p-value", "How likely a difference this large would be to appear by luck alone. Below 0.05 counts as a clear difference; above it, the two are treated as equal."),
     ("R² (out-of-sample)", "The share of the daily price move the forecast explains. 0 means no better than a simple average; below 0 means worse."),
     ("Rank correlation (IC)", "Whether days with a higher forecast really had higher actual moves. 0 means no relationship, 1 a perfect match."),
@@ -46,14 +46,14 @@ def _pipeline() -> None:
 
 def _experiments(res: dict) -> pd.DataFrame:
     models, rows = res["models"], []
-    for key, label in (("lstm", "LSTM (this model)"), ("ridge", "Ridge regression"), ("hist_gb_reg", "Gradient boosting")):
+    for key, label in (("lstm", "LSTM (this model)"), ("ridge", "Ridge (linear model)"), ("hist_gb_reg", "Gradient boosting (trees)")):
         m = models[key]
         rows.append(("Other models" if key != "lstm" else "Main model", label, label, m["mae_usd"], m["naive_mae_usd"], m["dm_p_vs_naive"], res["protocol"]["n_test"]))
     for r in feature_rows()[1:]:
         rows.append(("Extra inputs", SHORT.get(r["label"], r["label"]), "LSTM " + r["label"], r["mae"], r["naive_mae"], r["dm_p"], r["n"]))
     for h, r in horizons().items():
         m = r["models"]["lstm"]
-        rows.append(("Longer horizon", f"{h}-day forecast", f"LSTM, price {h} trading days ahead", m["mae_usd"], m["naive_mae_usd"], m["dm_p_vs_naive"], r["protocol"]["n_test"]))
+        rows.append(("Longer horizon", f"LSTM, {h} days ahead", f"LSTM, price {h} trading days ahead", m["mae_usd"], m["naive_mae_usd"], m["dm_p_vs_naive"], r["protocol"]["n_test"]))
     d = pd.DataFrame(rows, columns=["group", "short", "label", "mae", "naive", "p", "n"])
     d["diff_pct"] = (d["mae"] / d["naive"] - 1) * 100
     d["verdict"] = ["No clear difference" if p >= 0.05 else "Better" if x < 0 else "Worse" for p, x in zip(d["p"], d["diff_pct"])]
@@ -73,17 +73,17 @@ def _scoreboard(res: dict | None) -> None:
                            customdata=d[["mae", "naive", "p"]], hovertemplate="%{y}<br>Typical error $%{customdata[0]:.2f} vs. $%{customdata[1]:.2f} for “tomorrow = today”<br>p = %{customdata[2]:.2f}<extra></extra>"))
     fig.add_vline(x=0, line_color="rgba(128,128,128,.7)", line_width=1)
     finish(fig, 60 + 34 * len(d), hover="closest")
-    fig.update_xaxes(range=[-lim, lim], ticksuffix="%", title_text="Error vs. “tomorrow = today” (left = better)", title_font_size=12, showgrid=True, gridcolor="rgba(128,128,128,0.16)")
+    fig.update_xaxes(range=[-lim, lim], ticksuffix="%", title_text="Error vs. baseline (left = better)", title_font_size=12, showgrid=True, gridcolor="rgba(128,128,128,0.16)")
     fig.update_yaxes(autorange="reversed", automargin=True, showgrid=False)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     better, worse = (d["verdict"] == "Better").sum(), (d["verdict"] == "Worse").sum()
-    st.caption("Grey: within noise" + (" · Red: clearly worse" if worse else "") + (" · Green: clearly better" if better else "") + (". Nothing came out clearly better." if not better else "."))
+    st.caption("Grey: no real difference" + (" · Red: clearly worse" if worse else "") + (" · Green: clearly better" if better else "") + (". Nothing came out clearly better." if not better else "."))
     if d.loc[d["group"] != "Longer horizon", "n"].nunique() > 1:
         st.warning("These rows were evaluated on different test windows (see the table), so they are not strictly comparable.", icon=":material/warning:")
     with st.expander("See the numbers", icon=":material/table:"):
-        table = pd.DataFrame({"Experiment": d["label"], "Typical error": d["mae"], "“Tomorrow = today”": d["naive"], "Difference": d["diff_pct"], "p-value": d["p"], "Verdict": d["verdict"], "Test days": d["n"]})
+        table = pd.DataFrame({"Experiment": d["label"], "Typical error": d["mae"], "Baseline": d["naive"], "Difference": d["diff_pct"], "p-value": d["p"], "Verdict": d["verdict"], "Test days": d["n"]})
         st.dataframe(table, width="stretch", hide_index=True, column_config={
-            "Typical error": st.column_config.NumberColumn(format="$%.2f"), "“Tomorrow = today”": st.column_config.NumberColumn(format="$%.2f"),
+            "Typical error": st.column_config.NumberColumn(format="$%.2f"), "Baseline": st.column_config.NumberColumn(format="$%.2f"),
             "Difference": st.column_config.NumberColumn(format="%+.1f%%"), "p-value": st.column_config.NumberColumn(format="%.2f"), "Test days": st.column_config.NumberColumn(format="%d")})
         st.caption("Longer-horizon p-values are adjusted for overlapping forecasts.")
 

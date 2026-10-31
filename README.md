@@ -584,8 +584,8 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
   1.66 would otherwise size it in rem, 263 px at a 14 px base, while 1.56 keeps 300 px), the logos are bigger, the title is a heading, and the names and student IDs are body size. It measures about 595 px:
   plenty of room in an 857 px window, a few pixels of scroll in a 650 px one. A local preview server must be restarted after editing `config.toml` or a `ui/` module (a plain reload showed stale code several times).
 - **Plain wording, no overlapping chart text (30 Oct, owner feedback).** One name per idea everywhere: *baseline* ("tomorrow = today", also called the naive baseline), *this model* (the LSTM shown in the
-  header), *typical error*, *range hit rate*. Vague labels were replaced ("Used here", "No clear edge", "Range accuracy", "half-width"); the backtest legend reads "Actual close" and "Forecast made the
-  day before". Bar values now sit in the labels under the bars and reference lines are drawn behind the bars, so no text collides; every chart is checked with a script that compares the bounding boxes of all
+  header), *typical error*, *range hit rate*. Vague labels were replaced ("Used here", "No clear edge", "Range accuracy", "half-width"); the backtest reads "Actual vs. forecast price" with the legend "Actual" / "Forecast" and "Actual − Forecast ($)" for the
+  gap bars; model and input labels are spelled out ("LSTM + other markets", "Ridge (linear model)", "Follow last move"). Bar values now sit in the labels under the bars and reference lines are drawn behind the bars, so no text collides; every chart is checked with a script that compares the bounding boxes of all
   its text. A first attempt also deleted the statistics, model comparisons, volatility and input charts to suit "general users"; the owner objected (too many charts gone), so that commit was reverted and all
   charts are back. Do not remove charts without being asked.
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new

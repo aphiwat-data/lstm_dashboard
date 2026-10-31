@@ -52,9 +52,9 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
         fig.update_yaxes(ticksuffix="%")
         st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
         with st.expander("Which volatility model works best?", icon=":material/query_stats:"):
-            rows = [{"Model": r["model"], "Score": r["qlike"], "vs. this model": r["qlike_vs_ewma"], "p-value": r["dm_p_vs_ewma"]} for r in comparison["variance_forecasts"]]
+            rows = [{"Model": r["model"], "Error score": r["qlike"], "vs. this model": r["qlike_vs_ewma"], "p-value": r["dm_p_vs_ewma"]} for r in comparison["variance_forecasts"]]
             st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True, column_config={
-                "Score": st.column_config.NumberColumn(format="%.3f", help="QLIKE: lower is better"), "vs. this model": st.column_config.NumberColumn(format="%+.3f"),
+                "Error score": st.column_config.NumberColumn(format="%.3f", help="QLIKE: lower is better"), "vs. this model": st.column_config.NumberColumn(format="%+.3f"),
                 "p-value": st.column_config.NumberColumn(format="%.2f")})
             st.caption("Lower score is better. The simple weighted average used here was not beaten.")
     r = px.set_index("date")["close"].pct_change()

@@ -8,7 +8,7 @@ import streamlit as st
 from .logic import PHRASE, direction_verdict, edge_color, pct_miss, price_verdict
 from .theme import COLORS, finish, signed_usd, usd
 
-MODEL_LABELS = {"drift": "Rolling average", "ridge": "Ridge", "hist_gb_reg": "Gradient boosting", "hist_gb_clf": "Gradient boosting (up/down)", "lstm": "LSTM", "momentum_rule": "Momentum rule"}
+MODEL_LABELS = {"drift": "Recent average return", "ridge": "Ridge", "hist_gb_reg": "Gradient boosting", "hist_gb_clf": "Gradient boosting (up/down)", "lstm": "LSTM (this model)", "momentum_rule": "Follow last move"}
 
 
 def _verdict(lstm: dict, verdict: str) -> None:
@@ -41,7 +41,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
             signal = m["r2_os_vs_rolling_mean"] > 0 and m["ic_p"] < 0.05
             e, nc = iv["lstm_ewma_gaussian"], iv["no_change_ewma_gaussian"]
             st.divider()
-            _row("Explains the daily move?", f"{m['r2_os_vs_rolling_mean']:+.3f}", "Some signal" if signal else "No signal", "green" if signal else "orange",
+            _row("Predicts daily moves?", f"{m['r2_os_vs_rolling_mean']:+.3f}", "Some predictive power" if signal else "No predictive power", "green" if signal else "orange",
                  "Below 0 means no better than a simple average.",
                  f"Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: {m['ic_spearman']:+.3f} (p = {m['ic_p']:.2f}).")
             st.divider()
@@ -96,12 +96,12 @@ def _direction(res: dict) -> None:
     hd = lstm["direction_from_head"]
     up = models["drift"]["direction_from_sign"]["always_up_acc"]
     v = direction_verdict(lstm, up)
-    with st.expander("Secondary check: calling the direction (up or down)", icon=":material/swap_vert:"):
+    with st.expander("Side check: does it get up or down right?", icon=":material/swap_vert:"):
         st.markdown(f"Right on **{hd['acc']:.1%}** of days; always saying “up” scores **{up:.1%}**. The model {PHRASE[v]} that (p = {hd['p_vs_always_up']:.2f}).",
                     help="Calling up or down is a yes/no question, not how a price forecast is judged, so this is only a side check. The model says “up” on about nine days in ten, "
                          f"so its score mostly follows how often gold rose. 95% interval: {hd['ci95'][0]:.1%} to {hd['ci95'][1]:.1%}; the bars show the same intervals.")
-        entries = [("Always up", models["drift"]["direction_from_sign"]), ("Momentum rule", models["momentum_rule"]["direction_from_head"]), ("Ridge", models["ridge"]["direction_from_sign"]),
-                   ("Gradient boosting", models["hist_gb_clf"]["direction_from_head"]), ("LSTM", models["lstm"]["direction_from_head"])]
+        entries = [("Always guess up", models["drift"]["direction_from_sign"]), ("Follow last move", models["momentum_rule"]["direction_from_head"]), ("Ridge (linear)", models["ridge"]["direction_from_sign"]),
+                   ("Gradient boosting (trees)", models["hist_gb_clf"]["direction_from_head"]), ("LSTM (this model)", models["lstm"]["direction_from_head"])]
         acc = [d["acc"] * 100 for _, d in entries]
         fig = go.Figure(go.Bar(x=[f"{n}<br><b>{a:.1f}%</b>" for (n, _), a in zip(entries, acc)], y=acc, marker_color=[COLORS["naive"], COLORS["good"], COLORS["ridge"], COLORS["hgb"], COLORS["model"]],
                                error_y=dict(type="data", symmetric=False, array=[(d["ci95"][1] - d["acc"]) * 100 for _, d in entries], arrayminus=[(d["acc"] - d["ci95"][0]) * 100 for _, d in entries], thickness=1.2, width=4)))
@@ -118,12 +118,12 @@ def _details(res: dict, reg: dict | None) -> None:
             d = r.get("direction_from_head") or r["direction_from_sign"]
             m = (reg["models"].get(key) if reg else None) or {}
             rows[MODEL_LABELS.get(key, key)] = {"Typical error ($)": r.get("mae_usd"), "Typical error (%)": m.get("mape_pct"), "RMSE ($)": r.get("rmse_usd"),
-                                                "vs. no change (p)": r.get("dm_p_vs_naive"), "R² out-of-sample": m.get("r2_os_vs_rolling_mean"), "Rank correlation": r.get("ic_spearman"),
+                                                "vs. baseline (p)": r.get("dm_p_vs_naive"), "R² out-of-sample": m.get("r2_os_vs_rolling_mean"), "Rank correlation": r.get("ic_spearman"),
                                                 "Direction right (%)": d["acc"] * 100, "vs. always up (p)": d["p_vs_always_up"], "AUC": (r.get("direction_from_head") or {}).get("auc")}
         table = pd.DataFrame(rows).T.astype(float)
         st.dataframe(table, width="stretch", column_config={
             "Typical error ($)": st.column_config.NumberColumn(format="$%.2f"), "Typical error (%)": st.column_config.NumberColumn(format="%.3f%%"), "RMSE ($)": st.column_config.NumberColumn(format="$%.2f"),
-            "vs. no change (p)": st.column_config.NumberColumn(format="%.3f"), "R² out-of-sample": st.column_config.NumberColumn(format="%+.3f"), "Rank correlation": st.column_config.NumberColumn(format="%+.3f"),
+            "vs. baseline (p)": st.column_config.NumberColumn(format="%.3f"), "R² out-of-sample": st.column_config.NumberColumn(format="%+.3f"), "Rank correlation": st.column_config.NumberColumn(format="%+.3f"),
             "Direction right (%)": st.column_config.NumberColumn(format="%.1f%%"), "vs. always up (p)": st.column_config.NumberColumn(format="%.3f"), "AUC": st.column_config.NumberColumn(format="%.3f")})
         st.caption("p below 0.05 = a clear difference.")
         st.download_button("Download CSV", data=table.to_csv().encode("utf-8"), file_name="daily_walk_forward_metrics.csv", mime="text/csv", icon=":material/download:")
