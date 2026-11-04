@@ -83,7 +83,7 @@ def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame 
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         st.markdown("## Gold Price Forecast")
         trained = cur.get("model_trained_through")
-        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 08:00 (Thailand time). "
+        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 10:00 (Thailand time). "
                  f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
         st.badge("Research project", color="gray")
     st.caption("Next trading day's gold price (XAU/USD) · LSTM neural network")

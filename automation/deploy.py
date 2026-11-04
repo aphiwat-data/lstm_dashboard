@@ -4,7 +4,7 @@
   python deploy.py apply       # create or update everything (safe to repeat)
   python deploy.py teardown    # delete what apply created (not the S3 data)
 
-Creates: Lambda role (least-privilege inline policy), the function, the EventBridge Scheduler schedule (daily 01:00 UTC = 08:00 Thailand) with its own
+Creates: Lambda role (least-privilege inline policy), the function, the EventBridge Scheduler schedule (daily 03:00 UTC = 10:00 Thailand) with its own
 invoke-only role, an SNS topic with two CloudWatch alarms, and uploads automation/../daily/serving_artifacts/serving_model.npz to s3://<bucket>/model/serving/.
 """
 from __future__ import annotations
@@ -80,13 +80,13 @@ def apply() -> None:
     lam.get_waiter("function_active_v2").wait(FunctionName=FN)
     print("function ready", fn_arn)
     target = {"Arn": fn_arn, "RoleArn": sched_arn, "RetryPolicy": {"MaximumRetryAttempts": 2}}
-    args = dict(Name=SCHEDULE, ScheduleExpression="cron(0 1 * * ? *)", ScheduleExpressionTimezone="UTC", FlexibleTimeWindow={"Mode": "OFF"}, Target=target,
-                Description="Daily gold pipeline at 08:00 Thailand time", State="ENABLED")
+    args = dict(Name=SCHEDULE, ScheduleExpression="cron(0 3 * * ? *)", ScheduleExpressionTimezone="UTC", FlexibleTimeWindow={"Mode": "OFF"}, Target=target,
+                Description="Daily gold pipeline at 10:00 Thailand time", State="ENABLED")
     try:
         sch.update_schedule(**args)
     except sch.exceptions.ResourceNotFoundException:
         sch.create_schedule(**args)
-    print("schedule ready: cron(0 1 * * ? *) UTC")
+    print("schedule ready: cron(0 3 * * ? *) UTC")
     try:  # alarms need SNS and CloudWatch permissions that the project's IAM user may not have; the metrics are emitted either way
         topic = sns.create_topic(Name=TOPIC)["TopicArn"]
         for name, ns, metric, dims in ((f"{FN}-pipeline-failure", "GoldLSTM", "Failure", [{"Name": "FunctionName", "Value": FN}]),
@@ -120,7 +120,7 @@ if __name__ == "__main__":
     if cmd == "plan":
         print(f"function {FN} (python3.12, layer {LAYER.split(':')[-2]}:{LAYER.split(':')[-1]}), zip = {len(build_zip()) / 1024:.0f} KB with {list(FILES)}")
         print(f"model {MODEL_SRC.name} ({MODEL_SRC.stat().st_size / 1024:.0f} KB) -> s3://{BUCKET}/{MODEL_KEY}")
-        print(f"roles {ROLE}, {SCHED_ROLE}; schedule cron(0 1 * * ? *) UTC; topic {TOPIC}; 2 alarms")
+        print(f"roles {ROLE}, {SCHED_ROLE}; schedule cron(0 3 * * ? *) UTC; topic {TOPIC}; 2 alarms")
     elif cmd == "apply":
         apply()
     elif cmd == "teardown":

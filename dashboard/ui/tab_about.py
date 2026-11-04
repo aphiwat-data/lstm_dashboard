@@ -11,7 +11,7 @@ from .data import REPO_URL, feature_rows, horizons
 from .theme import COLORS, ERROR_UNDER, finish
 
 STEPS = [
-    ("Collect", "the latest gold price from Yahoo Finance, daily at 08:00 (Thailand time)"),
+    ("Collect", "the latest gold price from Yahoo Finance, daily at 10:00 (Thailand time)"),
     ("Check", "automatic data-quality checks"),
     ("Forecast", "an LSTM reads the last 20 days (retrained weekly)"),
     ("Add the range", "a 90% range from the model's recent errors"),

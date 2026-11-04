@@ -510,7 +510,7 @@ The old Lambda design (price-level model exported to TFLite, container image) wa
 retrained, and its Docker build had failed. Replaced by a pipeline split the way a real data team would split it (ingestion / training / serving):
 
 ```
-EventBridge Scheduler (cron 01:00 UTC = 08:00 Thailand, daily)
+EventBridge Scheduler (cron 03:00 UTC = 10:00 Thailand, daily; it was 01:00 UTC until 2026-11-04)
    -> Lambda gold-lstm-forecast-daily-refresh (python3.12 zip + AWS SDK for pandas layer, 1 GB, ~1.5 s per run)
         1. fetch settled daily bars (Yahoo chart endpoint, stdlib urllib; range widens automatically after an outage)
         2. append new bars to bronze/streaming/xauusd_daily_incremental.csv (idempotent, keyed by date; Silver is never rewritten)
@@ -541,6 +541,8 @@ Dashboard hero (29 Oct): the header forecast, range, sidebar "data through" line
 Honest status: deployed and invoked manually on 2026-10-29; the schedule is ENABLED and its first unattended run is 2026-10-30 01:00 UTC. The live track record starts with the forecast for 2026-10-28 and
 only fills in as days pass. Not done: CloudWatch alarms and the SNS topic (the IAM user `Auto` lacks SNS/CloudWatch permissions and the permissions were not widened); the empty ECR repo from September was deleted on request (2026-10-29). Cost: Lambda (a few seconds a day) and S3 are far inside the free tier. Operating it: `python3 automation/deploy.py apply` (safe to repeat),
 `python3 automation/retrain.py` weekly, `python3 automation/deploy.py teardown` removes everything except the S3 data.
+
+Schedule change (2026-11-04): the dashboard's live record had stopped moving because the 01:00 UTC run (08:00 Thailand) often found Yahoo's newest settled bar missing (the forecast lagged 1 to 3 days; the cause of the late bar was not proven). Two manual invocations after the COMEX close brought `latest_forecast.json` to as-of 2026-11-03 (forecast 3947.09, 90% range 3868.38 to 4027.40) and the live log to 3 scored forecasts (2 inside the range, 1 outside) plus one pending. The EventBridge schedule is now `cron(0 3 * * ? *)` UTC = 10:00 Thailand (changed in place with `aws scheduler update-schedule`; `deploy.py` and the dashboard wording match). Check after the next two mornings that `forecast_log.csv` gains one row per trading day.
 
 ### Phase 12: a readable, professional dashboard (October 30, 2026)
 
