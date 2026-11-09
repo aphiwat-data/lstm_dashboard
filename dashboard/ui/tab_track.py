@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from .cards import NOTES, card_row, metric_card
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, finish, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "All": None}
@@ -77,12 +78,12 @@ def _live(log: pd.DataFrame | None) -> None:
     miss_model = (scored["actual_next_close"] - scored["predicted_next_close"]).abs().mean()
     miss_naive = (scored["actual_next_close"] - scored["latest_close"]).abs().mean()
     inside = scored["inside_90"].astype(str).str.lower().eq("true")
-    with st.container(horizontal=True, gap="small"):
-        st.metric("Forecasts scored", f"{len(scored)}", border=True, width="stretch")
-        st.metric("MAE · average miss", usd(miss_model), f"simple guess: {usd(miss_naive)}", delta_color="off", delta_arrow="off", border=True, width="stretch",
-                  help="Mean absolute error of the live forecasts so far, against the simple guess “tomorrow = today” on the same days.")
-        st.metric("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%} · goal 90%", delta_color="off", delta_arrow="off", border=True, width="stretch",
-                  help="How often the actual close landed inside the 90% range. With so few days this says little yet.")
+    with card_row():
+        metric_card("Forecasts scored", f"{len(scored)}", note=NOTES["scored"])
+        metric_card("MAE · average miss", usd(miss_model), f"simple guess: {usd(miss_naive)}", NOTES["mae"],
+                    help="Mean absolute error of the live forecasts so far, against the simple guess “tomorrow = today” on the same days.")
+        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%} · goal 90%", NOTES["reliability"],
+                    help="With so few days this says little yet.")
     _live_chart(scored.tail(15).reset_index(drop=True), log[log["actual_next_close"].isna()])
     show = scored.tail(15).iloc[::-1].assign(inside=lambda d: d["inside_90"].astype(str).str.lower().eq("true"))
     table = pd.DataFrame({"Forecast made": show["as_of_date"], "Forecast for": pd.to_datetime(show["next_date"]), "Forecast": show["predicted_next_close"],

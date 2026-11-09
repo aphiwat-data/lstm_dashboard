@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from .cards import NOTES, card_row, metric_card
 from .data import next_trading_day, run_age_hours
 from .logic import edge_color, price_verdict
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, finish, signed_usd, usd
@@ -122,17 +123,17 @@ def _scorecard(res: dict, reg: dict | None) -> None:
         st.badge(VERDICT_BADGE[verdict], icon=":material/balance:", color=edge_color(verdict, diff),
                  help=f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])} a day on average; this model by {usd(lstm['mae_usd'])} ({signed_usd(diff)}). "
                       f"The pill is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
-    with st.container(horizontal=True, gap="small"):
-        st.metric("MAE · average miss", usd(lstm["mae_usd"]), f"simple guess {usd(lstm['naive_mae_usd'])}", delta_color="off", delta_arrow="off", border=True, width="stretch",
-                  help="Mean absolute error: the average gap between the forecast and the actual close, in dollars, per day.")
-        st.metric("RMSE", usd(lstm["rmse_usd"]), f"simple guess {usd(lstm['naive_rmse_usd'])}", delta_color="off", delta_arrow="off", border=True, width="stretch",
-                  help="Root mean squared error: like MAE, but big misses count extra, so it shows how bad the worst days were.")
+    with card_row():
+        metric_card("MAE · average miss", usd(lstm["mae_usd"]), f"simple guess {usd(lstm['naive_mae_usd'])}", NOTES["mae"],
+                    help="Mean absolute error: the average gap between the forecast and the actual close, in dollars, per day.")
+        metric_card("RMSE", usd(lstm["rmse_usd"]), f"simple guess {usd(lstm['naive_rmse_usd'])}", NOTES["rmse"],
+                    help="Root mean squared error: like MAE, but the gaps are squared first, so big misses count extra and it shows how bad the worst days were.")
         if reg:
             m, nc = reg["models"]["lstm"], reg["no_change"]
-            st.metric("Error % (MAPE)", f"{m['mape_pct']:.2f}%", f"simple guess {nc['mape_pct']:.2f}%", delta_color="off", delta_arrow="off", border=True, width="stretch",
-                      help="Mean absolute percentage error: the average miss as a share of the price.")
-            st.metric("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), f"simple guess {nc['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), delta_color="off", delta_arrow="off",
-                      border=True, width="stretch", help="The share of the daily price move the forecast explains. 0 means no better than a plain average; below 0 means worse.")
+            metric_card("Error % (MAPE)", f"{m['mape_pct']:.2f}%", f"simple guess {nc['mape_pct']:.2f}%", NOTES["mape"],
+                        help="Mean absolute percentage error: the average miss as a share of the price, so it can be compared when gold is cheap or expensive.")
+            metric_card("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), f"simple guess {nc['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), NOTES["r2"],
+                        help="The share of the daily price move the forecast explains. 0 means no better than a plain average; below 0 means worse.")
 
 
 def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
@@ -151,14 +152,11 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
     as_of = pd.Timestamp(cur["as_of_date"])
     target = next_trading_day(as_of)
     with st.container(border=True):
-        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="medium"):
-            with st.container(border=True, width=170, gap="xxsmall"):  # a calendar tile: the day being forecast, impossible to miss
-                st.caption("FORECAST FOR", text_alignment="center")
-                st.markdown(":blue[**" + f"{target:%A}".upper() + "**]", text_alignment="center")
-                st.markdown(f"# {target.day}", text_alignment="center")
-                st.markdown(":blue[**" + f"{target:%B} {target.year}".upper() + "**]", text_alignment="center")
+        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
+            st.caption("GOLD CLOSING PRICE FORECAST (XAU/USD)", width="content", help=f"The model's forecast for the close of {_day(target, year=True)}, made from the {_day(as_of)} close.")
+            st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]", width="content")  # top-right corner: which day this number is for
+        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
             with st.container(width="content", gap="xxsmall"):
-                st.caption("GOLD CLOSING PRICE (XAU/USD)", help=f"The model's forecast for the close of {_day(target, year=True)}, made from the {_day(as_of)} close.")
                 st.markdown(f"# {usd(fc)}")
                 st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]  \n:gray[:small[vs. the last close {usd(last)} · {as_of:%a} {as_of.day} {as_of:%b}]]")
             with st.container(width="content", border=True):

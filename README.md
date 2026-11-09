@@ -54,8 +54,8 @@ already does this, and so does Chapter 3 (price accuracy first, direction as a s
 one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py` verdict rules). It no longer imports TensorFlow (requirements: streamlit, boto3, pandas, numpy,
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
-Layout since Phase 13: a header (title, three-line briefing, the forecast card with a calendar tile for the forecast day, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
-an accuracy scorecard with MAE / RMSE / error % / R²), then four tabs: *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
+Layout since Phase 13: a header (title, three-line briefing, the forecast card with the forecast day in its top-right corner, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
+an accuracy scorecard with MAE / RMSE / error % / R², each card with a one-line note on what it measures), then four tabs: *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
 *About the project* (the only tab that explains what was built and tried).
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
@@ -604,13 +604,20 @@ the backtest first; actual values beside the forecasts in the "Price history and
 
 - **Header briefing.** Three one-line sentences under the title: what the model does (next trading day's gold price and a 90% range), that every forecast is saved before the day happens and
   scored against the real close, and that it is judged against "tomorrow = today". The old caption was replaced, not added to.
-- **Forecast day.** The first element of the forecast card is a calendar tile (FORECAST FOR / MONDAY / 9 / NOVEMBER 2026), then the price block ("GOLD CLOSING PRICE (XAU/USD)", the change chip, the
-  last close) and the range block. Four variants were compared in a scratch app (highlighted heading, callout band, calendar tile, big blue date line); the tile was the clearest and uses no extra row.
+- **Forecast day (placement revised the same day).** The first version put a calendar tile (FORECAST FOR / MONDAY / 9 / NOVEMBER 2026) to the left of the price; the owner found it cluttered there. It is now the
+  top-right corner of the forecast card: a top row with the card label on the left ("GOLD CLOSING PRICE FORECAST (XAU/USD)") and "Forecast for Monday 9 November 2026" on the right (calendar icon, the date in blue),
+  then the price block and the range block. Three placements were compared in a scratch app (heading top-right, a big blue date above the range box, a small badge top-right); the heading is clearly visible, adds no box
+  and shortens the card.
 - **Range and its reliability are one block.** "LIKELY RANGE (90%)" with the range and, under it, a badge "Range reliability 89.5%  goal 90%" (the tooltip gives 348 of 389 test days and the live
   count). The old "Price stayed in the range" card is gone. One name from now on: **range reliability** (it replaces "range hit rate" and "price stayed in the range" on every tab, chart title and the glossary).
 - **Scorecard.** "Accuracy · 449 backtest days" with four metric cards that carry their technical names and the simple guess beside them: MAE (average miss), RMSE, error % (MAPE) and out-of-sample R².
   The verdict is a coloured pill beside the title ("Not clearly better than a simple guess", green or red only when p < 0.05). A fifth card was tried and wrapped alone onto a second row at 1280 px, hence the pill.
   Rank correlation (IC) stays on *How reliable?*. The detailed evidence for the numbers stays on that tab (its rows use the same names).
+- **One-line notes under every metric (owner request, same day).** Each metric card now has a short grey line under the number saying what it measures and when to use it: MAE "Average miss in dollars. Best for the
+  everyday error.", RMSE "Like MAE, but big misses count extra. Best for spotting bad days.", error % "Miss as a share of the price. Best for comparing price levels.", R² "Does it explain the daily moves? 0 = no better
+  than average."; the live-record cards and the three volatility cards got the same treatment. The texts live in `ui/cards.py` (`NOTES`, `metric_card()`, `card_row()`); a card is a bordered container holding an `st.metric`
+  and a caption, and the row uses `vertical_alignment="distribute"` so every card has the same height even when one note wraps to an extra line. The cards stay in one row down to about 140 px each (a 759 px window
+  with the sidebar collapsed) and the notes simply wrap; tooltips still carry the longer definitions.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. The first two start
   with a one-line caption. Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.
@@ -625,8 +632,10 @@ the backtest first; actual values beside the forecasts in the "Price history and
   the method, the glossary, links). Nothing was deleted: the "What we tried" chart and every other chart are where they were.
 - **Live pipeline check.** With the schedule moved to 03:00 UTC (10:00 Thailand, 4 Nov) the unattended runs on 5, 6 and 7 Nov each added the previous day's bar and a forecast (the 8 and 9 Nov runs found nothing new: a weekend and a Monday morning), so the live log has one row per trading day since 4 Nov: 6 scored forecasts
   (4 inside the 90% range, 2 outside; MAE \$56.32 vs. \$57.40 for "tomorrow = today") and the forecast for Monday 9 Nov waiting. Six days say nothing about accuracy yet.
-- **Verification.** No exceptions and no text overlap in any chart on any tab (script over every `.main-svg` text box) on Streamlit 1.56 and 1.66.1 at 1512 x 857, and the header, scorecard and tabs checked at 1366, 1280 and
-  1024 px. The sidebar still fits 857 px without scrolling. At 1024 px the forecast card's three blocks wrap and the fourth scorecard card sits alone on a second row; that is acceptable for a projector.
+- **Verification.** No exceptions and no text overlap in any chart on any tab (script over every `.main-svg` text box) on Streamlit 1.56 and 1.66.1 at 1512 x 857, and the first revision of the header, scorecard and tabs also
+  at 1366 x 650, 1280 and 1024 px. The sidebar still fits 857 px without scrolling. After the second revision (forecast day top-right, note cards) the page was re-checked on 1.56 at 1512 x 857 and 759 px (sidebar collapsed) and on 1.66.1 at
+  1268 px (sidebar open): no exception, no overlap, no horizontal overflow; the four scorecard cards are 161 px wide at 1268 px and 142 px at 759 px, equal in height, with the notes wrapping to three or four lines. The browser pane
+  kept changing width while testing, so 1024 px was not re-measured for the second revision. An offline run (S3 unreachable) and an online run of the whole page under `AppTest` raise nothing.
 
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
