@@ -7,7 +7,7 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from .cards import NOTES, card_row, metric_card
-from .theme import COLORS, ERROR_OVER, ERROR_UNDER, finish, usd
+from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "All": None}
 
@@ -21,7 +21,7 @@ def _backtest(bt: pd.DataFrame, preds: pd.DataFrame) -> None:
     window = st.segmented_control("Window", list(WINDOWS), default="3M", key="bt_window", label_visibility="collapsed") or "3M"
     q = bt if WINDOWS[window] is None else bt.tail(WINDOWS[window])
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28], vertical_spacing=0.07,
-                        subplot_titles=("Actual vs. forecast price", "Actual − Forecast ($)"))
+                        subplot_titles=("<b>Actual vs. forecast price</b>", "<b>Actual − Forecast ($)</b>"))
     fig.add_trace(go.Scatter(x=q["for_date"], y=q["actual"], name="Actual", line=dict(color=COLORS["actual"], width=2.2)), row=1, col=1)
     fig.add_trace(go.Scatter(x=q["for_date"], y=q["forecast"], name="Forecast", line=dict(color=COLORS["model"], width=2, dash="dash")), row=1, col=1)
     fig.add_trace(go.Bar(x=q["for_date"], y=q["miss"], marker_color=[ERROR_UNDER if m >= 0 else ERROR_OVER for m in q["miss"]], showlegend=False, name="Actual − Forecast"), row=2, col=1)
@@ -30,7 +30,8 @@ def _backtest(bt: pd.DataFrame, preds: pd.DataFrame) -> None:
     fig.update_layout(legend=dict(x=1, xanchor="right"))
     fig.update_xaxes(hoverformat="%a %d %b %Y")
     fig.update_yaxes(tickprefix="$", tickformat=",.0f", row=1, col=1)
-    fig.update_annotations(font_size=12, xanchor="left", x=0)
+    panel_title(fig, "Actual vs. forecast price")
+    panel_title(fig, "Actual − Forecast ($)")
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
     st.download_button("Download CSV", data=preds.to_csv(index=False).encode("utf-8"), file_name="daily_walk_forward_predictions.csv", mime="text/csv",
                        icon=":material/download:")
@@ -38,6 +39,7 @@ def _backtest(bt: pd.DataFrame, preds: pd.DataFrame) -> None:
 
 def _live_chart(scored: pd.DataFrame, pending: pd.DataFrame) -> None:
     """Each real forecast with its 90% range, and the actual close beside it (a circle inside the range, a cross outside), then the forecast still waiting for its close."""
+    chart_title("Live forecasts vs. the actual close", help="Diamond: the forecast with its 90% range. Orange circle: the actual close, inside the range; orange cross: outside it. Open diamond: the next forecast, not scored yet.")
     blue, orange = COLORS["model"], COLORS["actual"]
     inside = scored["inside_90"].astype(str).str.lower().eq("true").to_numpy()
     label = lambda d: f"{pd.Timestamp(d):%a %d %b}"  # noqa: E731  (categories, so weekends leave no gaps)

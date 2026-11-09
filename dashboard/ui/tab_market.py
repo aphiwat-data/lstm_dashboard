@@ -9,7 +9,7 @@ from plotly.subplots import make_subplots
 
 from .cards import NOTES, card_row, metric_card
 from .data import indicators
-from .theme import COLORS, finish
+from .theme import COLORS, chart_title, finish
 
 TEST_START = pd.Timestamp("2025-01-09")
 PRICE_WINDOWS = {"1Y": 365, "5Y": 365 * 5, "10Y": 365 * 10, "All": None}
@@ -44,7 +44,7 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
             metric_card("Typical daily move", f"±{sigma:.2f}%", "of the gold price, per day", NOTES["daily_move"], help="One standard deviation behind today's range: a weighted average of recent forecast errors.")
             metric_card("Yearly pace", f"{sigma * np.sqrt(252):.1f}%", "the same move over a year", NOTES["yearly_pace"], help="Daily move × √252 trading days.")
             metric_card("Fear gauge (VIX)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", "US stock market", NOTES["vix"], help="Shown for context. We tested it as an input and it did not improve the gold forecast.")
-        st.markdown("**Actual daily moves vs. the model's limit**", help="Bars: how far gold actually moved each test day. Line: how far the model expected it could move; 90% of days should stay below the line.")
+        chart_title("Actual daily moves vs. the model's limit", help="Bars: how far gold actually moved each test day. Line: how far the model expected it could move; 90% of days should stay below the line.")
         fig = go.Figure()
         fig.add_trace(go.Bar(x=vdf["date"], y=vdf["abs_return_pct"], name="Actual daily move", marker_color=COLORS["naive"], opacity=0.5, marker_line_width=0, hovertemplate="%{x|%d %b %Y}<br>%{y:.2f}%<extra></extra>"))
         fig.add_trace(go.Scatter(x=vdf["date"], y=1.6449 * vdf["sigma_ewma_pct"], name="Expected limit (90% of days)", line=dict(color=COLORS["model"], width=2.4), hovertemplate="%{y:.2f}%<extra></extra>"))
@@ -62,7 +62,7 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
     fig2 = go.Figure(go.Scatter(x=rolling.index, y=rolling, line=dict(color=COLORS["model"], width=1.6), fill="tozeroy", fillcolor="rgba(42,120,214,0.12)", hovertemplate="%{x|%d %b %Y}<br>%{y:.1f}%<extra></extra>"))
     finish(fig2, 260)
     fig2.update_yaxes(ticksuffix="%")
-    st.markdown("**Long-run volatility** (30-day, yearly rate)")
+    chart_title("Long-run volatility", help="How much gold's price swung over rolling 30-day windows, shown as a yearly rate.")
     st.plotly_chart(fig2, width="stretch", config={"displayModeBar": False})
 
 

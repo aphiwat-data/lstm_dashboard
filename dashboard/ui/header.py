@@ -10,7 +10,7 @@ from plotly.subplots import make_subplots
 from .cards import NOTES, card_row, metric_card
 from .data import next_trading_day, run_age_hours
 from .logic import edge_color, price_verdict
-from .theme import COLORS, ERROR_OVER, ERROR_UNDER, finish, signed_usd, usd
+from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, signed_usd, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 VERDICT_BADGE = {"better": "Better than a simple guess", "same": "Not clearly better than a simple guess", "worse": "Worse than a simple guess"}
@@ -49,7 +49,7 @@ def forecast_chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict, days: int) -
     blue, orange = COLORS["model"], COLORS["actual"]
     past = fh[fh["for_date"] >= h["date"].min()]
     dots = len(h) <= 70  # one marker per day only while the days are far enough apart
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.8, 0.2], vertical_spacing=0.05, subplot_titles=("", "Actual − Forecast ($)"))
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.8, 0.2], vertical_spacing=0.05, subplot_titles=("", "<b>Actual − Forecast ($)</b>"))
     # 90% range of every forecast, the new one included (drawn first so it sits behind the lines)
     ranged = pd.concat([past.dropna(subset=["lo", "hi"])[["for_date", "lo", "hi"]], pd.DataFrame({"for_date": [fc_date], "lo": [lo], "hi": [hi]})])
     fig.add_trace(go.Scatter(x=ranged["for_date"], y=ranged["hi"], mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False), row=1, col=1)
@@ -81,14 +81,14 @@ def forecast_chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict, days: int) -
     fig.update_yaxes(tickprefix="$", tickformat=",.0f", range=[y_lo - pad, y_hi + pad], row=1, col=1)
     step = next((c for c in (10, 20, 25, 50, 100, 200, 500, 1000) if c >= past["miss"].abs().max() / 2), 1000) if len(past) else 50
     fig.update_yaxes(tickvals=[-step, 0, step], ticktext=[f"−${step}", "$0", f"${step}"], row=2, col=1)  # a short panel: three ticks, so the labels never touch
-    fig.update_annotations(font_size=12, xanchor="left", x=0, selector=dict(text="Actual − Forecast ($)"))
+    panel_title(fig, "Actual − Forecast ($)")
     return fig
 
 
 @st.fragment
 def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-        st.caption("**Price history and forecast**", help="Orange line: the actual daily close. Blue dashed line: the forecast made the day before, with its 90% range in light blue. "
+        chart_title("Price history and forecast", help="Orange line: the actual daily close. Blue dashed line: the forecast made the day before, with its 90% range in light blue. "
                    "Blue diamond: the new forecast, with the bar showing its range. Bars below: how far off each forecast was (actual minus forecast; red = the price ended higher, blue = lower). "
                    "Before the dotted vertical line the forecasts come from the backtest (the model replayed on past data); after it they are real forecasts saved by the pipeline.")
         window = st.segmented_control("History shown", list(WINDOWS), default="3M", key="hero_window", label_visibility="collapsed") or "3M"
@@ -118,7 +118,7 @@ def _scorecard(res: dict, reg: dict | None) -> None:
     verdict = price_verdict(lstm)
     diff = lstm["mae_usd"] - lstm["naive_mae_usd"]
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-        st.markdown(f"**Accuracy · {res['protocol']['n_test']} backtest days**", width="content", help="Every forecast was made without seeing the day it is judged on. Each number is set against the simple guess "
+        chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days", help="Every forecast was made without seeing the day it is judged on. Each number is set against the simple guess "
                     "“tomorrow = today” (the baseline) on the same days. For MAE, RMSE and error % lower is better; R² says how much of the daily price move the forecast explains (0 = nothing).")
         st.badge(VERDICT_BADGE[verdict], icon=":material/balance:", color=edge_color(verdict, diff),
                  help=f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])} a day on average; this model by {usd(lstm['mae_usd'])} ({signed_usd(diff)}). "

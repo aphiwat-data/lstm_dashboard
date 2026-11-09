@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from .logic import PHRASE, direction_verdict, edge_color, pct_miss, price_verdict
-from .theme import COLORS, finish, signed_usd, usd
+from .theme import COLORS, chart_title, finish, signed_usd, usd
 
 MODEL_LABELS = {"drift": "Recent average return", "ridge": "Ridge", "hist_gb_reg": "Gradient boosting", "hist_gb_clf": "Gradient boosting (up/down)", "lstm": "LSTM (this model)", "momentum_rule": "Follow last move"}
 
@@ -63,7 +63,7 @@ def _mae_chart(res: dict) -> None:
     fig.update_layout(bargap=0.5)
     fig.update_yaxes(range=[0, max(vals) * 1.2], tickprefix="$")
     better = [name for name, key in (("Ridge", "ridge"), ("Gradient boosting", "hist_gb_reg"), ("LSTM", "lstm")) if models[key]["dm_p_vs_naive"] < 0.05 and models[key]["mae_usd"] < naive]
-    st.markdown("**Average miss (MAE) by model**", help="Lower is better. A model has to land clearly below the dashed line to add value. " + (f"{', '.join(better)} {'does' if len(better) == 1 else 'do'}." if better else "None does."))
+    chart_title("Average miss (MAE) by model", help="Lower is better. A model has to land clearly below the dashed line to add value. " + (f"{', '.join(better)} {'does' if len(better) == 1 else 'do'}." if better else "None does."))
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
@@ -85,7 +85,7 @@ def _range_chart(compare: list | None, vix: list | None) -> None:
     fig.update_layout(bargap=0.5)
     fig.update_yaxes(range=[50, 100], ticksuffix="%")
     used, others = rows[0][1], [r[1] for r in rows[1:]]
-    st.markdown("**Range reliability by way of drawing the range**", help=f"How often the close landed inside the 90% range. Dashed line: the 90% goal. We compared {len(rows)} ways to draw the range." + (" The first one, used in this model, landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
+    chart_title("Range reliability by method", help=f"How often the close landed inside the 90% range. Dashed line: the 90% goal. We compared {len(rows)} ways to draw the range." + (" The first one, used in this model, landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
                 + (" The others were too narrow." if all(o < used for o in others) else ""))
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 

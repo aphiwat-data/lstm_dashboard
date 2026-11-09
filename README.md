@@ -618,6 +618,11 @@ the backtest first; actual values beside the forecasts in the "Price history and
   than average."; the live-record cards and the three volatility cards got the same treatment. The texts live in `ui/cards.py` (`NOTES`, `metric_card()`, `card_row()`); a card is a bordered container holding an `st.metric`
   and a caption, and the row uses `vertical_alignment="distribute"` so every card has the same height even when one note wraps to an extra line. The cards stay in one row down to about 140 px each (a 759 px window
   with the sidebar collapsed) and the notes simply wrap; tooltips still carry the longer definitions.
+- **Chart titles (owner request, same day).** The title of "Price history and forecast" was a small grey caption and several other chart titles were bold body text, so they were easy to miss. Every chart title is now
+  a section-size heading (h3, 17.5 px, weight 600) through one helper, `theme.chart_title(text, help=...)`: the header chart, the accuracy scorecard, the new live-record chart ("Live forecasts vs. the actual close", it had no title),
+  "Actual daily moves vs. the model's limit", "Long-run volatility", "Average miss (MAE) by model" and "Range reliability by method" (was "... by way of drawing the range"). The panel titles inside the figures ("Actual vs. forecast price",
+  "Actual − Forecast ($)") are bold 13 px dark grey instead of 12 px light grey (`theme.panel_title`). The theme's heading sizes were not touched because the sidebar title is an h3 and the sidebar is tuned to fit one screen.
+  `:large[...]` is not a Streamlit markdown directive (it renders as literal text); a blue accent bar and a chart icon before the title were compared in a scratch app and dropped to keep one heading style on the page.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. The first two start
   with a one-line caption. Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.

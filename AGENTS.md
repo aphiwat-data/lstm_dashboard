@@ -28,6 +28,7 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
   a caption is at most one short line, and anything longer goes in a tooltip, popover or expander; `help=` strings are markdown, so escape `$` there too.
   Use one name per idea (baseline = "tomorrow = today", this model, MAE / RMSE / error %, range reliability), never vague labels, and keep chart text from overlapping (bar values in the axis labels, reference lines behind the bars).
   Never delete charts or sections unless the owner asks for that specific removal.
+  Every chart gets a title through `theme.chart_title` (h3, same size as a section heading) and a figure panel title through `theme.panel_title`; do not use a bold caption or bold body text as a chart title.
   Metric cards come from `ui/cards.py` (`metric_card`, `card_row`) and every card carries a one-line note on what the metric measures; the forecast day sits in the top-right corner of the forecast card.
   Page layout (owner, 9 Nov): the header and the first three tabs hold only results and charts, the last tab (*About the project*) is the only place that explains what was built; the backtest comes before the live record; tab names say what is actual and what is predicted.
   The look is tuned for a 14 px base font (`theme.baseFontSize`) and the owner's screen, a viewport of about 1512x857: the sidebar (a fixed 320 px, set in `set_page_config`) must fit without scrolling there; keep the credits readable, not tiny. Check both
