@@ -20,12 +20,14 @@ STEPS = [
 SHORT = {"+ macro and cross-asset prices": "LSTM + other markets", "+ NFP release days": "LSTM + jobs-report days", "+ FOMC and CPI release days": "LSTM + Fed and inflation days", "+ CFTC positioning": "LSTM + trader positioning"}
 GLOSSARY = [
     ("LSTM", "A neural network built for sequences. Here it reads the last 20 days and predicts the next day's price change."),
-    ("Average miss per day (typical error, MAE)", "The average gap between the forecast and the actual close, in dollars. Lower is better."),
+    ("MAE (average miss per day)", "Mean absolute error: the average gap between the forecast and the actual close, in dollars. Lower is better."),
+    ("RMSE", "Root mean squared error: like MAE, but big misses count extra, so it shows how bad the worst days were. Lower is better."),
+    ("MAPE (error %)", "Mean absolute percentage error: the average miss as a share of the price."),
     ("Baseline (“tomorrow = today”)", "The benchmark that simply repeats today's close, also called the naive or no-change forecast. A price forecast is only useful if it clearly beats this."),
     ("p-value", "How likely a difference this large would be to appear by luck alone. Below 0.05 counts as a clear difference; above it, the two are treated as equal."),
     ("R² (out-of-sample)", "The share of the daily price move the forecast explains. 0 means no better than a simple average; below 0 means worse."),
     ("Rank correlation (IC)", "Whether days with a higher forecast really had higher actual moves. 0 means no relationship, 1 a perfect match."),
-    ("90% range and how often the price stayed in it", "Where the close should land 9 days out of 10, and how often it really did; 90% is ideal."),
+    ("Range reliability (90% range)", "The range is where the close should land 9 days out of 10; reliability is how often it really did in testing. 90% is ideal."),
     ("Walk-forward test", "Retrain on the past, test on the days that follow, then move forward and repeat, so the model never sees the days it is judged on."),
     ("EWMA", "Exponentially weighted moving average: recent values count more than old ones. Used to size the range."),
     ("VIX", "The “fear gauge” of the US stock market. Tested as an input; it did not help."),
@@ -61,7 +63,7 @@ def _experiments(res: dict) -> pd.DataFrame:
 
 
 def _scoreboard(res: dict | None) -> None:
-    st.subheader("What we tried", help="Every idea was judged the same way: the typical price error against “tomorrow = today”, on the same test days. The same holds for the range: "
+    st.subheader("What we tried", help="Every idea was judged the same way: the MAE (average miss) against “tomorrow = today”, on the same test days. The same holds for the range: "
                  "five ways of drawing it, a GARCH model, the VIX and a network trained on the range itself all failed to beat a simple weighted average of recent errors.")
     if res is None:
         st.info("The evaluation results are not available in this deployment.")
@@ -70,7 +72,7 @@ def _scoreboard(res: dict | None) -> None:
     lim = max(5, math.ceil(d["diff_pct"].abs().max() * 1.6))
     colors = [COLORS["naive"] if v == "No clear difference" else COLORS["good"] if v == "Better" else ERROR_UNDER for v in d["verdict"]]
     fig = go.Figure(go.Bar(y=d["short"], x=d["diff_pct"], orientation="h", marker_color=colors, text=["0.0%" if round(x, 1) == 0 else f"{x:+.1f}%" for x in d["diff_pct"]], textposition="outside", cliponaxis=False,
-                           customdata=d[["mae", "naive", "p"]], hovertemplate="%{y}<br>Typical error $%{customdata[0]:.2f} vs. $%{customdata[1]:.2f} for “tomorrow = today”<br>p = %{customdata[2]:.2f}<extra></extra>"))
+                           customdata=d[["mae", "naive", "p"]], hovertemplate="%{y}<br>MAE $%{customdata[0]:.2f} vs. $%{customdata[1]:.2f} for “tomorrow = today”<br>p = %{customdata[2]:.2f}<extra></extra>"))
     fig.add_vline(x=0, line_color="rgba(128,128,128,.7)", line_width=1)
     finish(fig, 60 + 34 * len(d), hover="closest")
     fig.update_xaxes(range=[-lim, lim], ticksuffix="%", title_text="Error vs. baseline (left = better)", title_font_size=12, showgrid=True, gridcolor="rgba(128,128,128,0.16)")
@@ -81,15 +83,15 @@ def _scoreboard(res: dict | None) -> None:
     if d.loc[d["group"] != "Longer horizon", "n"].nunique() > 1:
         st.warning("These rows were evaluated on different test windows (see the table), so they are not strictly comparable.", icon=":material/warning:")
     with st.expander("See the numbers", icon=":material/table:"):
-        table = pd.DataFrame({"Experiment": d["label"], "Typical error": d["mae"], "Baseline": d["naive"], "Difference": d["diff_pct"], "p-value": d["p"], "Verdict": d["verdict"], "Test days": d["n"]})
+        table = pd.DataFrame({"Experiment": d["label"], "MAE": d["mae"], "Baseline MAE": d["naive"], "Difference": d["diff_pct"], "p-value": d["p"], "Verdict": d["verdict"], "Test days": d["n"]})
         st.dataframe(table, width="stretch", hide_index=True, column_config={
-            "Typical error": st.column_config.NumberColumn(format="$%.2f"), "Baseline": st.column_config.NumberColumn(format="$%.2f"),
+            "MAE": st.column_config.NumberColumn(format="$%.2f"), "Baseline MAE": st.column_config.NumberColumn(format="$%.2f"),
             "Difference": st.column_config.NumberColumn(format="%+.1f%%"), "p-value": st.column_config.NumberColumn(format="%.2f"), "Test days": st.column_config.NumberColumn(format="%d")})
         st.caption("Longer-horizon p-values are adjusted for overlapping forecasts.")
 
 
 def _method(res: dict | None, reg: dict | None, px: pd.DataFrame | None) -> None:
-    cov = f", so its {reg['interval']['lstm_ewma_gaussian']['coverage']:.1%} hit rate is honest" if reg else ""
+    cov = f", so its {reg['interval']['lstm_ewma_gaussian']['coverage']:.1%} range reliability is honest" if reg else ""
     up = f" The model says “up” on {reg['models']['lstm']['says_up_share']:.0%} of test days, so its score mostly follows how often gold rose." if reg else ""
     if px is not None and "volume" in px:
         vol = pd.to_numeric(px["volume"], errors="coerce")

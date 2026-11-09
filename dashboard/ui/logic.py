@@ -30,5 +30,4 @@ def edge_color(verdict: str, diff: float) -> str:
     return {"better": "green", "worse": "red"}.get(verdict) or ("orange" if diff > 0 else "blue")
 
 
-VERDICT_WORDS = {"better": "Yes", "same": "Not clearly", "worse": "No, worse"}
 PHRASE = {"better": "beats", "worse": "is worse than", "same": "cannot be told apart from"}

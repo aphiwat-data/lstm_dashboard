@@ -1,15 +1,22 @@
-"""The always-visible top of the page: title, the forecast (the product), its chart and a three-number trust strip."""
+"""The always-visible top of the page: title and a short briefing, the forecast (the product) with its range, the chart that sets past forecasts beside what really
+happened, and the accuracy scorecard. Everything below this (the tabs) is the evidence."""
 from __future__ import annotations
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from .data import next_trading_day, run_age_hours
-from .logic import VERDICT_WORDS, edge_color, pct_miss, price_verdict
-from .theme import COLORS, finish, signed_usd, usd
+from .logic import edge_color, price_verdict
+from .theme import COLORS, ERROR_OVER, ERROR_UNDER, finish, signed_usd, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
+VERDICT_BADGE = {"better": "Better than a simple guess", "same": "Not clearly better than a simple guess", "worse": "Worse than a simple guess"}
+BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
+BRIEFING = ("An LSTM neural network forecasts the **next trading day's gold price** (XAU/USD) and a 90% range around it.  \n"
+            "Every forecast is saved **before** the day happens, then scored against the real close.  \n"
+            "It is judged against a simple guess, “tomorrow = today”: the model has to beat that to be useful.")
 
 
 def _age_text(hours: float | None) -> str:
@@ -28,57 +35,107 @@ def freshness(cur: dict) -> tuple[str, str, str]:
     return f"Live · updated {_age_text(age)}", "green", ":material/bolt:"
 
 
-def forecast_chart(hist: pd.DataFrame, cur: dict, days: int) -> go.Figure:
+def _day(ts: pd.Timestamp, year: bool = False) -> str:
+    """'Monday 9 November' (no leading zero, portable across platforms)."""
+    return f"{ts:%A} {ts.day} {ts:%B}" + (f" {ts.year}" if year else "")
+
+
+def forecast_chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict, days: int) -> go.Figure:
+    """Top: actual close (orange) with the forecasts made the day before (blue, with their 90% range) and the new forecast. Bottom: how far off each one was (actual - forecast)."""
     h = hist.tail(days)
     fc, lo, hi, last = cur["predicted_next_close"], cur["interval_90_close"][0], cur["interval_90_close"][1], cur["latest_close"]
     last_date, fc_date = pd.Timestamp(cur["as_of_date"]), next_trading_day(cur["as_of_date"])
     blue, orange = COLORS["model"], COLORS["actual"]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=h["date"], y=h["close"], mode="lines", line=dict(color=orange, width=2.4), hovertemplate="%{x|%a %d %b}<br><b>$%{y:,.2f}</b><extra></extra>"))
-    fig.add_trace(go.Scatter(x=[last_date], y=[last], mode="markers", marker=dict(size=9, color=orange, line=dict(color="white", width=1.5)), hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=[last_date, fc_date], y=[last, fc], mode="lines", line=dict(color=blue, width=2, dash="dot"), hoverinfo="skip"))
+    past = fh[fh["for_date"] >= h["date"].min()]
+    dots = len(h) <= 70  # one marker per day only while the days are far enough apart
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.8, 0.2], vertical_spacing=0.05, subplot_titles=("", "Actual − Forecast ($)"))
+    # 90% range of every forecast, the new one included (drawn first so it sits behind the lines)
+    ranged = pd.concat([past.dropna(subset=["lo", "hi"])[["for_date", "lo", "hi"]], pd.DataFrame({"for_date": [fc_date], "lo": [lo], "hi": [hi]})])
+    fig.add_trace(go.Scatter(x=ranged["for_date"], y=ranged["hi"], mode="lines", line=dict(width=0), hoverinfo="skip", showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=ranged["for_date"], y=ranged["lo"], mode="lines", line=dict(width=0), fill="tonexty", fillcolor=BAND, name="90% range", hoverinfo="skip", legendrank=3), row=1, col=1)
+    fig.add_trace(go.Scatter(x=past["for_date"], y=past["forecast"], mode="lines+markers" if dots else "lines", name="Forecast", legendrank=2,
+                             line=dict(color=blue, width=1.3, dash="dash"), marker=dict(size=5, color=blue), hovertemplate="$%{y:,.2f}<extra>Forecast</extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=h["date"], y=h["close"], mode="lines", name="Actual", legendrank=1, line=dict(color=orange, width=2.4), hovertemplate="$%{y:,.2f}<extra>Actual</extra>"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[last_date], y=[last], mode="markers", marker=dict(size=9, color=orange, line=dict(color="white", width=1.5)), hoverinfo="skip", showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=[last_date, fc_date], y=[last, fc], mode="lines", line=dict(color=blue, width=2, dash="dot"), hoverinfo="skip", showlegend=False), row=1, col=1)
     fig.add_trace(go.Scatter(
-        x=[fc_date], y=[fc], mode="markers+text", text=[f"${fc:,.0f}"], textposition="middle right", textfont=dict(color=blue, size=13), cliponaxis=False,
+        x=[fc_date], y=[fc], mode="markers+text", text=[f"${fc:,.0f}"], textposition="middle right", textfont=dict(color=blue, size=13), cliponaxis=False, name="New forecast", legendrank=4,
         marker=dict(symbol="diamond", size=15, color=blue, line=dict(color="white", width=1.5)),
         error_y=dict(type="data", symmetric=False, array=[hi - fc], arrayminus=[fc - lo], color=blue, thickness=2.5, width=8),
-        hovertemplate=f"Forecast for %{{x|%a %d %b}}<br><b>${fc:,.2f}</b><br>90% range ${lo:,.0f} to ${hi:,.0f}<extra></extra>",
-    ))
+        hovertemplate=f"${fc:,.2f} · 90% range ${lo:,.0f} to ${hi:,.0f}<extra>Forecast for {fc_date:%a %d %b}</extra>",
+    ), row=1, col=1)
+    fig.add_trace(go.Bar(x=past["for_date"], y=past["miss"], marker_color=[ERROR_UNDER if m >= 0 else ERROR_OVER for m in past["miss"]], marker_line_width=0, showlegend=False,
+                         hovertemplate="%{y:+,.2f}<extra>Actual − Forecast</extra>"), row=2, col=1)
+    fig.add_hline(y=0, line_color="rgba(128,128,128,.6)", line_width=1, row=2, col=1)
+    live = past[past["source"] == "live"]
+    if len(live) and past["source"].nunique() > 1:  # the stretch before this line is the backtest (the model replayed on past data), after it real forecasts
+        fig.add_vline(x=live["for_date"].min() - pd.Timedelta(hours=12), line_dash="dot", line_color="rgba(128,128,128,.7)", row=1, col=1,
+                      annotation_text="Live forecasts start", annotation_position="top left", annotation_font_size=11)
     span = max((fc_date - h["date"].min()).days, 10)
-    y_lo, y_hi = min(h["close"].min(), lo), max(h["close"].max(), hi)
-    pad = (y_hi - y_lo) * 0.10
-    finish(fig, 280, hover="closest")
-    fig.update_layout(margin=dict(r=64))  # room for the price label beside the forecast marker
-    fig.update_xaxes(range=[h["date"].min(), fc_date + pd.Timedelta(days=max(1, int(span * 0.03)))], tickformat="%d %b")
-    fig.update_yaxes(tickprefix="$", tickformat=",.0f", range=[y_lo - pad, y_hi + pad])
+    y_lo, y_hi = min(h["close"].min(), lo, past["lo"].min() if past["lo"].notna().any() else lo), max(h["close"].max(), hi, past["hi"].max() if past["hi"].notna().any() else hi)
+    pad = (y_hi - y_lo) * 0.08
+    finish(fig, 340, legend=True, hover="x unified")
+    fig.update_layout(margin=dict(r=64), legend=dict(x=0, xanchor="left", traceorder="normal"))  # room for the price label beside the forecast marker
+    fig.update_xaxes(range=[h["date"].min(), fc_date + pd.Timedelta(days=max(1, int(span * 0.03)))], tickformat="%d %b", hoverformat="%a %d %b %Y")
+    fig.update_yaxes(tickprefix="$", tickformat=",.0f", range=[y_lo - pad, y_hi + pad], row=1, col=1)
+    step = next((c for c in (10, 20, 25, 50, 100, 200, 500, 1000) if c >= past["miss"].abs().max() / 2), 1000) if len(past) else 50
+    fig.update_yaxes(tickvals=[-step, 0, step], ticktext=[f"−${step}", "$0", f"${step}"], row=2, col=1)  # a short panel: three ticks, so the labels never touch
+    fig.update_annotations(font_size=12, xanchor="left", x=0, selector=dict(text="Actual − Forecast ($)"))
     return fig
 
 
 @st.fragment
-def _chart(hist: pd.DataFrame, cur: dict) -> None:
+def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-        st.caption("**Price history and forecast**", help="Orange line: actual daily close. Blue diamond: tomorrow's forecast, with the bar showing its 90% range.")
+        st.caption("**Price history and forecast**", help="Orange line: the actual daily close. Blue dashed line: the forecast made the day before, with its 90% range in light blue. "
+                   "Blue diamond: the new forecast, with the bar showing its range. Bars below: how far off each forecast was (actual minus forecast; red = the price ended higher, blue = lower). "
+                   "Before the dotted vertical line the forecasts come from the backtest (the model replayed on past data); after it they are real forecasts saved by the pipeline.")
         window = st.segmented_control("History shown", list(WINDOWS), default="3M", key="hero_window", label_visibility="collapsed") or "3M"
-    st.plotly_chart(forecast_chart(hist, cur, WINDOWS[window]), width="stretch", config={"displayModeBar": False})
+    st.plotly_chart(forecast_chart(hist, fh, cur, WINDOWS[window]), width="stretch", config={"displayModeBar": False})
 
 
-def _trust_strip(res: dict, preds: pd.DataFrame, reg: dict | None) -> None:
+def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | None) -> None:
+    """The 90% range and how far it can be trusted, as one unit."""
+    st.caption("LIKELY RANGE (90%)", help="The close should land inside this range 9 days out of 10.")
+    st.markdown(f"### {usd(lo, 0)} – {usd(hi, 0)}")
+    if not reg:
+        return
+    e = reg["interval"]["lstm_ewma_gaussian"]
+    live = ""
+    if log is not None and len(log):
+        scored = log.dropna(subset=["actual_next_close"])
+        if len(scored):
+            live = f" Live so far: {int(scored['inside_90'].astype(str).str.lower().eq('true').sum())} of {len(scored)} days."
+    ok = abs(e["coverage"] - 0.9) <= 0.02
+    st.markdown(f":{'green' if ok else 'orange'}-badge[**Range reliability {e['coverage']:.1%}**] goal 90%",
+                help=f"How often the real close landed inside the 90% range in testing: {round(e['coverage'] * e['n'])} of {e['n']} days, using only information known before each forecast.{live} 90% is ideal.")
+
+
+def _scorecard(res: dict, reg: dict | None) -> None:
+    """Accuracy on the backtest window against the simple guess, with the technical names (MAE, RMSE, ...) visible; the verdict is the coloured pill beside the title."""
     lstm = res["models"]["lstm"]
     verdict = price_verdict(lstm)
-    pct_l, pct_n = pct_miss(preds)
     diff = lstm["mae_usd"] - lstm["naive_mae_usd"]
-    cov = reg["interval"]["lstm_ewma_gaussian"]["coverage"] if reg else None
-    n_cov = reg["interval"]["lstm_ewma_gaussian"]["n"] if reg else None
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.markdown(f"**Accuracy · {res['protocol']['n_test']} backtest days**", width="content", help="Every forecast was made without seeing the day it is judged on. Each number is set against the simple guess "
+                    "“tomorrow = today” (the baseline) on the same days. For MAE, RMSE and error % lower is better; R² says how much of the daily price move the forecast explains (0 = nothing).")
+        st.badge(VERDICT_BADGE[verdict], icon=":material/balance:", color=edge_color(verdict, diff),
+                 help=f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])} a day on average; this model by {usd(lstm['mae_usd'])} ({signed_usd(diff)}). "
+                      f"The pill is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
     with st.container(horizontal=True, gap="small"):
-        st.metric("Average miss per day", usd(lstm["mae_usd"]), f"only {pct_l:.2f}% of the price", delta_color="off", delta_arrow="off", border=True, width="stretch",
-                  help=f"Average gap between the forecast and the actual next-day close, measured over the whole test period ({res['protocol']['n_test']} trading days).")
-        if cov is not None:
-            st.metric("Price stayed in the range", f"{cov:.1%}", "of days · goal 90%", delta_color="green" if abs(cov - 0.9) <= 0.02 else "orange", delta_arrow="off", border=True, width="stretch",
-                      help=f"How often the actual close landed inside the 90% range over {n_cov} test days, using only information known before each forecast. 90% is ideal.")
-        st.metric("Better than a simple guess?", VERDICT_WORDS[verdict], f"{signed_usd(diff)} miss vs. simple guess", delta_color=edge_color(verdict, diff), delta_arrow="off",
-                  border=True, width="stretch", help=f"The simple guess (the baseline) is: tomorrow's price = today's price. The chip is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
+        st.metric("MAE · average miss", usd(lstm["mae_usd"]), f"simple guess {usd(lstm['naive_mae_usd'])}", delta_color="off", delta_arrow="off", border=True, width="stretch",
+                  help="Mean absolute error: the average gap between the forecast and the actual close, in dollars, per day.")
+        st.metric("RMSE", usd(lstm["rmse_usd"]), f"simple guess {usd(lstm['naive_rmse_usd'])}", delta_color="off", delta_arrow="off", border=True, width="stretch",
+                  help="Root mean squared error: like MAE, but big misses count extra, so it shows how bad the worst days were.")
+        if reg:
+            m, nc = reg["models"]["lstm"], reg["no_change"]
+            st.metric("Error % (MAPE)", f"{m['mape_pct']:.2f}%", f"simple guess {nc['mape_pct']:.2f}%", delta_color="off", delta_arrow="off", border=True, width="stretch",
+                      help="Mean absolute percentage error: the average miss as a share of the price.")
+            st.metric("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), f"simple guess {nc['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), delta_color="off", delta_arrow="off",
+                      border=True, width="stretch", help="The share of the daily price move the forecast explains. 0 means no better than a plain average; below 0 means worse.")
 
 
-def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame | None, reg: dict | None) -> None:
+def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
     label, color, icon = freshness(cur)
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         st.markdown("## Gold Price Forecast")
@@ -86,32 +143,37 @@ def render(cur: dict, hist: pd.DataFrame, res: dict | None, preds: pd.DataFrame 
         st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 10:00 (Thailand time). "
                  f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
         st.badge("Research project", color="gray")
-    st.caption("Next trading day's gold price (XAU/USD) · LSTM neural network")
+    st.caption(BRIEFING)
 
     fc, last, lo, hi = cur["predicted_next_close"], cur["latest_close"], cur["interval_90_close"][0], cur["interval_90_close"][1]
     change, pct = fc - last, (fc / last - 1) * 100
     up = change >= 0
-    day = next_trading_day(cur["as_of_date"]).strftime("%A %d %B").upper()
+    as_of = pd.Timestamp(cur["as_of_date"])
+    target = next_trading_day(as_of)
     with st.container(border=True):
-        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="bottom", gap="small"):
-            with st.container(width="content"):
-                st.caption(f"FORECAST FOR {day}")
+        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="medium"):
+            with st.container(border=True, width=170, gap="xxsmall"):  # a calendar tile: the day being forecast, impossible to miss
+                st.caption("FORECAST FOR", text_alignment="center")
+                st.markdown(":blue[**" + f"{target:%A}".upper() + "**]", text_alignment="center")
+                st.markdown(f"# {target.day}", text_alignment="center")
+                st.markdown(":blue[**" + f"{target:%B} {target.year}".upper() + "**]", text_alignment="center")
+            with st.container(width="content", gap="xxsmall"):
+                st.caption("GOLD CLOSING PRICE (XAU/USD)", help=f"The model's forecast for the close of {_day(target, year=True)}, made from the {_day(as_of)} close.")
                 st.markdown(f"# {usd(fc)}")
-                st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)] vs. last close {usd(last)} on {pd.Timestamp(cur['as_of_date']).strftime('%d %b')}")
-            with st.container(width="content"):
-                st.caption("LIKELY RANGE (90%)", help="The close should land inside this range 9 days out of 10.")
-                st.markdown(f"### {usd(lo, 0)} – {usd(hi, 0)}")
+                st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]  \n:gray[:small[vs. the last close {usd(last)} · {as_of:%a} {as_of.day} {as_of:%b}]]")
+            with st.container(width="content", border=True):
+                _range_block(lo, hi, reg, log)
         st.divider()
-        _chart(hist, cur)
-    if res is not None and preds is not None:
-        _trust_strip(res, preds, reg)
+        _chart(hist, fh, cur)
+    if res is not None:
+        _scorecard(res, reg)
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
             st.caption("Read it as “about today's close, within the range”. Research only, not trading advice.")
             with st.popover("How to read this", icon=":material/help:"):
                 st.markdown(
-                    "- **Forecast:** the model's estimate of tomorrow's closing price.\n"
-                    "- **Range / stayed in the range:** where the close should land 9 days out of 10, and how often it really did; a wider range means more uncertainty.\n"
-                    "- **Average miss per day:** how far off the forecast has been on average in testing.\n"
-                    "- **Better than a simple guess?** The simple guess (the baseline) just repeats today's price (“tomorrow = today”). A model is only useful if it does clearly better.\n\n"
-                    "The **How reliable?** tab shows the evidence behind each number."
+                    "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
+                    "- **Likely range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing (90% is ideal).\n"
+                    "- **MAE, RMSE, error %:** how far off the forecast was over the test days, set against the simple guess “tomorrow = today” (the baseline). RMSE counts big misses extra.\n"
+                    "- **Better than a simple guess?** A model is only useful if it does clearly better than just repeating today's price.\n\n"
+                    "The tabs below show the forecasts next to what really happened, the real market data, and the tests behind each number."
                 )

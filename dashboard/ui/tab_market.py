@@ -1,4 +1,4 @@
-"""Data explorer: price history, volatility (the range in the header is a volatility forecast), daily returns and the model's own indicators."""
+"""Actual market data: price history, volatility (the range in the header is a volatility forecast), daily returns and the model's own indicators."""
 from __future__ import annotations
 
 import numpy as np
@@ -99,6 +99,7 @@ def render(px: pd.DataFrame | None, cur: dict, vol: tuple | None) -> None:
     if px is None:
         st.info("Price history could not be loaded right now. The forecast and its evaluation above are unaffected.", icon=":material/cloud_off:")
         return
+    st.caption("Real market data: gold prices, how much they move, and the inputs the model reads.")
     _price(px)
     st.divider()
     _volatility(px, cur, vol)

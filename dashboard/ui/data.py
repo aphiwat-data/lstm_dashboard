@@ -8,6 +8,7 @@ from io import BytesIO
 from pathlib import Path
 
 import boto3
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -155,6 +156,32 @@ def price_history(preds: pd.DataFrame | None, cur: dict) -> pd.DataFrame:
     if len(hist) == 0 or as_of > hist["date"].max():
         hist = pd.concat([hist, pd.DataFrame({"date": [as_of], "close": [cur["latest_close"]]})], ignore_index=True)
     return hist.sort_values("date").reset_index(drop=True)
+
+
+def forecast_history(preds: pd.DataFrame | None, log: pd.DataFrame | None, vdf: pd.DataFrame | None) -> pd.DataFrame:
+    """Every past forecast placed on the day it was FOR, beside the actual close of that day.
+
+    Columns: for_date, forecast, lo, hi (the 90% range, NaN when unknown), actual, miss (actual - forecast) and source ("backtest" or "live").
+    The walk-forward backtest comes first; the live log (forecasts the pipeline saved before the day) wins when both cover a day."""
+    parts = []
+    if preds is not None and len(preds):
+        fc = preds["meta_close"] * np.exp(preds["pred_ret_lstm"])
+        b = pd.DataFrame({"for_date": preds["date"].shift(-1), "forecast": fc, "lo": np.nan, "hi": np.nan, "actual": preds["meta_next_close"], "source": "backtest"})
+        b.loc[b.index[-1], "for_date"] = preds["date"].iloc[-1] + pd.offsets.BDay(1)  # the last test row's next day is not in the table
+        if vdf is not None:  # 90% range = forecast x e^(+-1.645 sigma), sigma = the EWMA of past errors stored with the volatility results
+            z = 1.6449 * vdf.set_index("date")["sigma_ewma_pct"].reindex(preds["date"]).to_numpy() / 100
+            b["lo"], b["hi"] = fc * np.exp(-z), fc * np.exp(z)
+        parts.append(b)
+    if log is not None and len(log):
+        s = log.dropna(subset=["actual_next_close"])
+        parts.append(pd.DataFrame({"for_date": pd.to_datetime(s["next_date"]), "forecast": s["predicted_next_close"], "lo": s["lo_90"], "hi": s["hi_90"], "actual": s["actual_next_close"], "source": "live"}))
+    if not parts:
+        return pd.DataFrame(columns=["for_date", "forecast", "lo", "hi", "actual", "miss", "source"])
+    out = pd.concat(parts, ignore_index=True)
+    out["for_date"] = pd.to_datetime(out["for_date"])
+    out = out.drop_duplicates("for_date", keep="last").sort_values("for_date").reset_index(drop=True)
+    out["miss"] = out["actual"] - out["forecast"]
+    return out
 
 
 def run_age_hours(cur: dict) -> float | None:

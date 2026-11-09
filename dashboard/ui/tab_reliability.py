@@ -13,9 +13,9 @@ MODEL_LABELS = {"drift": "Recent average return", "ridge": "Ridge", "hist_gb_reg
 
 def _verdict(lstm: dict, verdict: str) -> None:
     if verdict == "better":
-        st.success("**A measurable edge.** The typical error is clearly lower than “tomorrow = today”.", icon=":material/check_circle:")
+        st.success("**A measurable edge.** The average miss (MAE) is clearly lower than “tomorrow = today”.", icon=":material/check_circle:")
     elif verdict == "worse":
-        st.error("**Worse than the simple baseline.** The typical error is clearly higher than repeating today's price.", icon=":material/cancel:")
+        st.error("**Worse than the simple baseline.** The average miss (MAE) is clearly higher than repeating today's price.", icon=":material/cancel:")
     else:
         st.info("**Not better than a simple guess.** It does about as well as repeating today's price (the baseline), so read it as *about today's close*. The range, however, is trustworthy.", icon=":material/balance:")
 
@@ -33,7 +33,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
     pct_n = pct_miss(preds)[1]
     st.subheader("The evidence", help=f"Based on {res['protocol']['n_test']} test days ({res['protocol']['test_start']} to {res['protocol']['test_end']}); small differences are within noise.")
     with st.container(border=True):
-        _row("Average miss per day", usd(lstm["mae_usd"]), f"{signed_usd(lstm['mae_usd'] - lstm['naive_mae_usd'])} vs. baseline", edge_color(verdict, lstm["mae_usd"] - lstm["naive_mae_usd"]),
+        _row("MAE · average miss", usd(lstm["mae_usd"]), f"{signed_usd(lstm['mae_usd'] - lstm['naive_mae_usd'])} vs. baseline", edge_color(verdict, lstm["mae_usd"] - lstm["naive_mae_usd"]),
              f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])}.",
              f"That guess misses by {pct_n:.2f}% of the price. The model {PHRASE[verdict]} it (p = {lstm['dm_p_vs_naive']:.2f}; below 0.05 counts as a clear difference).")
         if reg:
@@ -41,11 +41,11 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
             signal = m["r2_os_vs_rolling_mean"] > 0 and m["ic_p"] < 0.05
             e, nc = iv["lstm_ewma_gaussian"], iv["no_change_ewma_gaussian"]
             st.divider()
-            _row("Predicts daily moves?", f"{m['r2_os_vs_rolling_mean']:+.3f}", "Some predictive power" if signal else "No predictive power", "green" if signal else "orange",
+            _row("R² · predicts moves?", f"{m['r2_os_vs_rolling_mean']:+.3f}", "Some predictive power" if signal else "No predictive power", "green" if signal else "orange",
                  "Below 0 means no better than a simple average.",
                  f"Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: {m['ic_spearman']:+.3f} (p = {m['ic_p']:.2f}).")
             st.divider()
-            _row("Price stayed in the range", f"{e['coverage']:.1%}", "Target 90%", "green" if abs(e["coverage"] - 0.9) <= 0.02 else "orange",
+            _row("Range reliability", f"{e['coverage']:.1%}", "goal 90%", "green" if abs(e["coverage"] - 0.9) <= 0.02 else "orange",
                  f"The range held on {round(e['coverage'] * e['n'])} of {e['n']} test days.",
                  f"Ideal: 90%. Its width, {usd(e['mean_width_usd'], 0)}, is the same as a no-change range ({usd(nc['mean_width_usd'], 0)}): the model does not narrow the uncertainty.")
 
@@ -63,7 +63,7 @@ def _mae_chart(res: dict) -> None:
     fig.update_layout(bargap=0.5)
     fig.update_yaxes(range=[0, max(vals) * 1.2], tickprefix="$")
     better = [name for name, key in (("Ridge", "ridge"), ("Gradient boosting", "hist_gb_reg"), ("LSTM", "lstm")) if models[key]["dm_p_vs_naive"] < 0.05 and models[key]["mae_usd"] < naive]
-    st.markdown("**Typical daily error by model**", help="Lower is better. A model has to land clearly below the dashed line to add value. " + (f"{', '.join(better)} {'does' if len(better) == 1 else 'do'}." if better else "None does."))
+    st.markdown("**Average miss (MAE) by model**", help="Lower is better. A model has to land clearly below the dashed line to add value. " + (f"{', '.join(better)} {'does' if len(better) == 1 else 'do'}." if better else "None does."))
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
@@ -85,7 +85,7 @@ def _range_chart(compare: list | None, vix: list | None) -> None:
     fig.update_layout(bargap=0.5)
     fig.update_yaxes(range=[50, 100], ticksuffix="%")
     used, others = rows[0][1], [r[1] for r in rows[1:]]
-    st.markdown("**How often the 90% range held, by way of drawing it**", help=f"Dashed line: the 90% target. We compared {len(rows)} ways to draw the range." + (" The first one, used in this model, landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
+    st.markdown("**Range reliability by way of drawing the range**", help=f"How often the close landed inside the 90% range. Dashed line: the 90% goal. We compared {len(rows)} ways to draw the range." + (" The first one, used in this model, landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
                 + (" The others were too narrow." if all(o < used for o in others) else ""))
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
@@ -117,12 +117,12 @@ def _details(res: dict, reg: dict | None) -> None:
         for key, r in res["models"].items():
             d = r.get("direction_from_head") or r["direction_from_sign"]
             m = (reg["models"].get(key) if reg else None) or {}
-            rows[MODEL_LABELS.get(key, key)] = {"Typical error ($)": r.get("mae_usd"), "Typical error (%)": m.get("mape_pct"), "RMSE ($)": r.get("rmse_usd"),
+            rows[MODEL_LABELS.get(key, key)] = {"MAE ($)": r.get("mae_usd"), "Error % (MAPE)": m.get("mape_pct"), "RMSE ($)": r.get("rmse_usd"),
                                                 "vs. baseline (p)": r.get("dm_p_vs_naive"), "R² out-of-sample": m.get("r2_os_vs_rolling_mean"), "Rank correlation": r.get("ic_spearman"),
                                                 "Direction right (%)": d["acc"] * 100, "vs. always up (p)": d["p_vs_always_up"], "AUC": (r.get("direction_from_head") or {}).get("auc")}
         table = pd.DataFrame(rows).T.astype(float)
         st.dataframe(table, width="stretch", column_config={
-            "Typical error ($)": st.column_config.NumberColumn(format="$%.2f"), "Typical error (%)": st.column_config.NumberColumn(format="%.3f%%"), "RMSE ($)": st.column_config.NumberColumn(format="$%.2f"),
+            "MAE ($)": st.column_config.NumberColumn(format="$%.2f"), "Error % (MAPE)": st.column_config.NumberColumn(format="%.3f%%"), "RMSE ($)": st.column_config.NumberColumn(format="$%.2f"),
             "vs. baseline (p)": st.column_config.NumberColumn(format="%.3f"), "R² out-of-sample": st.column_config.NumberColumn(format="%+.3f"), "Rank correlation": st.column_config.NumberColumn(format="%+.3f"),
             "Direction right (%)": st.column_config.NumberColumn(format="%.1f%%"), "vs. always up (p)": st.column_config.NumberColumn(format="%.3f"), "AUC": st.column_config.NumberColumn(format="%.3f")})
         st.caption("p below 0.05 = a clear difference.")
