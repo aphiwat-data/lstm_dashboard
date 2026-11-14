@@ -54,7 +54,7 @@ already does this, and so does Chapter 3 (price accuracy first, direction as a s
 one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py` verdict rules). It no longer imports TensorFlow (requirements: streamlit, boto3, pandas, numpy,
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
-Layout since Phase 13: a header (title, three-line briefing, the forecast card with the forecast day in its top-right corner, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
+Layout since Phase 13: a header (the title with a status badge, the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
 an accuracy scorecard with MAE / RMSE / error % / R², the four cards with a one-line note on what each measures), then four tabs: *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
 *About the project* (the only tab that explains what was built and tried).
 
@@ -602,13 +602,13 @@ Owner request (nine points, plus "make a checklist"): a short briefing in the he
 hit rate renamed; metrics shown with their technical names (MAE, RMSE, ...) and a new home for the reliability numbers; tab names that say what is actual and what is predicted;
 the backtest first; actual values beside the forecasts in the "Price history and forecast" chart; visualisations on top and the explanations separated.
 
-- **Header briefing.** A short briefing under the title (first version: three one-line sentences: what the model does, that every forecast is saved before the day happens and scored against the real close, and that it is
-  judged against "tomorrow = today"). On 14 Nov the owner had the first sentence ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) and a 90% range") removed, so two lines remain:
-  "Each forecast is saved before the day happens, then scored against the real close." and "The forecast has to beat a simple guess, “tomorrow = today”, to be useful." The instrument name (XAU/USD) is no longer on the main page.
-- **Forecast day (placement revised the same day).** The first version put a calendar tile (FORECAST FOR / MONDAY / 9 / NOVEMBER 2026) to the left of the price; the owner found it cluttered there. It is now the
-  top-right corner of the forecast card: a top row with the card label on the left ("GOLD CLOSING PRICE FORECAST (XAU/USD)") and "Forecast for Monday 9 November 2026" on the right (calendar icon, the date in blue),
-  then the price block and the range block. Three placements were compared in a scratch app (heading top-right, a big blue date above the range box, a small badge top-right); the heading is clearly visible, adds no box
-  and shortens the card.
+- **Header briefing (removed).** The owner asked for a 2-3 line briefing under the title on 9 Nov (what the model does, that every forecast is saved before the day happens and scored against the real close, and that it is
+  judged against "tomorrow = today"). On 14 Nov the owner had its first sentence ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) and a 90% range") removed, and then the two remaining lines as well.
+  The header is now just the title and the status badge; the instrument name (XAU/USD) is no longer on the main page. Do not add a briefing back unless asked.
+- **Forecast day (placement revised twice).** The first version put a calendar tile (FORECAST FOR / MONDAY / 9 / NOVEMBER 2026) to the left of the price; the owner found it cluttered there. The second put "Forecast for
+  Monday 9 November 2026" (calendar icon, the date in blue) in the top-right corner of the card, opposite a card caption. Three placements were compared in a scratch app for that step (heading top-right, a big blue date above
+  the range box, a small badge top-right). On 14 Nov the owner asked for the line to sit right above the forecast number, so it is now the first line of the price block ("Forecast for Monday 16 November 2026", then the
+  price, the change chip and the last close) and the range box stays on the right; the card has no top row any more.
 - **Range and its reliability are one block.** "LIKELY RANGE (90%)" with the range and, under it, a badge "Range reliability 89.5%  goal 90%" (the tooltip gives 348 of 389 test days and the live
   count). The old "Price stayed in the range" card is gone. One name from now on: **range reliability** (it replaces "range hit rate" and "price stayed in the range" on every tab, chart title and the glossary).
 - **Scorecard.** "Accuracy · 449 backtest days" with four metric cards that carry their technical names and the simple guess beside them: MAE (average miss), RMSE, error % (MAPE) and out-of-sample R².
@@ -625,10 +625,10 @@ the backtest first; actual values beside the forecasts in the "Price history and
   "Actual − Forecast ($)") are bold 13 px dark grey instead of 12 px light grey (`theme.panel_title`). The theme's heading sizes were not touched because the sidebar title is an h3 and the sidebar is tuned to fit one screen.
   `:large[...]` is not a Streamlit markdown directive (it renders as literal text); a blue accent bar and a chart icon before the title were compared in a scratch app and dropped to keep one heading style on the page.
 - **Text trimmed (owner, 14 Nov: "the text still looks cluttered, remove what is not relevant").** Rule applied: no line may repeat what a title, a tab name, a chip or a tooltip already says. Removed: the "Research project" badge
-  (the disclaimer stays); the card caption "GOLD CLOSING PRICE FORECAST (XAU/USD)" (the status badge "Live · updated ..." moved from the title row into its place, top-left of the forecast card, so the date keeps the top-right);
+  (the disclaimer stays); the card caption "GOLD CLOSING PRICE FORECAST (XAU/USD)" (the status badge "Live · updated ..." briefly moved into its place in the forecast card and is back beside the title since the briefing was removed);
   "Read it as about today's close, within the range" (the reliability tab says it; the caption keeps only "Research only, not trading advice."); the one-line captions under the first two tab names; the notes on the live-record
   and volatility cards (their chips and tooltips remain; only the four accuracy cards keep a note, as the owner asked); the "Daily changes" statistics line (moved into its tooltip); the *About* intro paragraph, which repeated the header
-  briefing and the sidebar; and filler in the reliability tab (the verdict lost a clause, the R² row shows the rank correlation instead of an explanation). The header briefing was cut to shorter lines (later two, see the Header briefing bullet), the live-chart legend
+  briefing and the sidebar; and filler in the reliability tab (the verdict lost a clause, the R² row shows the rank correlation instead of an explanation). The header briefing was cut to shorter lines first (later removed, see the Header briefing bullet), the live-chart legend
   reads "Forecast + 90% range / Actual (inside range) / Actual (outside range) / Next forecast", and the "How to read this" popover no longer mentions the old fifth card. Text counted by script on the rendered page (charts, tables and
   collapsed expanders excluded, icon names included): *Forecast vs. actual* 310 to 250 words, *Actual market data* 364 to 287, *How reliable?* 370 to 333, *About* 846 to 790 (about 450 of those sit in collapsed expanders). No chart or
   section was removed.
@@ -647,7 +647,7 @@ the backtest first; actual values beside the forecasts in the "Price history and
 - **Live pipeline check.** With the schedule moved to 03:00 UTC (10:00 Thailand, 4 Nov) the unattended runs on 5, 6 and 7 Nov each added the previous day's bar and a forecast (the 8 and 9 Nov runs found nothing new: a weekend and a Monday morning), so the live log has one row per trading day since 4 Nov: 6 scored forecasts
   (4 inside the 90% range, 2 outside; MAE \$56.32 vs. \$57.40 for "tomorrow = today") and the forecast for Monday 9 Nov waiting. Six days say nothing about accuracy yet.
 - **Verification.** No exceptions and no text overlap in any chart on any tab (script over every `.main-svg` text box) on Streamlit 1.56 and 1.66.1 at 1512 x 857, and the first revision of the header, scorecard and tabs also
-  at 1366 x 650, 1280 and 1024 px. The sidebar still fits 857 px without scrolling. After the second revision (forecast day top-right, note cards) the page was re-checked on 1.56 at 1512 x 857 and 759 px (sidebar collapsed) and on 1.66.1 at
+  at 1366 x 650, 1280 and 1024 px. The sidebar still fits 857 px without scrolling. After the second revision (forecast day top-right, note cards; the later moves of the day above the price and the removal of the briefing were checked on 1.56 and 1.66.1 at 1512 x 857 with no exception, no chart text overlap and the sidebar fitting) the page was re-checked on 1.56 at 1512 x 857 and 759 px (sidebar collapsed) and on 1.66.1 at
   1268 px (sidebar open): no exception, no overlap, no horizontal overflow; the four scorecard cards are 161 px wide at 1268 px and 142 px at 759 px, equal in height, with the notes wrapping to three or four lines. The browser pane
   kept changing width while testing, so 1024 px was not re-measured for the second revision. An offline run (S3 unreachable) and an online run of the whole page under `AppTest` raise nothing.
 

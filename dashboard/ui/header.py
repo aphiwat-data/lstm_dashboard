@@ -1,5 +1,5 @@
-"""The always-visible top of the page: title and a short briefing, the forecast (the product) with its range, the chart that sets past forecasts beside what really
-happened, and the accuracy scorecard. Everything below this (the tabs) is the evidence."""
+"""The always-visible top of the page: the title with the status badge, the forecast (the product) with its day and its range, the chart that sets past forecasts beside
+what really happened, and the accuracy scorecard. Everything below this (the tabs) is the evidence."""
 from __future__ import annotations
 
 import pandas as pd
@@ -15,8 +15,6 @@ from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_t
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 VERDICT_BADGE = {"better": "Better than a simple guess", "same": "Not clearly better than a simple guess", "worse": "Worse than a simple guess"}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
-BRIEFING = ("Each forecast is saved **before** the day happens, then scored against the real close.  \n"
-            "The forecast has to beat a simple guess, “tomorrow = today”, to be useful.")
 
 
 def _age_text(hours: float | None) -> str:
@@ -138,8 +136,10 @@ def _scorecard(res: dict, reg: dict | None) -> None:
 def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
     label, color, icon = freshness(cur)
     trained = cur.get("model_trained_through")
-    st.markdown("## Gold Price Forecast")
-    st.caption(BRIEFING)
+    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
+        st.markdown("## Gold Price Forecast")
+        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 10:00 (Thailand time). "
+                 f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
 
     fc, last, lo, hi = cur["predicted_next_close"], cur["latest_close"], cur["interval_90_close"][0], cur["interval_90_close"][1]
     change, pct = fc - last, (fc / last - 1) * 100
@@ -148,11 +148,8 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
     target = next_trading_day(as_of)
     with st.container(border=True):
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
-            st.badge(label, icon=icon, color=color, width="content", help="The daily pipeline refreshes the forecast at 10:00 (Thailand time). "
-                     f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
-            st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]", width="content")  # top-right corner: which day this number is for
-        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
             with st.container(width="content", gap="xxsmall"):
+                st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]")  # which day the number below is for
                 st.markdown(f"# {usd(fc)}")
                 st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]  \n:gray[:small[vs. the last close {usd(last)} · {as_of:%a} {as_of.day} {as_of:%b}]]")
             with st.container(width="content", border=True):
