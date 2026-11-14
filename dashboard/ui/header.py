@@ -9,11 +9,9 @@ from plotly.subplots import make_subplots
 
 from .cards import card_row, metric_card
 from .data import next_trading_day, run_age_hours
-from .logic import edge_color, price_verdict
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, signed_usd, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
-VERDICT_BADGE = {"better": "Better than a simple guess", "same": "Not clearly better than a simple guess", "worse": "Worse than a simple guess"}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
 
 
@@ -110,16 +108,13 @@ def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | Non
 
 
 def _scorecard(res: dict, reg: dict | None) -> None:
-    """Accuracy on the backtest window against the simple guess, with the technical names (MAE, RMSE, ...) visible; the verdict is the coloured pill beside the title."""
+    """Accuracy on the backtest window, with the technical names (MAE, RMSE, ...) visible; the comparison with the simple guess sits in the tooltips."""
     lstm = res["models"]["lstm"]
-    verdict = price_verdict(lstm)
     diff = lstm["mae_usd"] - lstm["naive_mae_usd"]
-    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-        chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days", help="Every forecast was made without seeing the day it is judged on. Each number is set against the simple guess "
-                    "“tomorrow = today” (the baseline) on the same days. For MAE, RMSE and error % lower is better; R² says how much of the daily price move the forecast explains (0 = nothing).")
-        st.badge(VERDICT_BADGE[verdict], icon=":material/balance:", color=edge_color(verdict, diff),
-                 help=f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])} a day on average; this model by {usd(lstm['mae_usd'])} ({signed_usd(diff)}). "
-                      f"The pill is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
+    chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days",
+                help="Every forecast was made without seeing the day it is judged on. Each number is set against the simple guess “tomorrow = today” (the baseline) on the same days. "
+                     f"On average the simple guess misses by {usd(lstm['naive_mae_usd'])} a day and this model by {usd(lstm['mae_usd'])} ({signed_usd(diff)}); p = {lstm['dm_p_vs_naive']:.2f}, and a difference counts as clear only below 0.05. "
+                     "For MAE, RMSE and error % lower is better; R² says how much of the daily price move the forecast explains (0 = nothing).")
     with card_row():
         metric_card("MAE · average miss", usd(lstm["mae_usd"]),
                     help=f"Mean absolute error: the average gap between the forecast and the actual close, in dollars, per day. The simple guess “tomorrow = today” scores {usd(lstm['naive_mae_usd'])}.")
@@ -165,6 +160,5 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
                 st.markdown(
                     "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
                     "- **Likely range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing (90% is ideal).\n"
-                    "- **MAE, RMSE, error %:** how far off the forecast was over the test days, set against the simple guess “tomorrow = today” (the baseline).\n"
-                    "- **The coloured pill:** green or red only when the model is clearly better or worse than the simple guess."
+                    "- **MAE, RMSE, error %:** how far off the forecast was over the test days, set against the simple guess “tomorrow = today” (the baseline)."
                 )

@@ -613,7 +613,8 @@ the backtest first; actual values beside the forecasts in the "Price history and
 - **Range and its reliability are one block.** "RANGE" (first "LIKELY RANGE (90%)"; the owner had "LIKELY" and "(90%)" removed on 14 Nov, the tooltip still says 9 days out of 10) with the range and, under it, a badge
   "Range reliability 89.5%" (first with "goal 90%", also removed; the tooltip gives 348 of 389 test days, the live count and "90% is ideal"). The old "Price stayed in the range" card is gone. One name from now on: **range reliability** (it replaces "range hit rate" and "price stayed in the range" on every tab, chart title and the glossary).
 - **Scorecard.** "Accuracy · 449 backtest days" with four metric cards that carry their technical names: MAE (average miss), RMSE, error % (MAPE) and out-of-sample R². (First version: each card also had a chip "simple guess $46.63" and a one-line note; both were removed on 14 Nov, see "Cards stripped".)
-  The verdict is a coloured pill beside the title ("Not clearly better than a simple guess", green or red only when p < 0.05). A fifth card was tried and wrapped alone onto a second row at 1280 px, hence the pill.
+  The verdict was a coloured pill beside the title ("Not clearly better than a simple guess", green or red only when p < 0.05; a fifth card had wrapped alone onto a second row at 1280 px, hence the pill); the owner had the pill removed
+  on 14 Nov, see "Pill removed".
   Rank correlation (IC) stays on *How reliable?*. The detailed evidence for the numbers stays on that tab (its rows use the same names).
 - **One-line notes under the accuracy metrics (owner request, same day).** Each accuracy card has a short grey line under the number saying what it measures and when to use it: MAE "Average miss in dollars. Best for the
   everyday error.", RMSE "Like MAE, but big misses count extra. Best for spotting bad days.", error % "Miss as a share of the price. Best for comparing price levels.", R² "Does it explain the daily moves? 0 = no better
@@ -634,8 +635,11 @@ the backtest first; actual values beside the forecasts in the "Price history and
   collapsed expanders excluded, icon names included): *Forecast vs. actual* 310 to 250 words, *Actual market data* 364 to 287, *How reliable?* 370 to 333, *About* 846 to 790 (about 450 of those sit in collapsed expanders). No chart or
   section was removed.
 - **Cards stripped (owner, 14 Nov: selected the four notes and the four "simple guess" chips and said "remove all of it").** The four accuracy cards now show only the label (with its tooltip) and the number. The score of the simple guess
-  "tomorrow = today" moved into each card's tooltip (MAE $46.63, RMSE $68.94, error % 1.14%, R² −0.001), and the verdict pill beside the title still says how the model compares. The same chip was removed from the live-record cards
+  "tomorrow = today" moved into each card's tooltip (MAE $46.63, RMSE $68.94, error % 1.14%, R² −0.001), and the title's tooltip says how the model compares. The same chip was removed from the live-record cards
   ("simple guess: $49.57" and the "80%" under the range reliability; both are in the tooltips now). The volatility cards keep their unit chips ("per day", "over a year"). `ui/cards.py` lost its `NOTES` and the `note` argument.
+- **Pill removed (owner, 14 Nov: selected it and said "remove this").** The coloured verdict pill "Not clearly better than a simple guess" beside "Accuracy · 449 backtest days" is gone. What it said now sits in the tooltip of
+  the title (the simple guess misses by $46.63 a day, this model by $46.83, +$0.20, p = 0.38, a difference counts as clear only below 0.05) and in the card tooltips. The plain-language verdict ("Not better than a simple guess. Read the
+  forecast as about today's close. The range, however, is trustworthy.") is now only on *How reliable?*, so the first screen no longer states that the model does not beat the baseline; the owner chose that. The popover's pill bullet went too.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
   section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.
