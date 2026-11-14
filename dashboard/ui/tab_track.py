@@ -84,7 +84,7 @@ def _live(log: pd.DataFrame | None) -> None:
         metric_card("Forecasts scored", f"{len(scored)}")
         metric_card("MAE · average miss", usd(miss_model), f"simple guess: {usd(miss_naive)}",
                     help="Mean absolute error of the live forecasts so far, against the simple guess “tomorrow = today” on the same days.")
-        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%} · goal 90%",
+        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%}",
                     help="With so few days this says little yet.")
     _live_chart(scored.tail(15).reset_index(drop=True), log[log["actual_next_close"].isna()])
     show = scored.tail(15).iloc[::-1].assign(inside=lambda d: d["inside_90"].astype(str).str.lower().eq("true"))

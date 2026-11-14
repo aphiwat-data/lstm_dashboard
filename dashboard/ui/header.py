@@ -94,7 +94,7 @@ def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
 
 def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | None) -> None:
     """The 90% range and how far it can be trusted, as one unit."""
-    st.caption("LIKELY RANGE (90%)", help="The close should land inside this range 9 days out of 10.")
+    st.caption("RANGE", help="The close should land inside this range 9 days out of 10 (a 90% range).")
     st.markdown(f"### {usd(lo, 0)} – {usd(hi, 0)}")
     if not reg:
         return
@@ -105,7 +105,7 @@ def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | Non
         if len(scored):
             live = f" Live so far: {int(scored['inside_90'].astype(str).str.lower().eq('true').sum())} of {len(scored)} days."
     ok = abs(e["coverage"] - 0.9) <= 0.02
-    st.markdown(f":{'green' if ok else 'orange'}-badge[**Range reliability {e['coverage']:.1%}**] goal 90%",
+    st.markdown(f":{'green' if ok else 'orange'}-badge[**Range reliability {e['coverage']:.1%}**]",
                 help=f"How often the real close landed inside the 90% range in testing: {round(e['coverage'] * e['n'])} of {e['n']} days, using only information known before each forecast.{live} 90% is ideal.")
 
 
@@ -151,7 +151,7 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
             with st.container(width="content", gap="xxsmall"):
                 st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]")  # which day the number below is for
                 st.markdown(f"# {usd(fc)}")
-                st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]  \n:gray[:small[vs. the last close {usd(last)} · {as_of:%a} {as_of.day} {as_of:%b}]]")
+                st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]", help=f"Change from the last close, {usd(last)} on {as_of:%a} {as_of.day} {as_of:%b}.")
             with st.container(width="content", border=True):
                 _range_block(lo, hi, reg, log)
         st.divider()
