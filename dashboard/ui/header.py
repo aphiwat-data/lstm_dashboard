@@ -15,9 +15,8 @@ from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_t
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 VERDICT_BADGE = {"better": "Better than a simple guess", "same": "Not clearly better than a simple guess", "worse": "Worse than a simple guess"}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
-BRIEFING = ("An LSTM neural network forecasts the **next trading day's gold price** (XAU/USD) and a 90% range.  \n"
-            "Each forecast is saved **before** the day happens, then scored against the real close.  \n"
-            "It has to beat a simple guess, “tomorrow = today”, to be useful.")
+BRIEFING = ("Each forecast is saved **before** the day happens, then scored against the real close.  \n"
+            "The forecast has to beat a simple guess, “tomorrow = today”, to be useful.")
 
 
 def _age_text(hours: float | None) -> str:

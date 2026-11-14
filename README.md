@@ -602,8 +602,9 @@ Owner request (nine points, plus "make a checklist"): a short briefing in the he
 hit rate renamed; metrics shown with their technical names (MAE, RMSE, ...) and a new home for the reliability numbers; tab names that say what is actual and what is predicted;
 the backtest first; actual values beside the forecasts in the "Price history and forecast" chart; visualisations on top and the explanations separated.
 
-- **Header briefing.** Three one-line sentences under the title: what the model does (next trading day's gold price and a 90% range), that every forecast is saved before the day happens and
-  scored against the real close, and that it is judged against "tomorrow = today". The old caption was replaced, not added to.
+- **Header briefing.** A short briefing under the title (first version: three one-line sentences: what the model does, that every forecast is saved before the day happens and scored against the real close, and that it is
+  judged against "tomorrow = today"). On 14 Nov the owner had the first sentence ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) and a 90% range") removed, so two lines remain:
+  "Each forecast is saved before the day happens, then scored against the real close." and "The forecast has to beat a simple guess, “tomorrow = today”, to be useful." The instrument name (XAU/USD) is no longer on the main page.
 - **Forecast day (placement revised the same day).** The first version put a calendar tile (FORECAST FOR / MONDAY / 9 / NOVEMBER 2026) to the left of the price; the owner found it cluttered there. It is now the
   top-right corner of the forecast card: a top row with the card label on the left ("GOLD CLOSING PRICE FORECAST (XAU/USD)") and "Forecast for Monday 9 November 2026" on the right (calendar icon, the date in blue),
   then the price block and the range block. Three placements were compared in a scratch app (heading top-right, a big blue date above the range box, a small badge top-right); the heading is clearly visible, adds no box
@@ -627,7 +628,7 @@ the backtest first; actual values beside the forecasts in the "Price history and
   (the disclaimer stays); the card caption "GOLD CLOSING PRICE FORECAST (XAU/USD)" (the status badge "Live · updated ..." moved from the title row into its place, top-left of the forecast card, so the date keeps the top-right);
   "Read it as about today's close, within the range" (the reliability tab says it; the caption keeps only "Research only, not trading advice."); the one-line captions under the first two tab names; the notes on the live-record
   and volatility cards (their chips and tooltips remain; only the four accuracy cards keep a note, as the owner asked); the "Daily changes" statistics line (moved into its tooltip); the *About* intro paragraph, which repeated the header
-  briefing and the sidebar; and filler in the reliability tab (the verdict lost a clause, the R² row shows the rank correlation instead of an explanation). The header briefing keeps three lines but each is shorter, the live-chart legend
+  briefing and the sidebar; and filler in the reliability tab (the verdict lost a clause, the R² row shows the rank correlation instead of an explanation). The header briefing was cut to shorter lines (later two, see the Header briefing bullet), the live-chart legend
   reads "Forecast + 90% range / Actual (inside range) / Actual (outside range) / Next forecast", and the "How to read this" popover no longer mentions the old fifth card. Text counted by script on the rendered page (charts, tables and
   collapsed expanders excluded, icon names included): *Forecast vs. actual* 310 to 250 words, *Actual market data* 364 to 287, *How reliable?* 370 to 333, *About* 846 to 790 (about 450 of those sit in collapsed expanders). No chart or
   section was removed.
