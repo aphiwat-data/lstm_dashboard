@@ -13,9 +13,9 @@ MODEL_LABELS = {"drift": "Recent average return", "ridge": "Ridge", "hist_gb_reg
 
 def _verdict(lstm: dict, verdict: str) -> None:
     if verdict == "better":
-        st.success("**A measurable edge.** The average miss (MAE) is clearly lower than “tomorrow = today”.", icon=":material/check_circle:")
+        st.success("**A measurable edge.** The average miss (MAE) is clearly lower than a simple guess (repeating the last close).", icon=":material/check_circle:")
     elif verdict == "worse":
-        st.error("**Worse than the simple baseline.** The average miss (MAE) is clearly higher than repeating today's price.", icon=":material/cancel:")
+        st.error("**Worse than a simple guess.** The average miss (MAE) is clearly higher than just repeating today's price.", icon=":material/cancel:")
     else:
         st.info("**Not better than a simple guess.** Read the forecast as *about today's close*. The range, however, is trustworthy.", icon=":material/balance:")
 
@@ -34,7 +34,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
     st.subheader("The evidence", help=f"Based on {res['protocol']['n_test']} test days ({res['protocol']['test_start']} to {res['protocol']['test_end']}); small differences are within noise.")
     with st.container(border=True):
         _row("MAE · average miss", usd(lstm["mae_usd"]), f"{signed_usd(lstm['mae_usd'] - lstm['naive_mae_usd'])} vs. baseline", edge_color(verdict, lstm["mae_usd"] - lstm["naive_mae_usd"]),
-             f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])}.",
+             f"A simple guess, repeating the last close, misses by {usd(lstm['naive_mae_usd'])}.",
              f"That guess misses by {pct_n:.2f}% of the price. The model {PHRASE[verdict]} it (p = {lstm['dm_p_vs_naive']:.2f}; below 0.05 counts as a clear difference).")
         if reg:
             m, iv = reg["models"]["lstm"], reg["interval"]
@@ -53,7 +53,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
 def _mae_chart(res: dict) -> None:
     models = res["models"]
     naive = models["lstm"]["naive_mae_usd"]
-    entries = [("Baseline<br>(tomorrow = today)", naive, COLORS["naive"]), ("Ridge<br>(linear model)", models["ridge"]["mae_usd"], COLORS["ridge"]),
+    entries = [("Simple guess<br>(repeat last close)", naive, COLORS["naive"]), ("Ridge<br>(linear model)", models["ridge"]["mae_usd"], COLORS["ridge"]),
                ("Gradient boosting<br>(tree model)", models["hist_gb_reg"]["mae_usd"], COLORS["hgb"]), ("LSTM<br>(this model)", models["lstm"]["mae_usd"], COLORS["model"])]
     vals = [v for _, v, _ in entries]
     fig = go.Figure(go.Bar(x=[f"{n}<br><b>${v:,.2f}</b>" for n, v, _ in entries], customdata=[n.replace("<br>", " ") for n, _, _ in entries], y=vals, marker=dict(color=[c for *_, c in entries], pattern_shape=["/", "", "", ""], pattern_fgcolor="rgba(255,255,255,0.55)"),

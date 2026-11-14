@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def price_verdict(lstm: dict) -> str:
-    """'better' | 'worse' | 'same' for the LSTM's price error against "tomorrow = today" (Diebold-Mariano p < 0.05)."""
+    """'better' | 'worse' | 'same' for the LSTM's price error against the simple guess of repeating the last close (Diebold-Mariano p < 0.05)."""
     p, skill = lstm["dm_p_vs_naive"], lstm["mae_skill_vs_naive"]
     return "better" if p < 0.05 and skill > 0 else "worse" if p < 0.05 and skill < 0 else "same"
 
@@ -18,7 +18,7 @@ def direction_verdict(lstm: dict, always_up: float) -> str:
 
 
 def pct_miss(preds: pd.DataFrame) -> tuple[float, float]:
-    """Mean absolute percentage miss of the LSTM forecast and of a "tomorrow = today" guess on the same days."""
+    """Mean absolute percentage miss of the LSTM forecast and of a repeat-the-last-close guess on the same days."""
     actual = preds["meta_next_close"]
     lstm = (preds["meta_close"] * np.exp(preds["pred_ret_lstm"]) - actual).abs() / actual
     naive = (preds["meta_close"] - actual).abs() / actual

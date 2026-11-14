@@ -41,9 +41,9 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
         lo, hi = cur["interval_90_close"]
         sigma = float(np.log(hi / lo) / (2 * 1.6449) * 100)
         with card_row():
-            metric_card("Typical daily move", f"±{sigma:.2f}%", "of the gold price, per day", help="One standard deviation behind today's range: a weighted average of recent forecast errors.")
-            metric_card("Yearly pace", f"{sigma * np.sqrt(252):.1f}%", "the same move over a year", help="Daily move × √252 trading days.")
-            metric_card("Fear gauge (VIX)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", "US stock market", help="Shown for context. We tested it as an input and it did not improve the gold forecast.")
+            metric_card("Typical daily move", f"±{sigma:.2f}%", "of the gold price, per day", help="How big a normal day's move has been lately, in percent. The range is built from it: bigger recent moves make a wider range.")
+            metric_card("Yearly pace", f"{sigma * np.sqrt(252):.1f}%", "the same move over a year", help="The same daily move scaled up to a whole year (about 252 trading days).")
+            metric_card("Fear gauge (VIX)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", "US stock market", help="Shown for context: it measures how nervous the US stock market is. We tested it as an input and it did not improve the gold forecast.")
         chart_title("Actual daily moves vs. the model's limit", help="Bars: how far gold actually moved each test day. Line: how far the model expected it could move; 90% of days should stay below the line.")
         fig = go.Figure()
         fig.add_trace(go.Bar(x=vdf["date"], y=vdf["abs_return_pct"], name="Actual daily move", marker_color=COLORS["naive"], opacity=0.5, marker_line_width=0, hovertemplate="%{x|%d %b %Y}<br>%{y:.2f}%<extra></extra>"))

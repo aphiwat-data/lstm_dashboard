@@ -23,7 +23,7 @@ GLOSSARY = [
     ("MAE (average miss per day)", "Mean absolute error: the average gap between the forecast and the actual close, in dollars. Lower is better."),
     ("RMSE", "Root mean squared error: like MAE, but big misses count extra, so it shows how bad the worst days were. Lower is better."),
     ("MAPE (error %)", "Mean absolute percentage error: the average miss as a share of the price."),
-    ("Baseline (“tomorrow = today”)", "The benchmark that simply repeats today's close, also called the naive or no-change forecast. A price forecast is only useful if it clearly beats this."),
+    ("Simple guess (baseline)", "Assuming the price stays the same as the last close; also called the naive or no-change forecast. A price forecast is only useful if it clearly beats this."),
     ("p-value", "How likely a difference this large would be to appear by luck alone. Below 0.05 counts as a clear difference; above it, the two are treated as equal."),
     ("R² (out-of-sample)", "The share of the daily price move the forecast explains. 0 means no better than a simple average; below 0 means worse."),
     ("Rank correlation (IC)", "Whether days with a higher forecast really had higher actual moves. 0 means no relationship, 1 a perfect match."),
@@ -58,7 +58,7 @@ def _experiments(res: dict) -> pd.DataFrame:
 
 
 def _scoreboard(res: dict | None) -> None:
-    st.subheader("What we tried", help="Every idea was judged the same way: the MAE (average miss) against “tomorrow = today”, on the same test days. The same holds for the range: "
+    st.subheader("What we tried", help="Every idea was judged the same way: the MAE (average miss) against a simple guess (repeating the last close), on the same test days. The same holds for the range: "
                  "five ways of drawing it, a GARCH model, the VIX and a network trained on the range itself all failed to beat a simple weighted average of recent errors.")
     if res is None:
         st.info("The evaluation results are not available in this deployment.")
@@ -67,7 +67,7 @@ def _scoreboard(res: dict | None) -> None:
     lim = max(5, math.ceil(d["diff_pct"].abs().max() * 1.6))
     colors = [COLORS["naive"] if v == "No clear difference" else COLORS["good"] if v == "Better" else ERROR_UNDER for v in d["verdict"]]
     fig = go.Figure(go.Bar(y=d["short"], x=d["diff_pct"], orientation="h", marker_color=colors, text=["0.0%" if round(x, 1) == 0 else f"{x:+.1f}%" for x in d["diff_pct"]], textposition="outside", cliponaxis=False,
-                           customdata=d[["mae", "naive", "p"]], hovertemplate="%{y}<br>MAE $%{customdata[0]:.2f} vs. $%{customdata[1]:.2f} for “tomorrow = today”<br>p = %{customdata[2]:.2f}<extra></extra>"))
+                           customdata=d[["mae", "naive", "p"]], hovertemplate="%{y}<br>MAE $%{customdata[0]:.2f} vs. $%{customdata[1]:.2f} for the simple guess<br>p = %{customdata[2]:.2f}<extra></extra>"))
     fig.add_vline(x=0, line_color="rgba(128,128,128,.7)", line_width=1)
     finish(fig, 60 + 34 * len(d), hover="closest")
     fig.update_xaxes(range=[-lim, lim], ticksuffix="%", title_text="Error vs. baseline (left = better)", title_font_size=12, showgrid=True, gridcolor="rgba(128,128,128,0.16)")
@@ -96,7 +96,7 @@ def _method(res: dict | None, reg: dict | None, px: pd.DataFrame | None) -> None
         volume = "Volume is often zero or missing in Yahoo Finance's data, so every input comes from the closing price alone."
     with st.expander("The method in plain words", icon=":material/lightbulb:"):
         st.markdown(
-            "**Why a change, not a price?** The first version predicted the price and broke when gold reached levels it had never seen (error about \\$640 against about \\$51 for “tomorrow = today”). "
+            "**Why a change, not a price?** The first version predicted the price and broke when gold reached levels it had never seen (error about \\$640 against about \\$51 for a simple guess that repeats the last close). "
             "Now the model predicts the day's percentage change and converts it: forecast = today's close × e^(predicted change).\n\n"
             "**Why is every test on unseen days?** The model is retrained every 7 trading days on the latest 365 days and judged only on the days that follow. Inputs use past data only; automated tests check it.\n\n"
             f"**How is the 90% range computed?** Forecast ± 1.645 × the typical recent miss (a weighted average of past errors, decay 0.94). It uses only errors known before each forecast{cov}.\n\n"

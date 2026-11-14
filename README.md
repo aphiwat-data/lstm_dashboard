@@ -645,6 +645,12 @@ the backtest first; actual values beside the forecasts in the "Price history and
   were already inside the tabs (volatility models, side check, all statistics, the numbers, method, glossary) are nested inside them: Streamlit 1.56 and 1.66.1 both allow that. Every panel's content is unchanged; the `tab_*.py` modules keep their
   names. Checked on both versions by opening every panel and every nested expander: charts fill the full width (the direction chart too, which is hidden twice), no text overlap, no exception. Panels collapse again when the
   page is reloaded; to open the first one by default use `expanded=True` in `dashboard/app.py`.
+- **Tooltips in plain words (owner, 14 Nov: selected the `?` icons of the accuracy title, the four accuracy cards and the range, asked for simpler, more natural text and no more "tomorrow = today").** The tooltips of the header
+  (hero chart, status badge, change chip, range, range reliability, accuracy title, MAE, RMSE, error %, R², the popover) were rewritten in short plain sentences, e.g. MAE: "The average miss: on a typical day the forecast was about this many dollars
+  away from the real close. Lower is better. A simple guess (repeating the last close) misses by $46.63." The Accuracy tooltip now says how many past days were tested and ends with a conclusion generated from `price_verdict` ("so there is
+  no clear difference" today), without the p-value (the statistics stay on *How reliable?*). The phrase "tomorrow = today" is gone from the whole page: the simple guess is described as "repeating the last close" (chart bar "Simple guess (repeat last
+  close)", glossary entry "Simple guess (baseline)", the reliability verdict and evidence line, the About texts, the live-record tooltip); the volatility cards' tooltips lost "standard deviation" and "√252". The tooltips of the other
+  panels' charts and statistics rows keep their wording.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
   section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.

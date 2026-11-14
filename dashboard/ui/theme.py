@@ -10,7 +10,7 @@ import streamlit as st
 COLORS = {
     "actual": "#EB6834",   # orange: the real price series
     "model": "#2A78D6",    # blue: the LSTM
-    "naive": "#8A8F98",    # gray: the "tomorrow = today" baseline
+    "naive": "#8A8F98",    # gray: the simple guess (repeating the last close)
     "ridge": "#E87BA4",    # magenta
     "hgb": "#EDA100",      # yellow
     "good": "#1BAF7A",     # aqua
