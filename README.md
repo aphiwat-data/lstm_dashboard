@@ -55,7 +55,7 @@ one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
 Layout since Phase 13: a header (title, three-line briefing, the forecast card with the forecast day in its top-right corner, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
-an accuracy scorecard with MAE / RMSE / error % / R², each card with a one-line note on what it measures), then four tabs: *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
+an accuracy scorecard with MAE / RMSE / error % / R², the four cards with a one-line note on what each measures), then four tabs: *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
 *About the project* (the only tab that explains what was built and tried).
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
@@ -613,9 +613,9 @@ the backtest first; actual values beside the forecasts in the "Price history and
 - **Scorecard.** "Accuracy · 449 backtest days" with four metric cards that carry their technical names and the simple guess beside them: MAE (average miss), RMSE, error % (MAPE) and out-of-sample R².
   The verdict is a coloured pill beside the title ("Not clearly better than a simple guess", green or red only when p < 0.05). A fifth card was tried and wrapped alone onto a second row at 1280 px, hence the pill.
   Rank correlation (IC) stays on *How reliable?*. The detailed evidence for the numbers stays on that tab (its rows use the same names).
-- **One-line notes under every metric (owner request, same day).** Each metric card now has a short grey line under the number saying what it measures and when to use it: MAE "Average miss in dollars. Best for the
+- **One-line notes under the accuracy metrics (owner request, same day).** Each accuracy card has a short grey line under the number saying what it measures and when to use it: MAE "Average miss in dollars. Best for the
   everyday error.", RMSE "Like MAE, but big misses count extra. Best for spotting bad days.", error % "Miss as a share of the price. Best for comparing price levels.", R² "Does it explain the daily moves? 0 = no better
-  than average."; the live-record cards and the three volatility cards got the same treatment. The texts live in `ui/cards.py` (`NOTES`, `metric_card()`, `card_row()`); a card is a bordered container holding an `st.metric`
+  than average." (the live-record and volatility cards got the same treatment first and lost it again on 14 Nov, see "Text trimmed"). The texts live in `ui/cards.py` (`NOTES`, `metric_card()`, `card_row()`); a card is a bordered container holding an `st.metric`
   and a caption, and the row uses `vertical_alignment="distribute"` so every card has the same height even when one note wraps to an extra line. The cards stay in one row down to about 140 px each (a 759 px window
   with the sidebar collapsed) and the notes simply wrap; tooltips still carry the longer definitions.
 - **Chart titles (owner request, same day).** The title of "Price history and forecast" was a small grey caption and several other chart titles were bold body text, so they were easy to miss. Every chart title is now
@@ -623,8 +623,16 @@ the backtest first; actual values beside the forecasts in the "Price history and
   "Actual daily moves vs. the model's limit", "Long-run volatility", "Average miss (MAE) by model" and "Range reliability by method" (was "... by way of drawing the range"). The panel titles inside the figures ("Actual vs. forecast price",
   "Actual − Forecast ($)") are bold 13 px dark grey instead of 12 px light grey (`theme.panel_title`). The theme's heading sizes were not touched because the sidebar title is an h3 and the sidebar is tuned to fit one screen.
   `:large[...]` is not a Streamlit markdown directive (it renders as literal text); a blue accent bar and a chart icon before the title were compared in a scratch app and dropped to keep one heading style on the page.
-- **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. The first two start
-  with a one-line caption. Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
+- **Text trimmed (owner, 14 Nov: "the text still looks cluttered, remove what is not relevant").** Rule applied: no line may repeat what a title, a tab name, a chip or a tooltip already says. Removed: the "Research project" badge
+  (the disclaimer stays); the card caption "GOLD CLOSING PRICE FORECAST (XAU/USD)" (the status badge "Live · updated ..." moved from the title row into its place, top-left of the forecast card, so the date keeps the top-right);
+  "Read it as about today's close, within the range" (the reliability tab says it; the caption keeps only "Research only, not trading advice."); the one-line captions under the first two tab names; the notes on the live-record
+  and volatility cards (their chips and tooltips remain; only the four accuracy cards keep a note, as the owner asked); the "Daily changes" statistics line (moved into its tooltip); the *About* intro paragraph, which repeated the header
+  briefing and the sidebar; and filler in the reliability tab (the verdict lost a clause, the R² row shows the rank correlation instead of an explanation). The header briefing keeps three lines but each is shorter, the live-chart legend
+  reads "Forecast + 90% range / Actual (inside range) / Actual (outside range) / Next forecast", and the "How to read this" popover no longer mentions the old fifth card. Text counted by script on the rendered page (charts, tables and
+  collapsed expanders excluded, icon names included): *Forecast vs. actual* 310 to 250 words, *Actual market data* 364 to 287, *How reliable?* 370 to 333, *About* 846 to 790 (about 450 of those sit in collapsed expanders). No chart or
+  section was removed.
+- **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
+  section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.
 - **Actual vs. forecast in the header chart.** The orange actual line now has the blue forecast made the day before (dashed, one dot per day on short windows), the 90% range of each forecast as a light band,
   the new forecast with its range bar, and a short panel of bars "Actual − Forecast ($)" (red: the price ended above the forecast, blue: below). Forecasts are placed on the day they are *for*

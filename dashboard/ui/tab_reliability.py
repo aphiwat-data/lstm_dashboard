@@ -17,7 +17,7 @@ def _verdict(lstm: dict, verdict: str) -> None:
     elif verdict == "worse":
         st.error("**Worse than the simple baseline.** The average miss (MAE) is clearly higher than repeating today's price.", icon=":material/cancel:")
     else:
-        st.info("**Not better than a simple guess.** It does about as well as repeating today's price (the baseline), so read it as *about today's close*. The range, however, is trustworthy.", icon=":material/balance:")
+        st.info("**Not better than a simple guess.** Read the forecast as *about today's close*. The range, however, is trustworthy.", icon=":material/balance:")
 
 
 def _row(label: str, value: str, chip: str, color: str, line: str, help: str) -> None:
@@ -42,7 +42,7 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
             e, nc = iv["lstm_ewma_gaussian"], iv["no_change_ewma_gaussian"]
             st.divider()
             _row("R² · predicts moves?", f"{m['r2_os_vs_rolling_mean']:+.3f}", "Some predictive power" if signal else "No predictive power", "green" if signal else "orange",
-                 "Below 0 means no better than a simple average.",
+                 f"Rank correlation (IC) {m['ic_spearman']:+.3f}, p = {m['ic_p']:.2f}.",
                  f"Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: {m['ic_spearman']:+.3f} (p = {m['ic_p']:.2f}).")
             st.divider()
             _row("Range reliability", f"{e['coverage']:.1%}", "goal 90%", "green" if abs(e["coverage"] - 0.9) <= 0.02 else "orange",

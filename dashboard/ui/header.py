@@ -15,9 +15,9 @@ from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_t
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 VERDICT_BADGE = {"better": "Better than a simple guess", "same": "Not clearly better than a simple guess", "worse": "Worse than a simple guess"}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
-BRIEFING = ("An LSTM neural network forecasts the **next trading day's gold price** (XAU/USD) and a 90% range around it.  \n"
-            "Every forecast is saved **before** the day happens, then scored against the real close.  \n"
-            "It is judged against a simple guess, “tomorrow = today”: the model has to beat that to be useful.")
+BRIEFING = ("An LSTM neural network forecasts the **next trading day's gold price** (XAU/USD) and a 90% range.  \n"
+            "Each forecast is saved **before** the day happens, then scored against the real close.  \n"
+            "It has to beat a simple guess, “tomorrow = today”, to be useful.")
 
 
 def _age_text(hours: float | None) -> str:
@@ -138,12 +138,8 @@ def _scorecard(res: dict, reg: dict | None) -> None:
 
 def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
     label, color, icon = freshness(cur)
-    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-        st.markdown("## Gold Price Forecast")
-        trained = cur.get("model_trained_through")
-        st.badge(label, icon=icon, color=color, help="The daily pipeline refreshes the forecast at 10:00 (Thailand time). "
-                 f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
-        st.badge("Research project", color="gray")
+    trained = cur.get("model_trained_through")
+    st.markdown("## Gold Price Forecast")
     st.caption(BRIEFING)
 
     fc, last, lo, hi = cur["predicted_next_close"], cur["latest_close"], cur["interval_90_close"][0], cur["interval_90_close"][1]
@@ -153,7 +149,8 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
     target = next_trading_day(as_of)
     with st.container(border=True):
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
-            st.caption("GOLD CLOSING PRICE FORECAST (XAU/USD)", width="content", help=f"The model's forecast for the close of {_day(target, year=True)}, made from the {_day(as_of)} close.")
+            st.badge(label, icon=icon, color=color, width="content", help="The daily pipeline refreshes the forecast at 10:00 (Thailand time). "
+                     f"Data through {cur['as_of_date']}" + (f"; model trained through {trained}." if trained else "."))
             st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]", width="content")  # top-right corner: which day this number is for
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
             with st.container(width="content", gap="xxsmall"):
@@ -166,12 +163,11 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
     if res is not None:
         _scorecard(res, reg)
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-            st.caption("Read it as “about today's close, within the range”. Research only, not trading advice.")
+            st.caption("Research only, not trading advice.")
             with st.popover("How to read this", icon=":material/help:"):
                 st.markdown(
                     "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
                     "- **Likely range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing (90% is ideal).\n"
-                    "- **MAE, RMSE, error %:** how far off the forecast was over the test days, set against the simple guess “tomorrow = today” (the baseline). RMSE counts big misses extra.\n"
-                    "- **Better than a simple guess?** A model is only useful if it does clearly better than just repeating today's price.\n\n"
-                    "The tabs below show the forecasts next to what really happened, the real market data, and the tests behind each number."
+                    "- **MAE, RMSE, error %:** how far off the forecast was over the test days, set against the simple guess “tomorrow = today” (the baseline).\n"
+                    "- **The coloured pill:** green or red only when the model is clearly better or worse than the simple guess."
                 )

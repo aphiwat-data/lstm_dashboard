@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from .cards import NOTES, card_row, metric_card
+from .cards import card_row, metric_card
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "All": None}
@@ -45,10 +45,10 @@ def _live_chart(scored: pd.DataFrame, pending: pd.DataFrame) -> None:
     label = lambda d: f"{pd.Timestamp(d):%a %d %b}"  # noqa: E731  (categories, so weekends leave no gaps)
     x = [label(d) for d in scored["next_date"]]
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=scored["predicted_next_close"], mode="markers", name="Forecast and its 90% range", marker=dict(symbol="diamond", size=12, color=blue, line=dict(color="white", width=1.2)),
+    fig.add_trace(go.Scatter(x=x, y=scored["predicted_next_close"], mode="markers", name="Forecast + 90% range", marker=dict(symbol="diamond", size=12, color=blue, line=dict(color="white", width=1.2)),
                              error_y=dict(type="data", symmetric=False, array=scored["hi_90"] - scored["predicted_next_close"], arrayminus=scored["predicted_next_close"] - scored["lo_90"], color=blue, thickness=2.2, width=7),
                              hovertemplate="%{y:$,.2f}<extra>Forecast</extra>"))
-    for mask, name, symbol, line_w in ((inside, "Actual close · inside the range", "circle", 1.5), (~inside, "Actual close · outside the range", "x", 3)):
+    for mask, name, symbol, line_w in ((inside, "Actual (inside range)", "circle", 1.5), (~inside, "Actual (outside range)", "x", 3)):
         if mask.any():
             fig.add_trace(go.Scatter(x=[a for a, m in zip(x, mask) if m], y=scored["actual_next_close"][mask], mode="markers", name=name,
                                      marker=dict(symbol=symbol, size=10 if symbol == "circle" else 11, color=orange, line=dict(color="white" if symbol == "circle" else orange, width=line_w)),
@@ -57,7 +57,7 @@ def _live_chart(scored: pd.DataFrame, pending: pd.DataFrame) -> None:
     if len(pending):
         p = pending.iloc[-1]
         px_ = label(pd.Timestamp(p["as_of_date"]) + pd.offsets.BDay(1))
-        fig.add_trace(go.Scatter(x=[px_], y=[p["predicted_next_close"]], mode="markers", name="Next forecast (not scored yet)", marker=dict(symbol="diamond-open", size=12, color=blue, line=dict(width=2)),
+        fig.add_trace(go.Scatter(x=[px_], y=[p["predicted_next_close"]], mode="markers", name="Next forecast", marker=dict(symbol="diamond-open", size=12, color=blue, line=dict(width=2)),
                                  error_y=dict(type="data", symmetric=False, array=[p["hi_90"] - p["predicted_next_close"]], arrayminus=[p["predicted_next_close"] - p["lo_90"]], color=blue, thickness=1.4, width=7),
                                  hovertemplate="%{y:$,.2f}<extra>Next forecast</extra>"))
         lo.append(p["lo_90"]), hi.append(p["hi_90"])
@@ -81,10 +81,10 @@ def _live(log: pd.DataFrame | None) -> None:
     miss_naive = (scored["actual_next_close"] - scored["latest_close"]).abs().mean()
     inside = scored["inside_90"].astype(str).str.lower().eq("true")
     with card_row():
-        metric_card("Forecasts scored", f"{len(scored)}", note=NOTES["scored"])
-        metric_card("MAE · average miss", usd(miss_model), f"simple guess: {usd(miss_naive)}", NOTES["mae"],
+        metric_card("Forecasts scored", f"{len(scored)}")
+        metric_card("MAE · average miss", usd(miss_model), f"simple guess: {usd(miss_naive)}",
                     help="Mean absolute error of the live forecasts so far, against the simple guess “tomorrow = today” on the same days.")
-        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%} · goal 90%", NOTES["reliability"],
+        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%} · goal 90%",
                     help="With so few days this says little yet.")
     _live_chart(scored.tail(15).reset_index(drop=True), log[log["actual_next_close"].isna()])
     show = scored.tail(15).iloc[::-1].assign(inside=lambda d: d["inside_90"].astype(str).str.lower().eq("true"))
@@ -97,7 +97,6 @@ def _live(log: pd.DataFrame | None) -> None:
 
 
 def render(preds: pd.DataFrame | None, log: pd.DataFrame | None, fh: pd.DataFrame) -> None:
-    st.caption("The model's forecasts next to what really happened.")
     if preds is not None:
         _backtest(fh[fh["source"] == "backtest"].reset_index(drop=True), preds)
     else:

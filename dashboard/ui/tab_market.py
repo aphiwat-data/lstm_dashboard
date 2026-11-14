@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from .cards import NOTES, card_row, metric_card
+from .cards import card_row, metric_card
 from .data import indicators
 from .theme import COLORS, chart_title, finish
 
@@ -41,9 +41,9 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
         lo, hi = cur["interval_90_close"]
         sigma = float(np.log(hi / lo) / (2 * 1.6449) * 100)
         with card_row():
-            metric_card("Typical daily move", f"±{sigma:.2f}%", "of the gold price, per day", NOTES["daily_move"], help="One standard deviation behind today's range: a weighted average of recent forecast errors.")
-            metric_card("Yearly pace", f"{sigma * np.sqrt(252):.1f}%", "the same move over a year", NOTES["yearly_pace"], help="Daily move × √252 trading days.")
-            metric_card("Fear gauge (VIX)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", "US stock market", NOTES["vix"], help="Shown for context. We tested it as an input and it did not improve the gold forecast.")
+            metric_card("Typical daily move", f"±{sigma:.2f}%", "of the gold price, per day", help="One standard deviation behind today's range: a weighted average of recent forecast errors.")
+            metric_card("Yearly pace", f"{sigma * np.sqrt(252):.1f}%", "the same move over a year", help="Daily move × √252 trading days.")
+            metric_card("Fear gauge (VIX)", f"{vdf['vix_prev_close'].iloc[-1]:.1f}", "US stock market", help="Shown for context. We tested it as an input and it did not improve the gold forecast.")
         chart_title("Actual daily moves vs. the model's limit", help="Bars: how far gold actually moved each test day. Line: how far the model expected it could move; 90% of days should stay below the line.")
         fig = go.Figure()
         fig.add_trace(go.Bar(x=vdf["date"], y=vdf["abs_return_pct"], name="Actual daily move", marker_color=COLORS["naive"], opacity=0.5, marker_line_width=0, hovertemplate="%{x|%d %b %Y}<br>%{y:.2f}%<extra></extra>"))
@@ -67,16 +67,15 @@ def _volatility(px: pd.DataFrame, cur: dict, vol: tuple | None) -> None:
 
 
 def _returns(px: pd.DataFrame) -> None:
-    st.subheader("Daily changes", help="How many days gold moved by each percentage: tightly centred on zero with occasional large moves, whether gold trades at \\$400 or \\$5,000. "
-                 "This daily change is what the model predicts.")
     ret = (px["close"].pct_change() * 100).dropna()
+    st.subheader("Daily changes", help="How many days gold moved by each percentage: tightly centred on zero with occasional large moves, whether gold trades at \\$400 or \\$5,000. "
+                 f"This daily change is what the model predicts. Average {ret.mean():+.3f}%, typical swing {ret.std():.2f}%.")
     fig = go.Figure(go.Histogram(x=ret, nbinsx=120, marker_color=COLORS["dist"], marker_line_width=0, hovertemplate="%{x:.2f}%<br>%{y} days<extra></extra>"))
     fig.add_vline(x=0, line_dash="dash", line_color="rgba(128,128,128,.7)", line_width=1)
     finish(fig, 280, hover="closest")
     fig.update_xaxes(ticksuffix="%")
     fig.update_yaxes(title_text="Days", title_font_size=11)
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
-    st.caption(f"Average {ret.mean():+.3f}% · typical swing {ret.std():.2f}%")
 
 
 @st.fragment
@@ -99,7 +98,6 @@ def render(px: pd.DataFrame | None, cur: dict, vol: tuple | None) -> None:
     if px is None:
         st.info("Price history could not be loaded right now. The forecast and its evaluation above are unaffected.", icon=":material/cloud_off:")
         return
-    st.caption("Real market data: gold prices, how much they move, and the inputs the model reads.")
     _price(px)
     st.divider()
     _volatility(px, cur, vol)

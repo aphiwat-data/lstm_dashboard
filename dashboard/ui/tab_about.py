@@ -34,11 +34,6 @@ GLOSSARY = [
 ]
 
 
-def _intro() -> None:
-    st.subheader("About this project")
-    st.markdown("A senior project at Mae Fah Luang University: a daily forecast of **tomorrow's gold price (XAU/USD)** with an LSTM, a 90% range, and an honest test against simple baselines.")
-
-
 def _pipeline() -> None:
     st.subheader("How the forecast is made", help="A fully automatic pipeline on AWS (Lambda and S3) runs every day, without anyone pressing a button.")
     with st.container(border=True):
@@ -123,8 +118,6 @@ def _footer() -> None:
 
 
 def render(res: dict | None, reg: dict | None, px: pd.DataFrame | None) -> None:
-    _intro()
-    st.write("")
     _pipeline()
     st.write("")
     _scoreboard(res)
