@@ -82,10 +82,10 @@ def _live(log: pd.DataFrame | None) -> None:
     inside = scored["inside_90"].astype(str).str.lower().eq("true")
     with card_row():
         metric_card("Forecasts scored", f"{len(scored)}")
-        metric_card("MAE · average miss", usd(miss_model), f"simple guess: {usd(miss_naive)}",
-                    help="Mean absolute error of the live forecasts so far, against the simple guess “tomorrow = today” on the same days.")
-        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days", f"{inside.mean():.0%}",
-                    help="With so few days this says little yet.")
+        metric_card("MAE · average miss", usd(miss_model),
+                    help=f"Mean absolute error of the live forecasts so far. The simple guess “tomorrow = today” scores {usd(miss_naive)} on the same days.")
+        metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days",
+                    help=f"{inside.mean():.0%} of the scored days. With so few days this says little yet.")
     _live_chart(scored.tail(15).reset_index(drop=True), log[log["actual_next_close"].isna()])
     show = scored.tail(15).iloc[::-1].assign(inside=lambda d: d["inside_90"].astype(str).str.lower().eq("true"))
     table = pd.DataFrame({"Forecast made": show["as_of_date"], "Forecast for": pd.to_datetime(show["next_date"]), "Forecast": show["predicted_next_close"],

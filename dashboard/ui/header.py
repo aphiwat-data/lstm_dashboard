@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from .cards import NOTES, card_row, metric_card
+from .cards import card_row, metric_card
 from .data import next_trading_day, run_age_hours
 from .logic import edge_color, price_verdict
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, signed_usd, usd
@@ -121,16 +121,17 @@ def _scorecard(res: dict, reg: dict | None) -> None:
                  help=f"The simple guess “tomorrow = today” misses by {usd(lstm['naive_mae_usd'])} a day on average; this model by {usd(lstm['mae_usd'])} ({signed_usd(diff)}). "
                       f"The pill is green or red only when the difference is clear (p < 0.05); here p = {lstm['dm_p_vs_naive']:.2f}.")
     with card_row():
-        metric_card("MAE · average miss", usd(lstm["mae_usd"]), f"simple guess {usd(lstm['naive_mae_usd'])}", NOTES["mae"],
-                    help="Mean absolute error: the average gap between the forecast and the actual close, in dollars, per day.")
-        metric_card("RMSE", usd(lstm["rmse_usd"]), f"simple guess {usd(lstm['naive_rmse_usd'])}", NOTES["rmse"],
-                    help="Root mean squared error: like MAE, but the gaps are squared first, so big misses count extra and it shows how bad the worst days were.")
+        metric_card("MAE · average miss", usd(lstm["mae_usd"]),
+                    help=f"Mean absolute error: the average gap between the forecast and the actual close, in dollars, per day. The simple guess “tomorrow = today” scores {usd(lstm['naive_mae_usd'])}.")
+        metric_card("RMSE", usd(lstm["rmse_usd"]),
+                    help=f"Root mean squared error: like MAE, but the gaps are squared first, so big misses count extra and it shows how bad the worst days were. The simple guess scores {usd(lstm['naive_rmse_usd'])}.")
         if reg:
             m, nc = reg["models"]["lstm"], reg["no_change"]
-            metric_card("Error % (MAPE)", f"{m['mape_pct']:.2f}%", f"simple guess {nc['mape_pct']:.2f}%", NOTES["mape"],
-                        help="Mean absolute percentage error: the average miss as a share of the price, so it can be compared when gold is cheap or expensive.")
-            metric_card("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), f"simple guess {nc['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"), NOTES["r2"],
-                        help="The share of the daily price move the forecast explains. 0 means no better than a plain average; below 0 means worse.")
+            r2, r2_naive = (f"{x:+.3f}".replace("-", "−") for x in (m["r2_os_vs_rolling_mean"], nc["r2_os_vs_rolling_mean"]))
+            metric_card("Error % (MAPE)", f"{m['mape_pct']:.2f}%",
+                        help=f"Mean absolute percentage error: the average miss as a share of the price, so it can be compared when gold is cheap or expensive. The simple guess scores {nc['mape_pct']:.2f}%.")
+            metric_card("R² (out-of-sample)", r2,
+                        help=f"The share of the daily price move the forecast explains. 0 means no better than a plain average; below 0 means worse. The simple guess scores {r2_naive}.")
 
 
 def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
