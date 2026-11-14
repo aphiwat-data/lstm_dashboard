@@ -55,7 +55,7 @@ one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
 Layout since Phase 13: a header (the title with a status badge, the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
-an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then four tabs: *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
+an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then four collapsible panels (closed until clicked since 14 Nov, before that tabs): *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
 *About the project* (the only tab that explains what was built and tried).
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
@@ -640,6 +640,11 @@ the backtest first; actual values beside the forecasts in the "Price history and
 - **Pill removed (owner, 14 Nov: selected it and said "remove this").** The coloured verdict pill "Not clearly better than a simple guess" beside "Accuracy · 449 backtest days" is gone. What it said now sits in the tooltip of
   the title (the simple guess misses by $46.63 a day, this model by $46.83, +$0.20, p = 0.38, a difference counts as clear only below 0.05) and in the card tooltips. The plain-language verdict ("Not better than a simple guess. Read the
   forecast as about today's close. The range, however, is trustworthy.") is now only on *How reliable?*, so the first screen no longer states that the model does not beat the baseline; the owner chose that. The popover's pill bullet went too.
+- **Panels instead of tabs (owner, 14 Nov: selected the four tab labels and asked for windows that hide the content until clicked, with all content kept).** The four tabs are now four `st.expander` panels with the same names and icons
+  (bold labels), all closed when the page loads, so the page shows the forecast, its chart, the accuracy cards and four bars; the page is about 1,300 px tall instead of about 2,700 px. The panels open independently, and the expanders that
+  were already inside the tabs (volatility models, side check, all statistics, the numbers, method, glossary) are nested inside them: Streamlit 1.56 and 1.66.1 both allow that. Every panel's content is unchanged; the `tab_*.py` modules keep their
+  names. Checked on both versions by opening every panel and every nested expander: charts fill the full width (the direction chart too, which is hidden twice), no text overlap, no exception. Panels collapse again when the
+  page is reloaded; to open the first one by default use `expanded=True` in `dashboard/app.py`.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
   section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.
@@ -650,7 +655,7 @@ the backtest first; actual values beside the forecasts in the "Price history and
   New helper `data.forecast_history()` builds the table (backtest rows plus live-log rows, live wins on the same day) and reproduces the backtest MAE of $46.83.
 - **Live record chart (new).** Under the three live cards: each real forecast as a diamond with its 90% range bar, the actual close beside it (a circle inside the range, a cross outside) and the next forecast as an
   open diamond. With the table below it, the live record is now visual as well as numeric.
-- **Division of content.** The header and the first three tabs hold only results and charts; *About the project* holds everything that explains what was built (intro, the five pipeline steps, "What we tried",
+- **Division of content.** The header and the first three panels hold only results and charts; *About the project* holds everything that explains what was built (intro, the five pipeline steps, "What we tried",
   the method, the glossary, links). Nothing was deleted: the "What we tried" chart and every other chart are where they were.
 - **Live pipeline check.** With the schedule moved to 03:00 UTC (10:00 Thailand, 4 Nov) the unattended runs on 5, 6 and 7 Nov each added the previous day's bar and a forecast (the 8 and 9 Nov runs found nothing new: a weekend and a Monday morning), so the live log has one row per trading day since 4 Nov: 6 scored forecasts
   (4 inside the 90% range, 2 outside; MAE \$56.32 vs. \$57.40 for "tomorrow = today") and the forecast for Monday 9 Nov waiting. Six days say nothing about accuracy yet.
