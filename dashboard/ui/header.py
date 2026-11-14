@@ -93,7 +93,7 @@ def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
 
 def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | None) -> None:
     """The 90% range and how far it can be trusted, as one unit."""
-    st.caption("RANGE", help="Where the closing price is expected to land: inside this range on 9 days out of 10.")
+    st.caption("RANGE")
     st.markdown(f"### {usd(lo, 0)} – {usd(hi, 0)}")
     if not reg:
         return
@@ -105,7 +105,7 @@ def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | Non
             live = f" So far in live use: {int(scored['inside_90'].astype(str).str.lower().eq('true').sum())} of {len(scored)} days."
     ok = abs(e["coverage"] - 0.9) <= 0.02
     st.markdown(f":{'green' if ok else 'orange'}-badge[**Range reliability {e['coverage']:.1%}**]",
-                help=f"In testing, the real close stayed inside the range on {round(e['coverage'] * e['n'])} of {e['n']} days.{live} The aim is 9 days out of 10.")
+                help=f"The range is where the close is expected to land on 9 days out of 10. In testing, the real close stayed inside it on {round(e['coverage'] * e['n'])} of {e['n']} days.{live}")
 
 
 def _scorecard(res: dict, reg: dict | None) -> None:
