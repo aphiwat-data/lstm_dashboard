@@ -4,8 +4,9 @@ Run from the repository root:  python3 -m streamlit run dashboard/app.py
 The page is assembled from the small modules in `ui/` (header, sidebar, one module per panel). Nothing here needs TensorFlow:
 the forecast comes from the daily pipeline on AWS and the evaluation from the result files committed in `daily/results`.
 
-Layout: the header (the forecast, its chart, the accuracy scorecard) and four collapsible panels that stay closed until clicked: three of visualisations (forecast vs. actual,
-actual market data, the reliability tests), then one that only explains what was built and tried (About).
+Layout: the header (the forecast, its chart, the accuracy scorecard) and a navigation bar of four sections in one row. Nothing is shown until a section is clicked, and clicking
+the active one hides it again: three sections of visualisations (forecast vs. actual, actual market data, the reliability tests), then one that only explains what was built
+and tried (About).
 """
 import streamlit as st
 
@@ -26,12 +27,17 @@ fh = data.forecast_history(preds, log, vol[0] if vol else None)
 sidebar.render()
 header.render(cur, data.price_history(preds, cur), fh, res, reg, log)
 
+SECTIONS = {"forecast": (":material/compare_arrows:", "Forecast vs. actual"), "market": (":material/candlestick_chart:", "Actual market data"),
+            "reliable": (":material/verified:", "How reliable?"), "about": (":material/menu_book:", "About the project")}
+
 st.write("")
-with st.expander("**Forecast vs. actual**", icon=":material/compare_arrows:"):
+section = st.segmented_control("Sections", list(SECTIONS), format_func=lambda k: f"{SECTIONS[k][0]} **{SECTIONS[k][1]}**", selection_mode="single", default=None, key="section",
+                               label_visibility="collapsed", width="stretch")  # the navigation bar: nothing selected at first, so nothing is shown
+if section == "forecast":
     tab_track.render(preds, log, fh)
-with st.expander("**Actual market data**", icon=":material/candlestick_chart:"):
+elif section == "market":
     tab_market.render(data.prices(), cur, vol)
-with st.expander("**How reliable?**", icon=":material/verified:"):
+elif section == "reliable":
     tab_reliability.render(res, preds, reg, *data.interval_tests())
-with st.expander("**About the project**", icon=":material/menu_book:"):
+elif section == "about":
     tab_about.render(res, reg, data.prices())
