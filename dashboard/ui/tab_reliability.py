@@ -34,20 +34,20 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
     st.subheader("The evidence", help=f"Based on {res['protocol']['n_test']} test days ({res['protocol']['test_start']} to {res['protocol']['test_end']}); small differences are within noise.")
     with st.container(border=True):
         _row("MAE · average miss", usd(lstm["mae_usd"]), f"{signed_usd(lstm['mae_usd'] - lstm['naive_mae_usd'])} vs. baseline", edge_color(verdict, lstm["mae_usd"] - lstm["naive_mae_usd"]),
-             f"A simple guess, repeating the last close, misses by {usd(lstm['naive_mae_usd'])}.",
-             f"That guess misses by {pct_n:.2f}% of the price. The model {PHRASE[verdict]} it (p = {lstm['dm_p_vs_naive']:.2f}; below 0.05 counts as a clear difference).")
+             "On a typical day the forecast was about this many dollars away from the real close.",
+             f"A simple guess (repeating the last close) misses by {usd(lstm['naive_mae_usd'])} a day, {pct_n:.2f}% of the price. The model {PHRASE[verdict]} it (p = {lstm['dm_p_vs_naive']:.2f}; below 0.05 counts as a clear difference).")
         if reg:
             m, iv = reg["models"]["lstm"], reg["interval"]
             signal = m["r2_os_vs_rolling_mean"] > 0 and m["ic_p"] < 0.05
             e, nc = iv["lstm_ewma_gaussian"], iv["no_change_ewma_gaussian"]
             st.divider()
             _row("R² · predicts moves?", f"{m['r2_os_vs_rolling_mean']:+.3f}", "Some predictive power" if signal else "No predictive power", "green" if signal else "orange",
-                 f"Rank correlation (IC) {m['ic_spearman']:+.3f}, p = {m['ic_p']:.2f}.",
+                 "A test score for catching the daily ups and downs: 1 means every move was predicted, 0 means none was.",
                  f"Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: {m['ic_spearman']:+.3f} (p = {m['ic_p']:.2f}).")
             st.divider()
             _row("Range reliability", f"{e['coverage']:.1%}", "goal 90%", "green" if abs(e["coverage"] - 0.9) <= 0.02 else "orange",
-                 f"The range held on {round(e['coverage'] * e['n'])} of {e['n']} test days.",
-                 f"Ideal: 90%. Its width, {usd(e['mean_width_usd'], 0)}, is the same as a no-change range ({usd(nc['mean_width_usd'], 0)}): the model does not narrow the uncertainty.")
+                 "How often the real close stayed inside the range. The aim is 9 days out of 10.",
+                 f"The real close stayed inside the range on {round(e['coverage'] * e['n'])} of {e['n']} test days. Ideal: 90%. Its width, {usd(e['mean_width_usd'], 0)}, is the same as a no-change range ({usd(nc['mean_width_usd'], 0)}): the model does not narrow the uncertainty.")
 
 
 def _mae_chart(res: dict) -> None:
