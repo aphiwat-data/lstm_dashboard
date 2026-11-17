@@ -700,6 +700,8 @@ the backtest first; actual values beside the forecasts in the "Price history and
   and a 90% range around it. Every forecast is saved before the day happens, then scored against the real close. It is judged against a simple guess, tomorrow = today: the model has to beat that to be useful."
 - **The `?` of the header chart title leaves (owner, 17 Nov).** "Actual vs Forecast" has no tooltip any more; what it said is kept in "Content removed from the dashboard" below. The *Forecast vs. actual* section still tells replayed from real forecasts with its two badges
   ("Simulated on past data", "Real forecasts").
+- **Backtest filter moved to the right (owner, 17 Nov).** The window filter (1M / 3M / 6M / All) of *Backtest · 449 test days* moved from its own row under the title to the right end of the title row, where the header chart's filter already sits;
+  the title and the grey "Simulated on past data" badge stay together on the left. It also saves one row of height. The price-history and indicator filters in *Actual market data* still sit on their own rows.
 
 #### Content removed from the dashboard (November 17, 2026)
 

@@ -14,11 +14,12 @@ WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "All": None}
 
 @st.fragment
 def _backtest(bt: pd.DataFrame, preds: pd.DataFrame) -> None:
-    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-        st.subheader(f"Backtest · {len(preds)} test days", width="content", help="The model is retrained every 7 trading days and judged only on later days, as in real use. Each point is a forecast made the day before, "
-                     "shown on the day it was for. Red bars: the price ended above the forecast; blue bars: below.")
-        st.badge("Simulated on past data", icon=":material/history:", color="gray")
-    window = st.segmented_control("Window", list(WINDOWS), default="3M", key="bt_window", label_visibility="collapsed") or "3M"
+    with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):  # the title and badge on the left, the window filter at the right end
+        with st.container(horizontal=True, vertical_alignment="center", gap="small", width="content"):
+            st.subheader(f"Backtest · {len(preds)} test days", width="content", help="The model is retrained every 7 trading days and judged only on later days, as in real use. Each point is a forecast made the day before, "
+                         "shown on the day it was for. Red bars: the price ended above the forecast; blue bars: below.")
+            st.badge("Simulated on past data", icon=":material/history:", color="gray")
+        window = st.segmented_control("Window", list(WINDOWS), default="3M", key="bt_window", label_visibility="collapsed") or "3M"
     q = bt if WINDOWS[window] is None else bt.tail(WINDOWS[window])
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.72, 0.28], vertical_spacing=0.07,
                         subplot_titles=("<b>Actual vs. forecast price</b>", "<b>Actual − Forecast ($)</b>"))
