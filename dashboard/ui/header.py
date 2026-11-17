@@ -119,7 +119,7 @@ def _scorecard(res: dict, reg: dict | None) -> None:
             metric_card("Error % (MAPE)", f"{m['mape_pct']:.2f}%",
                         help="The average miss as a percentage of the price, so it means the same whether gold is cheap or expensive. Lower is better.")
             metric_card("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"),
-                        help="Like a test score for catching the daily ups and downs. 1 means every move was predicted; 0 means none was caught, no better than assuming a typical day; below 0 means worse than that. Measured only on days the model had never seen.")
+                        help="Like a test score for catching the daily ups and downs. 1 means every move was predicted; 0 means none was caught, no better than assuming a typical day.")
 
 
 def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
