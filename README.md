@@ -54,7 +54,7 @@ already does this, and so does Chapter 3 (price accuracy first, direction as a s
 one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py` verdict rules). It no longer imports TensorFlow (requirements: streamlit, boto3, pandas, numpy,
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
-Layout since Phase 13: a header (the title with a status badge and a one-line project description, the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
+Layout since Phase 13: a header (the title with a status badge and a short project description (the model, how it is built, the live record and the disclaimer), the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
 an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then a navigation bar of three sections in one row (nothing is shown until one is clicked; since 14 Nov, before that tabs and for a few hours stacked panels): *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations). The fourth section, *About the project*, was removed on 17 Nov; its content is in "Content removed from the dashboard" (Phase 13).
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
@@ -702,6 +702,8 @@ the backtest first; actual values beside the forecasts in the "Price history and
   ("Simulated on past data", "Real forecasts").
 - **Backtest filter moved to the right (owner, 17 Nov).** The window filter (1M / 3M / 6M / All) of *Backtest · 449 test days* moved from its own row under the title to the right end of the title row, where the header chart's filter already sits;
   the title and the grey "Simulated on past data" badge stay together on the left. It also saves one row of height. The price-history and indicator filters in *Actual market data* still sit on their own rows.
+- **The disclaimer joins the project description (owner, 17 Nov).** "Made only for a Computer Engineering senior project. This is not trading advice." is now the last line of the description under the title (five short lines in all) instead of a caption under the accuracy cards,
+  which now carry no caption. Because the description is built without the result files when they are missing, the disclaimer shows in that case too.
 
 #### Content removed from the dashboard (November 17, 2026)
 

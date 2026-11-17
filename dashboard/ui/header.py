@@ -1,4 +1,4 @@
-"""The always-visible top of the page: the title with the status badge and a one-line description, the forecast (the product) with its day and its range, the chart that sets past forecasts beside
+"""The always-visible top of the page: the title with the status badge and a short description, the forecast (the product) with its day and its range, the chart that sets past forecasts beside
 what really happened, and the accuracy scorecard. Everything below this (the tabs) is the evidence."""
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ def _age_text(hours: float | None) -> str:
 
 
 def _briefing(res: dict | None, reg: dict | None) -> str:
-    """Under the title: what the model is and how it is built. The numbers are read from the result files, so a refresh needs no edit. It must not mention the simple guess (owner),
-    and it says *live* forecasts are saved beforehand because the replayed ones were not."""
+    """Under the title: what the model is and how it is built, the live record, then the senior-project disclaimer (owner, 17 Nov: it moved here from under the accuracy cards). The numbers
+    are read from the result files, so a refresh needs no edit. It must not mention the simple guess (owner), and it says *live* forecasts are saved beforehand because the replayed ones were not."""
     lines = ["An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range."]
     if res:
         p = res["protocol"]
@@ -31,6 +31,7 @@ def _briefing(res: dict | None, reg: dict | None) -> str:
         if reg:
             lines.append(f"Tests use only unseen days (walk-forward). The range is the forecast ± 1.645 × a weighted average of recent errors (EWMA {reg['protocol']['ewma_lambda']}).")
     lines.append("Live forecasts are saved before the day happens, then scored against the real close.")
+    lines.append("Made only for a Computer Engineering senior project. This is not trading advice.")
     return "  \n".join(lines)
 
 
@@ -170,4 +171,3 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
         _chart(hist, fh, cur)
     if res is not None:
         _scorecard(res, reg)
-        st.caption("Made only for a Computer Engineering senior project. This is not trading advice.")
