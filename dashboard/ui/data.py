@@ -19,7 +19,6 @@ STREAM_LOG_KEY = "bronze/streaming/xauusd_daily_incremental.csv"
 SILVER_KEY = "silver/xauusd_daily_clean.parquet"
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "daily" / "results"
-REPO_URL = "https://github.com/aphiwat-data/lstm_dashboard"
 
 
 def _s3_bytes(key: str) -> bytes:
@@ -101,36 +100,6 @@ def volatility() -> tuple[pd.DataFrame, dict] | None:
 def interval_tests() -> tuple[list | None, list | None]:
     s = _stamp("interval_comparison.json", "interval_vix.json")
     return _load("interval_comparison.json", s), _load("interval_vix.json", s)
-
-
-def horizons() -> dict:
-    out = {}
-    for h in (5, 20):
-        r = _load(f"horizon_h{h}/walk_forward_results.json", _stamp(f"horizon_h{h}/walk_forward_results.json"))
-        if r:
-            out[h] = r
-    return out
-
-
-FEATURE_SETS = [("Price history only", ""), ("+ macro and cross-asset prices", "with_macro"), ("+ NFP release days", "with_macro_calendar"),
-                ("+ FOMC and CPI release days", "with_macro_calendar_full"), ("+ CFTC positioning", "with_cot")]
-
-
-def feature_rows() -> list[dict]:
-    """One row per feature-search experiment, read from the committed results (nothing typed in by hand)."""
-    rows = []
-    for label, folder in FEATURE_SETS:
-        pre = f"{folder}/" if folder else ""
-        s = _stamp(f"{pre}walk_forward_results.json", f"{pre}regression_metrics.json")
-        res, reg = _load(f"{pre}walk_forward_results.json", s), _load(f"{pre}regression_metrics.json", s)
-        if not res or not reg:
-            continue
-        m, hd_all = reg["models"]["lstm"], res["models"]["lstm"]
-        hd = hd_all["direction_from_head"]
-        rows.append({"label": label, "n": res["protocol"]["n_test"], "mae": m["mae_usd"], "naive_mae": reg["no_change"]["mae_usd"], "dm_p": hd_all["dm_p_vs_naive"],
-                     "ic": m["ic_spearman"], "r2_os": m["r2_os_vs_rolling_mean"], "acc": hd["acc"], "auc": hd.get("auc"), "p_dir": hd["p_vs_always_up"],
-                     "says_up": m["says_up_share"]})
-    return rows
 
 
 # --------------------------------------------------------------------------------------------------------------- what the page shows now

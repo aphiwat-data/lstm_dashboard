@@ -4,15 +4,14 @@ Run from the repository root:  python3 -m streamlit run dashboard/app.py
 The page is assembled from the small modules in `ui/` (header, sidebar, one module per panel). Nothing here needs TensorFlow:
 the forecast comes from the daily pipeline on AWS and the evaluation from the result files committed in `daily/results`.
 
-Layout: the header (the forecast, its chart, the accuracy scorecard) and a navigation bar of four sections in one row. Nothing is shown until a section is clicked, and clicking
-the active one hides it again: three sections of visualisations (forecast vs. actual, actual market data, the reliability tests), then one that only explains what was built
-and tried (About).
+Layout: the header (the forecast, its chart, the accuracy scorecard) and a navigation bar of three sections in one row. Nothing is shown until a section is clicked, and clicking
+the active one hides it again: forecast vs. actual, actual market data and the reliability tests. What was built and tried is documented in the README.
 """
 import streamlit as st
 
 st.set_page_config(page_title="Gold Price Forecast", page_icon=":material/show_chart:", layout="wide", initial_sidebar_state=320)  # a width in pixels: "auto" behaviour with a sidebar of that width
 
-from ui import data, header, sidebar, tab_about, tab_market, tab_reliability, tab_track  # noqa: E402  (after set_page_config)
+from ui import data, header, sidebar, tab_market, tab_reliability, tab_track  # noqa: E402  (after set_page_config)
 
 res, preds = data.results()
 reg = data.regression()
@@ -28,7 +27,7 @@ sidebar.render()
 header.render(cur, data.price_history(preds, cur), fh, res, reg, log)
 
 SECTIONS = {"forecast": (":material/compare_arrows:", "Forecast vs. actual"), "market": (":material/candlestick_chart:", "Actual market data"),
-            "reliable": (":material/verified:", "How reliable?"), "about": (":material/menu_book:", "About the project")}
+            "reliable": (":material/verified:", "How reliable?")}
 
 st.write("")
 section = st.segmented_control("Sections", list(SECTIONS), format_func=lambda k: f"{SECTIONS[k][0]} **{SECTIONS[k][1]}**", selection_mode="single", default=None, key="section",
@@ -39,5 +38,3 @@ elif section == "market":
     tab_market.render(data.prices(), cur, vol)
 elif section == "reliable":
     tab_reliability.render(res, preds, reg, *data.interval_tests())
-elif section == "about":
-    tab_about.render(res, reg, data.prices())

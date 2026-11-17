@@ -55,8 +55,7 @@ one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
 Layout since Phase 13: a header (the title with a status badge, the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
-an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then a navigation bar of four sections in one row (nothing is shown until one is clicked; since 14 Nov, before that tabs and for a few hours stacked panels): *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations) and
-*About the project* (the only tab that explains what was built and tried).
+an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then a navigation bar of three sections in one row (nothing is shown until one is clicked; since 14 Nov, before that tabs and for a few hours stacked panels): *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations). The fourth section, *About the project*, was removed on 17 Nov; its content is in "Content removed from the dashboard" (Phase 13).
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
 called by `walk_forward.py`) computes from `wf_predictions.csv`: MAE, RMSE, MAPE, relative MAE and Diebold-Mariano p (lags 0 and 24; LSTM
@@ -553,8 +552,7 @@ Request: make the UI much easier to read and as professional as possible. The ol
 Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views of the superseded price-level pipeline. It was rebuilt rather than patched.
 
 - **Structure.** `dashboard/app.py` (30 lines) wires `dashboard/ui/`: `data.py` (cached loaders: results from `daily/results`, the live forecast, track record and price history from S3),
-  `logic.py` (the price verdict and the chip colour), `theme.py` (colours, `usd()`, one shared Plotly style), `header.py`, `sidebar.py`, `tab_track.py`, `tab_market.py`, `tab_reliability.py`
-  and `tab_about.py`. The original-pipeline views (60-day price-level LSTM, AR(5) baselines, Gold-table feature explorer) were removed from the page; this README is their record.
+  `logic.py` (the price verdict and the chip colour), `theme.py` (colours, `usd()`, one shared Plotly style), `header.py`, `sidebar.py`, `tab_track.py`, `tab_market.py` and `tab_reliability.py` (`tab_about.py` was removed on 17 Nov). The original-pipeline views (60-day price-level LSTM, AR(5) baselines, Gold-table feature explorer) were removed from the page; this README is their record.
   `requirements.txt` dropped tensorflow, awswrangler and scikit-learn and gained pyarrow. A warm page paints in about a second; segmented controls are `st.fragment`s, so changing a
   chart window re-runs only that chart.
 - **Design system, native theming only.** `.streamlit/config.toml` sets the Inter font, rounder corners, a heading scale where `h1` is the forecast price, and one light theme with
@@ -670,7 +668,7 @@ the backtest first; actual values beside the forecasts in the "Price history and
   The owner then asked for "LSTM" instead of "Recent errors" on the first bar of the range chart. "Recent errors" had named the *method*, not the model: the range is the forecast +/- 1.645 x an exponentially weighted average (lambda 0.94, recent days count more)
   of the model's own past errors, while the bar "All past errors" takes the 5th and 95th percentile of every past error with all days weighted equally (85.9% coverage, it adapts slowly). The chart tooltip now says "this model's range (sized from its recent errors)";
   the last bar, first labelled "Recent errors + VIX", was then renamed "LSTM + VIX" (owner, 17 Nov): it is the same range with the VIX added to the width model, not the VIX fed into the LSTM, and the tooltip says so.
-- **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
+- **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project* (removed on 17 Nov, see the end of this phase). (They first started with a one-line caption each; removed on 14 Nov, the tab names and
   section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.
 - **Actual vs. forecast in the header chart.** The orange actual line now has the blue forecast made the day before (dashed, one dot per day on short windows), the 90% range of each forecast as a light band,
@@ -681,7 +679,7 @@ the backtest first; actual values beside the forecasts in the "Price history and
 - **Live record chart (new).** Under the three live cards: each real forecast as a diamond with its 90% range bar, the actual close beside it (a circle inside the range, a cross outside) and the next forecast as an
   open diamond. With the table below it, the live record is now visual as well as numeric.
 - **Division of content.** The header and the first three sections hold only results and charts; *About the project* holds everything that explains what was built (intro, the five pipeline steps, "What we tried",
-  the method, the glossary, links). Nothing was deleted: the "What we tried" chart and every other chart are where they were.
+  the method, the glossary, links). Nothing was deleted: the "What we tried" chart and every other chart are where they were. Superseded on 17 Nov: *About the project* was removed at the owner's request and its content moved to the README (see below).
 - **Live pipeline check.** With the schedule moved to 03:00 UTC (10:00 Thailand, 4 Nov) the unattended runs on 5, 6 and 7 Nov each added the previous day's bar and a forecast (the 8 and 9 Nov runs found nothing new: a weekend and a Monday morning), so the live log has one row per trading day since 4 Nov: 6 scored forecasts
   (4 inside the 90% range, 2 outside; MAE \$56.32 vs. \$57.40 for "tomorrow = today") and the forecast for Monday 9 Nov waiting. Six days say nothing about accuracy yet.
 - **Verification.** No exceptions and no text overlap in any chart on any tab (script over every `.main-svg` text box) on Streamlit 1.56 and 1.66.1 at 1512 x 857, and the first revision of the header, scorecard and tabs also
@@ -692,6 +690,10 @@ the backtest first; actual values beside the forecasts in the "Price history and
   and the four `?` tooltips of the evidence block (the heading and the MAE, R² and range-reliability rows), and to keep their content in the README. The section now starts with the evidence block and ends with the range chart; the one-line explanation beside each evidence number stays.
   The code that only served the removed parts is gone too (`_verdict`, `_direction`, `_details`, `MODEL_LABELS`, `logic.direction_verdict`, `logic.pct_miss`, `logic.PHRASE`). The content is recorded in "Content removed from the dashboard" below.
   The table's CSV download (`daily_walk_forward_metrics.csv`) went with it; the backtest section keeps its own predictions CSV. Direction accuracy stays a labelled secondary check, now in the README only.
+- **The *About the project* section leaves the page (owner, 17 Nov).** The owner asked to remove the whole section (the five pipeline steps, the "What we tried" chart with its numbers, "The method in plain words", the glossary, the source-code and README buttons and the footer line)
+  and to keep the information in the README. The navigation bar now has three sections. `tab_about.py` and the loaders only it used (`data.horizons`, `data.feature_rows`, `data.FEATURE_SETS`, `data.REPO_URL`) are deleted.
+  The content is recorded in "Content removed from the dashboard" below, rebuilt from the result files (the table holds the same data as the "What we tried" chart). The page no longer links to the repository or to this README, because the two buttons lived only in that section;
+  the "Made only for a Computer Engineering senior project, not trading advice" line stays under the accuracy cards.
 
 #### Content removed from the dashboard (November 17, 2026)
 
@@ -739,6 +741,59 @@ Caption: p below 0.05 = a clear difference. 449 test days, 2025-01-09 to 2026-10
 - *MAE · average miss*: A simple guess (repeating the last close) misses by \$46.63 a day, 1.14% of the price. The model cannot be told apart from it (p = 0.38; below 0.05 counts as a clear difference).
 - *R² · predicts moves?*: Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: +0.006 (p = 0.90).
 - *Range reliability*: The real close stayed inside the range on 348 of 389 test days. Ideal: 90%. Its width, \$223, is the same as a no-change range (\$221): the model does not narrow the uncertainty.
+
+**The *About the project* section** (the fourth section of the navigation bar; it only explained what was built and tried). Its parts in the order shown, with every number rebuilt from the same result files:
+
+**How the forecast is made.** A fully automatic pipeline on AWS (Lambda and S3) runs every day, without anyone pressing a button.
+
+1. **Collect**: the latest gold price from Yahoo Finance, daily at 10:00 (Thailand time)
+2. **Check**: automatic data-quality checks
+3. **Forecast**: an LSTM reads the last 20 days (retrained weekly)
+4. **Add the range**: a 90% range from the model's recent errors
+5. **Publish and score**: saved to Amazon S3, scored when the real close arrives
+
+**What we tried.** Every idea was judged the same way: the MAE (average miss) against a simple guess (repeating the last close), on the same test days. The same holds for the range: five ways of drawing it, a GARCH model, the VIX and a network trained on the range itself all failed to beat a simple weighted average of recent errors.
+
+| Group | Experiment | MAE | Baseline MAE (simple guess) | Difference | p-value | Verdict | Test days |
+|---|---|---|---|---|---|---|---|
+| Main model | LSTM (this model) | \$46.83 | \$46.63 | +0.4% | 0.38 | No clear difference | 449 |
+| Other models | Ridge (linear model) | \$47.87 | \$46.63 | +2.7% | 0.02 | Worse | 449 |
+| Other models | Gradient boosting (trees) | \$50.68 | \$46.63 | +8.7% | 0.00 | Worse | 449 |
+| Extra inputs | LSTM + macro and cross-asset prices | \$46.80 | \$46.63 | +0.4% | 0.46 | No clear difference | 449 |
+| Extra inputs | LSTM + NFP release days | \$46.74 | \$46.63 | +0.2% | 0.59 | No clear difference | 449 |
+| Extra inputs | LSTM + FOMC and CPI release days | \$46.38 | \$46.63 | -0.5% | 0.97 | No clear difference | 449 |
+| Extra inputs | LSTM + CFTC positioning | \$46.62 | \$46.63 | -0.0% | 0.80 | No clear difference | 449 |
+| Longer horizon | LSTM, price 5 trading days ahead | \$109.50 | \$109.19 | +0.3% | 0.43 | No clear difference | 444 |
+| Longer horizon | LSTM, price 20 trading days ahead | \$216.95 | \$219.40 | -1.1% | 0.59 | No clear difference | 429 |
+
+Chart: one bar per experiment showing the error against the baseline (left = better). Grey: no real difference · Red: clearly worse. Nothing came out clearly better.
+
+Longer-horizon p-values are adjusted for overlapping forecasts.
+
+**The method in plain words.**
+
+- **Why a change, not a price?** The first version predicted the price and broke when gold reached levels it had never seen (error about \$640 against about \$51 for a simple guess that repeats the last close). Now the model predicts the day's percentage change and converts it: forecast = today's close × e^(predicted change).
+- **Why is every test on unseen days?** The model is retrained every 7 trading days on the latest 365 days and judged only on the days that follow. Inputs use past data only; automated tests check it.
+- **How is the 90% range computed?** Forecast ± 1.645 × the typical recent miss (a weighted average of past errors, decay 0.94). It uses only errors known before each forecast, so its 89.5% range reliability is honest.
+- **Why isn't volume an input?** 3% of days show zero or missing volume in Yahoo Finance's data, so every input comes from the closing price alone.
+- **Why is up/down only a side check?** A price forecast is judged by how far off it is, not by a yes/no call. The model says “up” on 88% of test days, so its score mostly follows how often gold rose.
+
+**Glossary.**
+
+- **LSTM.** A neural network built for sequences. Here it reads the last 20 days and predicts the next day's price change.
+- **MAE (average miss per day).** Mean absolute error: the average gap between the forecast and the actual close, in dollars. Lower is better.
+- **RMSE.** Root mean squared error: like MAE, but big misses count extra, so it shows how bad the worst days were. Lower is better.
+- **MAPE (error %).** Mean absolute percentage error: the average miss as a share of the price.
+- **Simple guess (baseline).** Assuming the price stays the same as the last close; also called the naive or no-change forecast. A price forecast is only useful if it clearly beats this.
+- **p-value.** How likely a difference this large would be to appear by luck alone. Below 0.05 counts as a clear difference; above it, the two are treated as equal.
+- **R² (out-of-sample).** The share of the daily price move the forecast explains. 0 means no better than a simple average; below 0 means worse.
+- **Rank correlation (IC).** Whether days with a higher forecast really had higher actual moves. 0 means no relationship, 1 a perfect match.
+- **Range reliability (90% range).** The range is where the close should land 9 days out of 10; reliability is how often it really did in testing. 90% is ideal.
+- **Walk-forward test.** Retrain on the past, test on the days that follow, then move forward and repeat, so the model never sees the days it is judged on.
+- **EWMA.** Exponentially weighted moving average: recent values count more than old ones. Used to size the range.
+- **VIX.** The “fear gauge” of the US stock market. Tested as an input; it did not help.
+
+**Footer.** Two buttons, "Source code" (https://github.com/aphiwat-data/lstm_dashboard) and "Full write-up (README)" (https://github.com/aphiwat-data/lstm_dashboard/blob/main/README.md), and the line: "Made only for a Computer Engineering senior project, not trading advice · Prices: Yahoo Finance (GC=F)".
 
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
@@ -822,7 +877,7 @@ lstm_dashboard/
 │   └── 06_Model_Evaluation.ipynb
 ├── dashboard/
 │   ├── app.py                   ← Streamlit dashboard entry point (deployed on Streamlit Community Cloud; reads S3 + daily/results) — see §10
-│   ├── ui/                      ← the page: data.py, logic.py, theme.py, header.py, sidebar.py, tab_track.py, tab_market.py, tab_reliability.py, tab_about.py (Phase 12)
+│   ├── ui/                      ← the page: data.py, logic.py, theme.py, header.py, sidebar.py, tab_track.py, tab_market.py, tab_reliability.py (Phase 12; tab_about.py removed on 17 Nov)
 │   ├── assets/                  ← mfu_logo.png, adt_logo.png (sidebar header)
 │   ├── requirements.txt         ← streamlit>=1.56 (Cloud installs the newest release), boto3, pandas, numpy, plotly, pyarrow; no TensorFlow
 │   └── .python-version          ← 3.11

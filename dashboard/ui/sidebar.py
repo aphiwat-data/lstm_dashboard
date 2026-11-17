@@ -1,4 +1,4 @@
-"""Sidebar: who made this (always visible, as requested). Sized to read comfortably and still fit one screen without scrolling; the source link lives on the About tab."""
+"""Sidebar: who made this (always visible, as requested). Sized to read comfortably and still fit one screen without scrolling."""
 from __future__ import annotations
 
 from pathlib import Path
