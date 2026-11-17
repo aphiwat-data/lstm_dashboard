@@ -81,7 +81,7 @@ def _plain(label: str) -> str:
 def _range_chart(compare: list | None, vix: list | None) -> None:
     if not compare:
         return
-    wanted = [("EWMA Gaussian, lambda 0.94 (current)", f"{highlight('Recent errors', 14)}<br>{highlight('(this model)')}"), ("Empirical quantiles, all past errors", "All past errors"), ("GARCH(1,1), Gaussian", "GARCH<br>(volatility model)"), ("LSTM quantile (pinball loss)", "LSTM learns<br>the range")]
+    wanted = [("EWMA Gaussian, lambda 0.94 (current)", f"{highlight('LSTM', 14)}<br>{highlight('(this model)')}"), ("Empirical quantiles, all past errors", "All past errors"), ("GARCH(1,1), Gaussian", "GARCH<br>(volatility model)"), ("LSTM quantile (pinball loss)", "LSTM learns<br>the range")]
     by = {r["method"]: r for r in compare}
     rows = [(label, by[key]["coverage"]) for key, label in wanted if key in by]
     if vix:
@@ -96,7 +96,7 @@ def _range_chart(compare: list | None, vix: list | None) -> None:
     fig.update_layout(bargap=0.5)
     fig.update_yaxes(range=[50, 100], ticksuffix="%")
     used, others = rows[0][1], [r[1] for r in rows[1:]]
-    chart_title("Range reliability by method", help=f"How often the close landed inside the 90% range. Dashed line: the 90% goal. We compared {len(rows)} ways to draw the range." + (" The first one, used in this model, landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
+    chart_title("Range reliability by method", help=f"How often the close landed inside the 90% range. Dashed line: the 90% goal. We compared {len(rows)} ways to draw the range." + (" The first one, this model's range (sized from its recent errors), landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
                 + (" The others were too narrow." if all(o < used for o in others) else ""))
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
