@@ -104,11 +104,22 @@ def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | Non
                 help=f"The range is where the close is expected to land on 9 days out of 10. In testing, the real close stayed inside it on {round(e['coverage'] * e['n'])} of {e['n']} days.{live}")
 
 
+def _how_to_read() -> None:
+    with st.popover("How to read this", icon=":material/help:"):
+        st.markdown(
+            "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
+            "- **Range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing.\n"
+            "- **MAE, RMSE, error %:** how far off the forecast was on the test days."
+        )
+
+
 def _scorecard(res: dict, reg: dict | None) -> None:
-    """Accuracy on the backtest window, with the technical names (MAE, RMSE, ...) visible; definitions sit in the tooltips."""
+    """Accuracy on the backtest window, with the technical names (MAE, RMSE, ...) visible; definitions sit in the tooltips. "How to read this" sits at the right end of the title row."""
     lstm = res["models"]["lstm"]
-    chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days",
-                help=f"The model was tested on {res['protocol']['n_test']} past days. For each day it forecast the close without having seen it, so these numbers show how it would have done in real use.")
+    with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
+        chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days",
+                    help=f"The model was tested on {res['protocol']['n_test']} past days. For each day it forecast the close without having seen it, so these numbers show how it would have done in real use.")
+        _how_to_read()
     with card_row():
         metric_card("MAE · average miss", usd(lstm["mae_usd"]),
                     help="The average miss: on a typical day the forecast was about this many dollars away from the real close. Lower is better.")
@@ -136,22 +147,16 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
     as_of = pd.Timestamp(cur["as_of_date"])
     target = next_trading_day(as_of)
     with st.container(border=True):
-        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
-            with st.container(width="content", gap="xxsmall"):
-                st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]")  # which day the number below is for
-                st.markdown(f"# {usd(fc)}")
-                st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]", help=f"Compared with the last close: {usd(last)} on {as_of:%a} {as_of.day} {as_of:%b}.")
-            with st.container(width="content", border=True):
-                _range_block(lo, hi, reg, log)
-        st.divider()
+        with st.container(gap=None):  # no gap between the price row and the line: the line then sits as far from the row as from the chart title below it
+            with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center", gap="small"):
+                with st.container(width="content", gap="xxsmall"):
+                    st.markdown(f"### :material/event: Forecast for :blue[{_day(target, year=True)}]")  # which day the number below is for
+                    st.markdown(f"# {usd(fc)}")
+                    st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]", help=f"Compared with the last close: {usd(last)} on {as_of:%a} {as_of.day} {as_of:%b}.")
+                with st.container(width="content", border=True):
+                    _range_block(lo, hi, reg, log)
+            st.divider()
         _chart(hist, fh, cur)
     if res is not None:
         _scorecard(res, reg)
-        with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-            st.caption("Made only for a Computer Engineering senior project. This is not trading advice.")
-            with st.popover("How to read this", icon=":material/help:"):
-                st.markdown(
-                    "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
-                    "- **Range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing.\n"
-                    "- **MAE, RMSE, error %:** how far off the forecast was on the test days."
-                )
+        st.caption("Made only for a Computer Engineering senior project. This is not trading advice.")
