@@ -8,7 +8,7 @@ still pending. It merges the written thesis proposal (`Next_day_Gold_
 Prices_Forcasting_With_LSTM.pdf`) with what the pipeline *actually* does
 today, and calls out every place the two disagree. Read this fully before
 making changes. If you are picking the project up, start with the
-**[Handoff](#handoff-where-things-stand-2026-10-27)** block below.
+**[Handoff](#handoff-where-things-stand-2026-11-17)** block below.
 
 For the full chronological story of every AWS/code error hit and how it
 was fixed (useful for "what problems did you encounter" in the defense),
@@ -19,9 +19,17 @@ see **[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)**.
 > directional accuracy" did not survive comparison with the trivial "always up" rule. Read the
 > **[Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned)** first; the corrected numbers are in §8.0.
 
+**Contents.**
+1. [Handoff](#handoff-where-things-stand-2026-11-17): the current result, the live pipeline, how to run and refresh things, traps and open items.
+2. [Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned): Phases 1-13 (the dashboard's final form is Phase 13 plus its appendix [Content removed from the dashboard](#content-removed-from-the-dashboard-november-17-2026)),
+   then [lessons learned](#lessons-learned), [where things live](#where-things-live) and [status and next steps](#status-and-next-steps) (including the publication plan).
+3. Reference sections: §0 front matter, [§1 repository structure](#1-repository-structure), §2-§3 proposal and deviations, [§4 AWS state](#4-aws-account-state-actual-as-of-now), §5-§6 data architecture and notebooks, §7 risks,
+   [§8 results](#8-model-evaluation--results-interpretation-37-write-up), §9 literature, [§10 dashboard](#10-streamlit-dashboard-deployed-on-streamlit-community-cloud), [§11 daily automation](#11-daily-automation-pipeline-lambda--eventbridge-scheduler),
+   [§12 pending](#12-pending--not-yet-done), §13 references, §14 repository and hosting, [§15 research dossier for the IEEE paper](#15-research-dossier-for-the-ieee-paper).
+
 ---
 
-## Handoff: where things stand (2026-10-27)
+## Handoff: where things stand (2026-11-17)
 
 Read this block first if you are picking the project up (a new contributor or another coding agent); everything below it is the
 detailed record.
@@ -35,9 +43,11 @@ better:
 
 | Check | Result |
 |---|---|
-| Price error | MAE \$46.83 vs \$46.63 for "tomorrow = today" (Diebold-Mariano p = 0.38); 1.15% of the price |
+| Price error | MAE \$46.83 vs \$46.63 for "tomorrow = today", the *simple guess* of repeating the last close (Diebold-Mariano p = 0.38); 1.15% of the price |
 | Fit on returns | R² -0.014 (a constant zero-return forecast scores -0.003); IC +0.006 (p = 0.90) |
 | Direction (secondary) | 51.9% vs always-up 55.2% (p = 0.155), AUC 0.463; the model says "up" on about 88% of days |
+| 90% range | Reliable: the real close stayed inside it on 348 of 389 scored test days (89.5%, goal 90%; Kupiec p = 0.73). It is as wide as a no-change range (\$223 vs \$221), so it tracks market volatility, not model skill |
+| Live record (2026-11-17) | 11 real forecasts scored since 2026-10-28: MAE \$48.49 vs \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything; it grows by one trading day each morning |
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
@@ -48,14 +58,25 @@ regression-first metrics and the same causal protocol.
 **Metric policy (advisor, 2026-10-27).** Directional accuracy is a classification metric, not the yardstick for a price forecast. Lead
 with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" baseline and keep up/down accuracy only as a labelled
 secondary check (it is how the proposal phrased the ~70% target, and it exposes the model's majority-class behaviour). The dashboard
-already does this, and so does Chapter 3 (price accuracy first, direction as a secondary table).
+leads with price error and, since 17 Nov, no longer shows direction accuracy at all (its former side check is kept under "Content removed from the dashboard" in Phase 13); Chapter 3 did the same (price accuracy first, direction as a secondary table).
 
-**Dashboard structure (2026-10-30, Phase 12; page layout reworked 2026-11-09, Phase 13).** `dashboard/app.py` is a 35-line entry point; the page lives in `dashboard/ui/` (`data.py` cached loaders, `header.py`, `sidebar.py`,
-one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py` verdict rules). It no longer imports TensorFlow (requirements: streamlit, boto3, pandas, numpy,
-plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
-refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
-Layout since Phase 13: a header (the title with a status badge and a short project description (the model, the live record and the disclaimer), the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
-an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then a navigation bar of three sections in one row (nothing is shown until one is clicked; since 14 Nov, before that tabs and for a few hours stacked panels): *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations). The fourth section, *About the project*, was removed on 17 Nov; its content is in "Content removed from the dashboard" (Phase 13).
+**Dashboard (final form, 2026-11-17; the owner closed the dashboard work that day).** `dashboard/app.py` is a 40-line entry point; the page lives in `dashboard/ui/` (`data.py` cached loaders, `header.py`, `sidebar.py`, `cards.py` metric cards,
+one `tab_*.py` per section, `theme.py` colours and the shared chart style, `logic.py` the price verdict and the chip colour). It does not import TensorFlow (requirements: streamlit, boto3, pandas, numpy, plotly, pyarrow), so a page
+loads in about a second. Every number in the prose is read from the result files, so a results refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml` (one light theme, on purpose).
+The page, top to bottom: a **header** (the title with a freshness badge; three lines under it: what the model forecasts, that live forecasts are saved before the day and scored against the real close, and the senior-project disclaimer; the forecast card with
+the forecast day, the forecast price, its change against the last close and the 90% range with its *range reliability*; the chart "Actual vs Forecast" with a 1M / 3M / 6M / 1Y filter; the scorecard "Accuracy · 449 backtest days" with MAE, RMSE, error % and R²,
+each card showing only a label and a number), then a **navigation bar of three sections** in one row (nothing is shown until one is clicked; click the active one to hide it): *Forecast vs. actual* (the backtest with its window filter at the right, then the live record),
+*Actual market data* (price history, volatility, daily changes, the model's inputs) and *How reliable?* (the evidence rows, average miss by model, range reliability by method). The sidebar holds the credits. The details are in §10 ("Current dashboard").
+Step by step the owner removed the briefing, notes, chips, verdict boxes, the side-check and statistics expanders, many tooltips and the whole *About the project* section; everything removed is kept in "Content removed from the dashboard" (Phase 13)
+and `AGENTS.md` lists the rules so that it stays removed.
+
+**Live pipeline (since 2026-10-29; Phase 11, §11).** An EventBridge schedule (`cron(0 3 * * ? *)`, 03:00 UTC = 10:00 Thailand, ENABLED) invokes the Lambda `gold-lstm-forecast-daily-refresh` (python3.12, 1 GB, about 1.5 s per run) in `ap-southeast-2`.
+Each morning it appends the newest settled Yahoo bar to `bronze/streaming/xauusd_daily_incremental.csv`, runs data-quality checks, makes the forecast with a numpy LSTM and its 90% EWMA range (`gold/xauusd_daily/predictions/latest_forecast.json`)
+and scores every earlier forecast whose next close is now known (`forecast_log.csv`, the live record). Status on 2026-11-17: the 10:00 run worked (latest forecast, made from the 2026-11-16 close: \$3,858.67, range \$3,776.27 to \$3,942.87);
+12 forecasts are logged, 11 scored, 9 of 11 inside the range, MAE \$48.49 against \$48.21 for the simple guess. **Open:** (1) the serving model (`model/serving/serving_model.npz`) was last written on 2026-10-29, so the weekly
+`python3 automation/retrain.py` (run by hand; needs TensorFlow and AWS credentials) is two retrains behind; (2) `forecast_log.csv` is an ordinary S3 object and the Lambda replaces the row of the same as-of date on a re-run, so the live record is not tamper-proof
+(for a paper add S3 versioning with Object Lock, or a daily git commit of the log; the *Live record* tooltip on the page still says nothing can be edited afterwards); (3) no CloudWatch alarms or SNS topic (the IAM user `Auto` lacks the permission and the owner chose not to widen it);
+(4) `AmazonEC2ContainerRegistryFullAccess` is still attached to `Auto` although nothing uses it. See §12 items 18-22.
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
 called by `walk_forward.py`) computes from `wf_predictions.csv`: MAE, RMSE, MAPE, relative MAE and Diebold-Mariano p (lags 0 and 24; LSTM
@@ -110,6 +131,9 @@ python3 test_no_lookahead_daily.py                 # causality tests
 python3 build_daily_dataset.py --out-dir data/processed
 python3 walk_forward.py --data data/processed/xauusd_d1_features.parquet --latest data/processed/xauusd_d1_latest_features.parquet --out-dir results
 python3 horizon_always_up.py                       # the Phase 8 horizon table
+python3 test_regression_metrics.py                 # metric tests; test_serving.py (numpy LSTM equals Keras) and ../automation/test_lambda_function.py run the same way
+cd ../automation && python3 deploy.py plan         # the daily Lambda and its schedule: plan / apply / teardown (idempotent)
+python3 retrain.py                                 # weekly: retrain the serving model and upload it (needs TensorFlow and AWS credentials)
 ```
 
 The feature-search folders are the same walk-forward run on a differently built dataset (one `--out-dir` per variant):
@@ -124,12 +148,13 @@ The feature-search folders are the same walk-forward run on a differently built 
 Hourly: `hourly/run_full_pipeline.sh` (needs Node for `dukascopy-node`; run `npm install` in `hourly/` first), then
 `hourly/train_models.py` (usage in its docstring).
 
-**Refreshing the results** (§12 item 12). (1) Extend the silver data: the S3 table is still at 2026-09-21, and a local parquet with the
-same columns can be passed to `--silver`. (2) Delete or repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first:
-`fetch_macro` and `fetch_cot` return a cache as-is without checking its end date, so a stale cache silently forward-fills old values.
-(3) Re-run the main walk-forward **and all four variants on the same rows**, keep the previous outputs in a dated
-`daily/results/snapshot_*` folder, and update the README numbers, Chapter 3 Tables 3.2-3.5 and the dashboard together (the
-dashboard's feature-search table reads the `with_*` folders by itself).
+**Refreshing the results** (§12 item 12; last done 2026-10-27 with data through 2026-10-26). (1) Extend the silver data: the S3 Silver table is still at 2026-09-21 (the Lambda keeps newer bars in `bronze/streaming/xauusd_daily_incremental.csv` and nothing absorbs them into Silver yet),
+so build a local parquet with the same columns and pass it to `--silver`. (2) Delete or repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first: `fetch_macro` and `fetch_cot` return a cache as-is without checking its end date, so a stale cache silently
+forward-fills old values. (3) Re-run the main walk-forward **and all four variants on the same rows**, keep the previous outputs in a dated `daily/results/snapshot_*` folder (only `snapshot_2026-09-18/` exists so far; copy the current outputs into a new one before overwriting)
+and update the README numbers. The dashboard reads the result files by itself (cache keyed on file mtime) and its prose is generated, so it needs no edit; the README tables are typed by hand. The Word files are no longer maintained. A long-window run for a paper belongs in its own
+results folder, so that the dashboard's 449-day window stays consistent.
+
+**Paper (IEEE; the next step since 2026-11-17).** The research dossier is §15: what the evidence supports and does not support, every number with its source file, the method in reproducible detail, threats to validity, extra experiments (E1-E12), a checked bibliography with BibTeX (39 references, DOIs verified 2026-11-17), an IEEE venue shortlist (JCSSE 2027 second round on 22 Jan 2027, hosted by the owner's school; IEEE Access, rolling), a section-by-section writing plan and the rules for working with Claude (§15.13). Read §15.0 and §15.13 before drafting anything.
 
 **Working agreements and traps.**
 - The repo is public: never commit AWS keys, the AWS account ID or any credentials (Streamlit Cloud keeps them in the app's Secrets).
@@ -139,10 +164,10 @@ dashboard's feature-search table reads the `with_*` folders by itself).
   installs a newer Streamlit than local development used (1.66 vs 1.56), so check every layout change at 1280, 1024, 900, 760 and
   390 px and on the live URL after the push (§10, lessons).
 - The owner pushes small commits straight to `main`. Every push redeploys the public app, so a broken `app.py` is public at once.
-- Report status (2026-10-29): Chapter 3 is final. `Report_Abstract_Ch1_Ch4.docx` (next to it, outside the repo) holds the revised Abstract, Chapter 1 sections 1.2/1.3/1.6,
-  Chapter 4 (conclusion and discussion) and the additional references. Chapter 2 (literature review) is the proposal's original text and has not been revised.
-- Chapter 3 tables were updated programmatically from the results JSONs with python-docx (each table cell is a single run: set
-  `run.text` to keep the formatting). Keep a backup next to the file and compare every number with the README.
+- Checking a second Streamlit version means proving which version ran: print `streamlit.__version__` first (a broken scratch venv silently ran 1.56 for days). Streamlit 1.66's `AppTest.from_file` resolves a relative path against the calling file, so give it the absolute path of
+  `dashboard/app.py`; prime `st.session_state["section"]` to test each navigation section.
+- The owner decides every visible element of the page and writes the rules down in `AGENTS.md`: never delete a chart or section unless the owner asks for that exact removal, and put removed content into this README (see "Content removed from the dashboard").
+- The paper will be rewritten from scratch by the owner (2026-10-29): the Word files (`Chapter3.docx`, `Report_Abstract_Ch1_Ch4.docx`, kept outside the repo) are no longer maintained. Record every result and decision in this README only.
 
 ---
 
@@ -161,6 +186,8 @@ also visible in the commit history.
 | Is the advisor's ~70% directional-accuracy expectation reachable? | **Not on this evidence, not by combining models, and not by adding macro/cross-asset inputs.** Every model tried (ridge, gradient boosting, LSTM/GRU) sits at AUC 0.50-0.52 on price history alone; adding DXY/silver/S&P 500/VIX/yields/TIP (Phase 9) still lands at AUC ~0.50. Ensembling or feeding in more inputs cannot manufacture a signal that none of them has. "Always up" alone reaches 55% at 1 day, 62.0% at 20 days and 75.6% at 60 days on the test period (Phase 8) purely because gold trended up, so a ~70% figure needs a stated horizon, baseline and coverage before it means anything. Worth discussing with the advisor (where does 70% come from, and how is it measured?). |
 | Do other horizons, interval methods or VIX change that? | **No.** 5 and 20 days ahead: no significant gain over no-change (p = 0.43, 0.59). The shipped 90% band (EWMA, 89.5% causal coverage) beat GARCH (85.6%), an LSTM quantile model (63.5%) and a VIX model (86.1-86.4%) (Phase 10). |
 | Is the price forecast usable? | It matches a no-change forecast (daily MAE \$46.83 vs \$46.63). Read it as "about today's close, within the interval". |
+| Is the 90% range trustworthy? | **Yes.** The real close stayed inside it on 89.5% of 389 scored test days (goal 90%, Kupiec p = 0.73) and on 9 of 11 live days so far. It is as wide as a no-change range, so it reflects market volatility, not model skill. |
+| What does the live record say? | 11 real forecasts scored (2026-10-28 to 2026-11-16): MAE \$48.49 vs \$48.21 for the simple guess, 9 of 11 inside the range. Far too few days to conclude anything; what it shows is that the pipeline runs unattended. |
 | What was the big bug? | A price-level target and price-level inputs with train-only scalers: once gold left the training range in 2025-26, MAE reached ≈ \$640. Fixed with a return target and scale-free features. |
 
 ### Phase 1: build the pipeline (§5-§7)
@@ -183,11 +210,11 @@ Added, without removing anything: a model-freshness indicator, an empirical 90% 
 date-range metrics picker and a panel comparing with the Lambda's daily forecast. Lesson from the picker: a 4-day range
 showed 100% directional accuracy, which is only three comparisons, i.e. small-sample luck, not leakage.
 
-### Phase 4: attempt to deploy the automation (still open)
+### Phase 4: attempt to deploy the automation (finished in Phase 11)
 `automation/deploy.sh` attached three managed policies to `Auto` (Lambda, ECR and EventBridge Scheduler full access) and
 created the ECR repository `gold-lstm-forecast-daily-refresh`, then the Docker build failed with I/O errors because the
 Mac's disk was 98% full (249 MB free); after freeing space Docker Desktop's engine still did not become healthy after a
-restart. The Lambda and schedule were never created. The policies and the ECR repository still exist, so either finish the deployment or clean them up (§12).
+restart. The Lambda and schedule were never created. Resolved in Phase 11: the Lambda was rebuilt around the return-target model and deployed on 2026-10-29, and the empty ECR repository was deleted; the broad managed policies on `Auto` remain (§12 item 11).
 
 ### Phase 5: advisor feedback: hourly data and a ~70% target (hourly/)
 - Data: Dukascopy XAU/USD hourly bars, 2004 to 2026 (free, spot price). Two data traps: the downloader silently saved
@@ -521,7 +548,7 @@ EventBridge Scheduler (cron 03:00 UTC = 10:00 Thailand, daily; it was 01:00 UTC 
         5. upsert forecast_log.csv: every earlier forecast is scored once its next close is known (the live track record)
         6. CloudWatch metrics (embedded metric format: NewRows, DQWarnings, Failure, ForecastsScored, RunSeconds) and a run log
    weekly, by hand or any scheduler with TensorFlow: automation/retrain.py  (Silver + stream log -> final LSTM -> s3://.../model/serving/serving_model.npz)
-   dashboard: Method tab, "Live pipeline" expander (latest forecast, last run age, live track record)
+   dashboard: Method tab, "Live pipeline" expander (latest forecast, last run age, live track record); replaced by the header badge and the *Live record* section in Phases 12-13
 ```
 
 Files: `daily/serving.py` (latest features, numpy LSTM, EWMA band), `daily/export_serving_model.py` (train the final model and export weights, 100 KB),
@@ -594,7 +621,7 @@ Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views o
 - **Verification.** No exceptions on any tab at the widths above; no horizontal overflow (script-checked per tab); Streamlit 1.66.1 in a fresh venv installed from the new
   `requirements.txt` rendered identically; live URL checked after the push.
 
-### Phase 13: page restructure, clearer tabs and a fuller scorecard (November 9, 2026)
+### Phase 13: page restructure, clearer tabs and a fuller scorecard (November 9-17, 2026)
 
 Owner request (nine points, plus "make a checklist"): a short briefing in the header; the forecast day much more prominent; the 90% range and its hit rate merged into one block and the
 hit rate renamed; metrics shown with their technical names (MAE, RMSE, ...) and a new home for the reliability numbers; tab names that say what is actual and what is predicted;
@@ -704,6 +731,8 @@ the backtest first; actual values beside the forecasts in the "Price history and
   the title and the grey "Simulated on past data" badge stay together on the left. It also saves one row of height. The price-history and indicator filters in *Actual market data* still sit on their own rows.
 - **The disclaimer joins the project description (owner, 17 Nov).** "Made only for a Computer Engineering senior project. This is not trading advice." is now the last line of the description under the title (three short lines in all) instead of a caption under the accuracy cards,
   which now carry no caption. The description is a constant text, so the disclaimer shows even when the result files are missing.
+- **Dashboard closed (owner, 17 Nov).** The owner declared the dashboard finished for now and asked for the README to be completed. The final structure is in §10 ("Current dashboard"); the rules that keep it that way are in `AGENTS.md`.
+  What remains lies outside the page: the weekly retrain, the live-log hardening and the paper (see Status and next steps and §15).
 
 #### Content removed from the dashboard (November 17, 2026)
 
@@ -829,22 +858,32 @@ Longer-horizon p-values are adjusted for overlapping forecasts.
 12. Test the evaluator, not only the model: the metrics module has tests that fail on look-ahead and on wrong formulas.
 13. Check how a layout primitive behaves at several widths before building on it: Streamlit's stretch children squeeze rather than wrap unless their content has a minimum size.
     Generate prose from the data, so wording cannot drift from the numbers.
+14. Never delete what the owner did not ask to delete. A mass removal of charts had to be restored from git; since then every removal needs an explicit request, and the removed content moves to the README.
+15. A check on a second runtime must prove which runtime ran. A scratch virtual environment silently fell back to Streamlit 1.56, so several "1.66.1" runs were not what they claimed; print the version in the check itself.
+16. Say what is live and what is replayed. "Every forecast is saved before the day" is true only of the live forecasts; the replayed (backtest) forecasts were not saved beforehand.
+17. Give every manual step of an unattended system an owner and a reminder: the weekly retrain was documented but never scheduled, and the serving model is weeks old.
+18. An audit trail that can be overwritten is not an audit trail: the live log needs versioning or an external timestamp before it is cited as evidence.
 
 ### Where things live
 | Path | What |
 |---|---|
-| `notebooks/`, `automation/` | Original daily pipeline (notebooks 01-06) and the Lambda automation, which is designed but not deployed and still runs the old price-level model |
-| `daily/` | Corrected daily dataset builder, causality tests, walk-forward evaluation, regression-first metrics (`regression_metrics.py`), multi-day walk-forward (`walk_forward_horizon.py`) and the interval experiments (`interval_experiment.py`, `lstm_quantile.py`, `interval_vix.py`). `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
+| `notebooks/`, `automation/` | Original pipeline (notebooks 01-06, the price-level model, superseded) and the live daily pipeline: `lambda_function.py` (deployed 2026-10-29), `deploy.py`, `retrain.py`, the IAM policies and the tests |
+| `daily/` | Corrected daily dataset builder, causality tests, walk-forward evaluation, regression-first metrics (`regression_metrics.py`), multi-day walk-forward (`walk_forward_horizon.py`), the interval experiments (`interval_experiment.py`, `lstm_quantile.py`, `interval_vix.py`), the volatility comparison (`volatility_experiment.py`) and the serving core of the live pipeline (`serving.py`, `export_serving_model.py`, `serving_artifacts/`). `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
 | `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check and the cross-asset test (`results/with_aux_mid/`); `results/summary_hourly_findings.png` is the one-page summary |
-| `dashboard/app.py`, `dashboard/ui/` | Streamlit app (deployed on Streamlit Community Cloud from `main`): `app.py` is the entry point, `ui/` the header, sidebar, one module per tab, cached data loaders and the chart style; `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
+| `dashboard/app.py`, `dashboard/ui/` | Streamlit app (deployed on Streamlit Community Cloud from `main`): `app.py` is the entry point, `ui/` the header, sidebar, metric cards, one module per section (three sections), cached data loaders and the chart style; `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
 | `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
+| `AGENTS.md` | Rules for any coding agent: public-repo privacy, metric policy, one results window, the owner's dashboard rules, research rules for the paper |
+| S3 bucket `gold-lstm-forecast` (`ap-southeast-2`), not in git | `bronze/`, `silver/`, `gold/` (data, features, the live pipeline's predictions) and `model/serving/serving_model.npz` (the live model) |
 
 ### Status and next steps
-See the **Handoff** block at the top and §12 for the tracked open items. In short: the modelling work is finished and closed as a
-negative result (every lever tried, including macro, NFP, FOMC/CPI and COT features on daily and hourly data, lands at AUC ~0.50,
-so the honest write-up is a well-instrumented negative result rather than a 70% claim). What remains is writing and housekeeping:
-the thesis write-up (Chapter 3 is on the 449-day window; a regression-first restructure is optional), the Lambda decision (finish it
-around the return-target model, or tear down the partial AWS changes), and refreshing the results when new data arrives (§12 item 12).
+*As of 2026-11-17.* See the **Handoff** block at the top and §12 for the tracked open items. In short:
+- **Modelling: closed as a negative result.** Every lever tried (models, five feature sets, horizons, daily and hourly data, interval methods) is level with the simple guess on price error; the honest write-up is a well-instrumented negative result with a reliable 90% range.
+- **Dashboard: finished (owner, 17 Nov).** The final structure is in §10 and the rules that keep it that way are in `AGENTS.md`.
+- **Live pipeline: running unattended since 2026-10-30** (11 forecasts scored by 2026-11-17). To do: run `python3 automation/retrain.py` (the model was last written on 2026-10-29), make the live log tamper-proof if it will be cited (S3 versioning with Object Lock, or a daily git commit of the log)
+  and correct the *Live record* tooltip, which still says nothing can be edited afterwards.
+- **Paper: an IEEE-format paper is the next step (owner, 2026-11-17).** The advisor wants a publication; the owner will work with this README and Claude as research helpers. §15 is the research dossier: the claim the evidence supports, every number with its source file, the method in reproducible detail,
+  threats to validity, extra experiments to strengthen the paper, a checked bibliography, an IEEE venue shortlist, a section-by-section writing plan and the rules for working with Claude.
+- **Housekeeping:** detach `AmazonEC2ContainerRegistryFullAccess` from `Auto`, stop the SageMaker notebook instance when idle, and optionally refresh the 449-day window with new data (§12 item 12).
 
 ---
 
@@ -879,7 +918,8 @@ Financial Analytics.
 
 ```
 lstm_dashboard/
-├── README.md                    ← this file
+├── README.md                    ← this file: handoff, project journey, reference sections, research dossier for the paper (§15)
+├── AGENTS.md                    ← rules for any coding agent: privacy, metric policy, one results window, the owner's dashboard rules, research rules
 ├── docs/
 │   └── TROUBLESHOOTING.md       ← full chronological log of every error + fix
 ├── notebooks/
@@ -891,7 +931,7 @@ lstm_dashboard/
 │   └── 06_Model_Evaluation.ipynb
 ├── dashboard/
 │   ├── app.py                   ← Streamlit dashboard entry point (deployed on Streamlit Community Cloud; reads S3 + daily/results) — see §10
-│   ├── ui/                      ← the page: data.py, logic.py, theme.py, header.py, sidebar.py, tab_track.py, tab_market.py, tab_reliability.py (Phase 12; tab_about.py removed on 17 Nov)
+│   ├── ui/                      ← the page: data.py, logic.py, theme.py, cards.py, header.py, sidebar.py, tab_track.py, tab_market.py, tab_reliability.py (Phase 12-13; tab_about.py removed on 17 Nov)
 │   ├── assets/                  ← mfu_logo.png, adt_logo.png (sidebar header)
 │   ├── requirements.txt         ← streamlit>=1.56 (Cloud installs the newest release), boto3, pandas, numpy, plotly, pyarrow; no TensorFlow
 │   └── .python-version          ← 3.11
@@ -913,8 +953,9 @@ lstm_dashboard/
 │   ├── regression_metrics.py, test_regression_metrics.py   ← price error, out-of-sample R², causal interval coverage (Phase 10)
 │   ├── walk_forward_horizon.py  ← price 5 / 20 trading days ahead vs. no-change (results/horizon_h5, horizon_h20)
 │   ├── interval_experiment.py, lstm_quantile.py, interval_vix.py   ← 90% interval method comparison and the VIX test
+│   ├── volatility_experiment.py ← volatility forecast comparison (EWMA, GARCH, VIX; QLIKE) → volatility_forecast.csv, volatility_comparison.json
 │   ├── requirements.txt
-│   └── results/                 ← main run (449-day window): walk_forward_results.json, wf_predictions.csv, latest_forecast.json (read by the dashboard)
+│   └── results/                 ← main run (449-day window): walk_forward_results.json, wf_predictions.csv, regression_metrics.json, latest_forecast.json, interval_comparison.json, interval_vix.json, volatility_forecast.csv, volatility_comparison.json (read by the dashboard)
 │       ├── with_macro/, with_macro_calendar/, with_macro_calendar_full/, with_cot/   ← Phase 9 feature-search runs on the same rows
 │       ├── snapshot_2026-09-18/ ← the earlier 424-day outputs of all five runs
 │       └── model_results_lstm_w*.json   ← static-training variants (not re-run in the October refresh)
@@ -1010,15 +1051,22 @@ here.
   account belongs to someone outside this project.
 - **Login identity used day-to-day**: IAM user `Auto`
   (ARN `arn:aws:iam::<ACCOUNT_ID>:user/Auto`) — **not** the root user.
-- **IAM policies currently attached to user `Auto`**:
+- **IAM policies currently attached to user `Auto`** (checked 2026-11-17):
   - `AmazonS3FullAccess`
   - `AmazonSageMakerFullAccess`
   - `IAMFullAccess` (added so `Auto` can manage its own access keys —
     had to be attached by someone with existing IAM permissions, since
     `Auto` could not grant this to itself)
+  - `AWSLambda_FullAccess` and `AmazonEventBridgeSchedulerFullAccess` (for the daily pipeline, Phase 11)
+  - `AmazonEC2ContainerRegistryFullAccess` (left over from the abandoned container deployment, Phase 4; nothing uses it, so it can be detached)
+  - `IAMUserChangePassword`
 - **Region**: `ap-southeast-2` (Asia Pacific — Sydney). All S3 and
   SageMaker resources live here.
 - **S3 bucket**: `gold-lstm-forecast`
+- **Daily pipeline (since 2026-10-29, §11)**: Lambda `gold-lstm-forecast-daily-refresh` (python3.12, 1024 MB, zip package plus the AWS-managed "AWS SDK for pandas" layer), an EventBridge Scheduler schedule of the same name
+  (`cron(0 3 * * ? *)` UTC = 10:00 Thailand, ENABLED), two roles (`gold-lstm-forecast-daily-refresh-role` for the function and `gold-lstm-forecast-daily-refresh-scheduler-role` for the schedule; the least-privilege policies are in `automation/`)
+  and CloudWatch metrics in the namespace `GoldLSTM`. S3 prefixes it uses: `bronze/streaming/` (append-only bar log), `gold/xauusd_daily/predictions/` (`latest_forecast.json`, `forecast_log.csv`, `dq_report.json`) and
+  `model/serving/serving_model.npz` (last written 2026-10-29). No CloudWatch alarms or SNS topic exist (`Auto` lacks the permissions). Cost: far inside the free tier.
 - **Compute actually used**: SageMaker classic **Notebook Instance** — see
   Deviation #1 in §3 for why this differs from the proposal's stated
   SageMaker Studio / `ml.m5.2xlarge`.
@@ -1513,6 +1561,9 @@ brief:
 
 ## 10. Streamlit Dashboard (deployed on Streamlit Community Cloud)
 
+> **Update (17 Nov 2026): final form.** The owner closed the dashboard work on 17 Nov 2026. The "Current dashboard" subsection below describes exactly what is deployed; the notes in this block quote are the history that led to it,
+> and what was removed on the way is kept in "Content removed from the dashboard" (Phase 13).
+>
 > **Update (30 Oct 2026): rebuilt for readability (Journey, Phase 12).** The page is now `dashboard/app.py` plus the `dashboard/ui/` package, uses only the result files, the live
 > pipeline's S3 output and the price history, and no longer loads TensorFlow or the original-pipeline views mentioned in the updates below; the "Current dashboard" subsection
 > describes what is deployed today. The older notes are kept for the record.
@@ -1545,30 +1596,35 @@ brief:
 > uses wrapping horizontal containers (`st.container(horizontal=True)`), which wrap by *content* width, so the range and
 > last close drop below the price instead of squeezing it.
 
-**STATUS: live and redesigned (October 2026).** Further iteration is welcome (nothing here is frozen), but the structure in the next
-subsection is what a reader sees today.
+**STATUS: live; closed by the owner on 17 Nov 2026.** The structure in the next subsection is what a reader sees today; change it only on the owner's request (the rules are in `AGENTS.md`).
 
-### Current dashboard (30 October 2026)
+### Current dashboard (17 November 2026, final)
 - **Hosting.** Streamlit Community Cloud, app path `dashboard/app.py`, Python 3.11, redeployed automatically from `main`. AWS credentials live in the app's Secrets (never in git).
   Local run: `python3 -m streamlit run dashboard/app.py` from the repo root (AWS credentials are needed for the live forecast and the price history; without them the page falls back to
   the committed result files). Requirements: streamlit, boto3, pandas, numpy, plotly, pyarrow.
-- **Code layout.** `app.py` sets the page up and calls `ui/header.py`, `ui/sidebar.py` and one `ui/tab_*.py` per tab; `ui/data.py` holds every cached loader, `ui/logic.py` the verdict
-  rules, `ui/theme.py` the colours, `usd()` and the shared chart style. The theme (one light theme, the advisor's preference) and the font are in `.streamlit/config.toml`.
-- **Sidebar (credits first).** MFU and ADT logos side by side, project title, degree and school, authors with student IDs, advisor, committee, then a status badge (live or backtest data,
-  data-through date, model-trained-through date) and a link to the source code.
-- **Header (the forecast is the product).** Title with a freshness badge, the next-day forecast price (largest element), change chip vs. last close, the 90% range, a 1M/3M/6M/1Y chart
-  with the forecast and its range bar, then three trust cards (typical error, range accuracy, "beats tomorrow = today?"; chips are green or red only when p < 0.05, orange or blue
-  within noise) and a "How to read this" popover. The forecast is the live pipeline's `latest_forecast.json` whenever it is newer than the one stored with the last walk-forward run.
-- **Tabs, in order.** *Track record* (live record first, then the backtest with the miss per day and a CSV download); *Data explorer* (price and volume with the test-period marker,
-  volatility forecast vs. realised with the QLIKE comparison, 30-day volatility, daily changes, the model's own inputs); *How reliable?* (verdict callout, scorecard, price-error and
-  range-accuracy charts, the secondary up/down check, the full statistics table); *About* (project summary, the five pipeline steps, the "what we tried" chart read from `daily/results`
-  including the `with_*` and `horizon_h*` folders, the method in plain words, glossary).
-- **Data it reads.** `daily/results/walk_forward_results.json`, `wf_predictions.csv`, `regression_metrics.json`, `volatility_*`, `interval_*`, `horizon_h5/` and `horizon_h20/`, the four
-  `with_*` folders (cache keyed on file mtime, so a refresh shows up without a restart); from S3 (`gold-lstm-forecast`): `gold/xauusd_daily/predictions/latest_forecast.json` and
-  `forecast_log.csv`, `bronze/streaming/xauusd_daily_incremental.csv` and `silver/xauusd_daily_clean.parquet` for the price history.
-- **Rules that came from real bugs:** native Streamlit elements only; `width="stretch"` instead of `use_container_width`; escape dollar signs in markdown and `st.metric` as `\$`; wrapping
-  containers instead of `st.columns` where the open sidebar would squeeze content, and stretch only for `st.metric` cards (text-heavy cards and charts are squeezed instead of wrapping);
-  charts use the system font; keep visible text short (explanations go in `help=` tooltips, popovers or expanders, and `$` in a tooltip must be escaped like anywhere else); check every layout change at several widths on Streamlit 1.56 and 1.66 and on the live URL (see Phase 12).
+- **Code layout.** `app.py` (page config, loaders, header, navigation bar and the selected section), `ui/data.py` (every cached loader; each degrades to None when a source is missing), `ui/header.py`, `ui/sidebar.py`, `ui/cards.py` (`metric_card`, `card_row`),
+  `ui/tab_track.py`, `ui/tab_market.py`, `ui/tab_reliability.py`, `ui/theme.py` (colours, `usd()`, `chart_title`, `panel_title`, `highlight`, the shared chart style) and `ui/logic.py` (the price verdict and the chip colour).
+  The theme (one light theme, the advisor's preference) and the font are in `.streamlit/config.toml`.
+- **Sidebar.** Credits only: MFU and ADT logos, project title, degree and school, authors with student IDs, advisor and committee. The page has no link to the repository or to this README.
+- **Header.** The title with a freshness badge ("Live · updated N h ago"; its tooltip gives the 10:00 refresh and the data and model dates); three lines under it (what the model forecasts, that live forecasts are saved before the day and scored against the real close,
+  the senior-project disclaimer); the forecast card (the forecast day, the forecast price, its change against the last close, and the 90% range with the *range reliability* badge: 89.5% in testing, the live count in its tooltip);
+  the chart "Actual vs Forecast" (window 1M by default, 3M, 6M, 1Y: the actual line, the forecast made the day before with its range band, the new forecast with its range bar, the daily miss as bars);
+  the scorecard "Accuracy · 449 backtest days" (MAE · average miss, RMSE, Error % (MAPE), R² (out-of-sample); label and number only, definitions in tooltips) with a "How to read this" popover.
+- **Navigation bar** (one `st.segmented_control`, nothing selected at load, click the active one to hide it):
+  - *Forecast vs. actual*: **Backtest · 449 test days** (badge "Simulated on past data"; window filter 1M / 3M / 6M / All at the right end of the title row, default 3M; actual vs. forecast price and the daily miss; CSV download of the predictions), then **Live record**
+    (badge "Real forecasts"; cards: forecasts scored, MAE, range reliability; the chart of each real forecast with its range and the actual close; the table of the last 15 scored forecasts).
+  - *Actual market data*: gold price history (1Y / 5Y / 10Y / All with volume and the test-period marker), volatility (typical daily move, yearly pace, VIX; actual moves against the model's limit; an expander comparing volatility models; long-run volatility),
+    daily changes (histogram) and what the model looks at (six inputs, one picker).
+  - *How reliable?*: **The evidence** (three rows: MAE · average miss with its chip against the baseline, R² · predicts moves?, range reliability with the goal 90%), the chart *Average miss (MAE) by model* (LSTM first, simple guess, Ridge, gradient boosting)
+    and the chart *Range reliability by method* (LSTM, all past errors, GARCH, LSTM learns the range, LSTM + VIX).
+- **Data it reads.** From the repository (`daily/results/`): `walk_forward_results.json`, `wf_predictions.csv`, `regression_metrics.json`, `volatility_forecast.csv`, `volatility_comparison.json`, `interval_comparison.json`, `interval_vix.json` (cache keyed on file mtime, so a refresh shows up
+  without a restart); from S3 (`gold-lstm-forecast`): `gold/xauusd_daily/predictions/latest_forecast.json` and `forecast_log.csv`, `bronze/streaming/xauusd_daily_incremental.csv` and `silver/xauusd_daily_clean.parquet` (the price history).
+  The `with_*` and `horizon_h*` result folders are no longer read by the page (they fed the removed "What we tried" chart; their numbers are in "Content removed from the dashboard" and §15).
+- **Rules that came from real bugs:** native Streamlit elements only; `width="stretch"` instead of `use_container_width`; escape dollar signs in markdown and `st.metric` as `\$`; wrapping containers instead of `st.columns` where the open sidebar would squeeze content, and stretch only for `st.metric` cards
+  (text-heavy cards and charts are squeezed instead of wrapping); charts use the system font; keep visible text short (explanations go in `help=` tooltips, popovers or expanders, and `$` in a tooltip must be escaped like anywhere else); check every layout change at several widths on
+  Streamlit 1.56 and 1.66 and on the live URL (see Phase 12). The full list, with the owner's wording rules, is in `AGENTS.md`.
+- **What was removed, and where it went.** The header briefing, the metric notes and chips, the verdict pill and the verdict box, the side-check and all-statistics expanders, the evidence and chart-title tooltips, the *About the project* section (pipeline steps, "What we tried", method, glossary, links) and the old
+  Method/Data-explorer tabs: all documented in Phase 13 ("Content removed from the dashboard"), with the numbers rebuilt from the result files.
 
 **Hosting decision.** Streamlit Community Cloud is free. The real AWS cost risk in this project is compute left running continuously
 (not S3 reads or occasional inference), so the dashboard is deliberately not deployed to always-on AWS compute.
@@ -1645,29 +1701,12 @@ re-validated (adjacent-pair CVD ΔE and normal-vision floor both pass in
 light and dark) before shipping.
 
 ### What `app.py` does
-- Connects to S3 bucket `gold-lstm-forecast` (region `ap-southeast-2`) via
-  `awswrangler`/`boto3`, using whatever AWS credentials are configured
-  locally — no credentials are hardcoded in the file.
-- Loads the Gold parquet, both scalers, `wf_pred.npy`/`wf_actual.npy`,
-  `test_dates.csv`, and `lstm_model.keras` from
-  `s3://gold-lstm-forecast/gold/xauusd_daily/features/`.
-- **Recomputes** Naive Persistence, AR(5), and Linear Regression baselines
-  live in the app (same logic as notebook 06's Cell 3), since notebook 06
-  never persists these to S3.
-- Loads LSTM Walk-Forward metrics directly from the saved
-  `wf_pred.npy`/`wf_actual.npy`.
-- Computes a **next-day forecast**: takes the most recent `SEQ_LEN=60`
-  rows of the Gold feature table, scales with the persisted
-  `feature_scaler`, runs `lstm_model.predict()`, inverse-transforms with
-  `target_scaler`.
-- Computes the **volume data-quality diagnostic** (% of rows with
-  zero/missing `volume`) live from whatever is in the loaded Gold table,
-  rather than a hardcoded figure — the exact percentage shifts slightly
-  as more trading days get collected, so it's always recomputed, never
-  quoted from a specific past run.
-- All UI text is in English (an earlier draft mixed Thai captions in; the
-  dashboard is meant to be shown to the advisor/committee, so it's fully
-  English now, matching the proposal's own language).
+- Sets the page up (`st.set_page_config`: wide layout, sidebar 320 px), then loads the evaluation (`data.results()`, `data.regression()`), the current forecast (`data.current_forecast`: the live pipeline's `latest_forecast.json` when it is newer than the one stored with the last walk-forward run, otherwise the stored one),
+  the live log and the volatility frame, and builds the forecast history (`data.forecast_history`: backtest and live forecasts aligned to the day they were for).
+- Renders the sidebar and the header, then the navigation bar and only the selected section (`key="section"`; in `AppTest` prime `st.session_state["section"]` to test a section).
+- Reads AWS credentials from the environment (locally) or Streamlit Secrets (Cloud); no credential is in the repo. If S3 cannot be read, the loaders return None and the page falls back to the committed result files; if there is no forecast at all it shows an error and stops.
+- All UI text is in English and written for readers who are not specialists; numbers in prose are read from the result files.
+- The original `app.py` (Gold parquet, scalers, `lstm_model.keras`, live baselines, 60-day window, `awswrangler`) was replaced in Phase 12; its description is in the git history and in "Layout of the original design" above.
 
 ### Local Mac setup (one-time)
 
@@ -1699,7 +1738,7 @@ boto3/awswrangler read these automatically — no keys go in `app.py`.
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r dashboard/requirements.txt
 ```
 `dashboard/requirements.txt` (since Phase 12; the original design also needed awswrangler, tensorflow and scikit-learn for the views that were removed):
 ```
@@ -1722,6 +1761,10 @@ this data volume; no compute cost from running the dashboard).
 ---
 
 ## 11. Daily Automation Pipeline (Lambda + EventBridge Scheduler)
+
+**Current status (2026-11-17): running.** Deployed on 2026-10-29 and unattended since 2026-10-30; the EventBridge schedule is `cron(0 3 * * ? *)` UTC = 10:00 Thailand since 2026-11-04. The latest run (2026-11-17, 03:00 UTC) produced the forecast made from the 2026-11-16 close; the live log holds 12 forecasts, 11 of them scored.
+Open: the weekly retrain (`automation/retrain.py`) has not been run since 2026-10-29, the log is not tamper-proof and there are no alarms (Handoff; §12 items 18-22). Where the original v1 text below disagrees (08:00 Thailand, a TFLite container, `convert_and_export.py` plus `deploy.sh`),
+this paragraph, Phase 11 and `automation/README.md` win: deploy with `python3 automation/deploy.py apply`.
 
 **Status (2026-10-29): deployed and scheduled (see Journey, Phase 11).** The design below is the original v1 (price-level model, TFLite, container image),
 kept for the record; the running v2 serves the return-target model with numpy and is described in Phase 11 and in `automation/README.md`.
@@ -1842,7 +1885,7 @@ that discipline matters most), and teardown instructions are all in
 7. ~~Keep iterating on the Streamlit dashboard~~ **Done for now (Oct 2026):** the forecast-first redesign, credits sidebar,
    regression-first metrics and responsive layout are live (§10). Further changes are optional and should follow the rules in §10.
 8. ~~Actually deploy and verify the daily automation~~ **Done (2026-10-29, Phase 11):** redesigned (numpy serving, zip + layer), deployed, invoked, schedule ENABLED.
-   Remaining: watch the first unattended runs (from 2026-10-30), run `retrain.py` weekly, optionally add alarms. *Original item:* deploy and verify the daily automation (§11) against the
+   Unattended runs verified (from 2026-10-30; the schedule moved to 03:00 UTC on 2026-11-04). Remaining: run `retrain.py` weekly (not done since 2026-10-29), optionally add alarms. *Original item:* deploy and verify the daily automation (§11) against the
    live AWS account — run `convert_and_export.py` + `deploy.sh`, confirm a
    real invocation writes a correct `latest_forecast.json`, then let it run
    for at least one real trading-day rollover before demoing it as "live"
@@ -1862,7 +1905,7 @@ that discipline matters most), and teardown instructions are all in
     — see `automation/README.md` §9 for why this is scoped out for now.
 
 11. **Clean up the old AWS leftovers** (Journey, phase 4): the Lambda is now finished (item 8) and the unused, empty ECR repository was deleted (2026-10-29);
-    only the broad policies below (`AmazonEC2ContainerRegistryFullAccess` is no longer needed) can still be detached. Earlier text: the ECR
+    only the broad policies below (`AmazonEC2ContainerRegistryFullAccess` is no longer needed and was still attached on 2026-11-17) can still be detached. Earlier text: the ECR
     repository `gold-lstm-forecast-daily-refresh` and the policies
     `AWSLambda_FullAccess`, `AmazonEC2ContainerRegistryFullAccess`,
     `AmazonEventBridgeSchedulerFullAccess` attached to `Auto` are standing changes
@@ -1870,9 +1913,8 @@ that discipline matters most), and teardown instructions are all in
 12. **Refresh the corrected daily results** after new data arrives:
     `python daily/build_daily_dataset.py` then `python daily/walk_forward.py ...`
     (commands in the script docstrings), commit `daily/results/`. **Last done 2026-10-27** (data through 2026-10-26,
-    see Journey, Phase 7 refresh note). The S3 silver table is still at 2026-09-21: re-run notebooks 01-02 (or the Lambda
-    path) to bring it forward, or pass a locally extended silver parquet to `--silver`. When refreshing, re-run the main walk-forward
-    **and all four feature-search variants on the same rows**, and update the README, Chapter 3 and the dashboard together; delete or
+    see Journey, Phase 7 refresh note). The S3 silver table is still at 2026-09-21: re-run notebooks 01-02 to bring it forward (the Lambda's newer bars sit in `bronze/streaming/` and nothing absorbs them into Silver, item 10), or pass a locally extended silver parquet to `--silver`. When refreshing, re-run the main walk-forward
+    **and all four feature-search variants on the same rows**, and update the README (the dashboard reads the result files by itself; the Word files are no longer maintained); delete or
     repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first, because a stale cache is reused as-is (see Handoff).
 13. **Daily-pipeline cross-asset + calendar + COT features: done (Phase 9, all addenda), null** —
     DXY, silver, S&P 500, VIX, 10Y yield, TIP, NFP, FOMC (204 dates), CPI (271 dates) and CFTC Commitment of
@@ -1893,6 +1935,13 @@ that discipline matters most), and teardown instructions are all in
     Tables 3.2-3.5 and keeps the previous outputs in a dated `snapshot_*` folder.
 17. **Privacy.** The repo is public: no AWS keys or account ID in any file; the student names and IDs shown in the dashboard are there
     by the owner's choice.
+18. **Weekly retrain of the serving model.** `python3 automation/retrain.py` (needs TensorFlow and AWS credentials, so it runs on a machine of the owner's, not in Lambda). The model object was last written on 2026-10-29 and nothing schedules the retrain, so every live forecast since comes from that model.
+19. **Make the live record tamper-proof if it will be cited.** `forecast_log.csv` is an ordinary S3 object and the Lambda replaces the row of the same as-of date on a re-run, so edits are possible and invisible. Options: S3 bucket versioning with Object Lock, or a daily commit of the log to git.
+    Until then do not call the live forecasts pre-registered. The *Live record* tooltip on the page ("nothing can be edited afterwards") overstates this and should be reworded.
+20. **Back up `forecast_log.csv`** (one copy outside the bucket) before anything is changed.
+21. **Alarms.** No CloudWatch alarms or SNS topic; the IAM user `Auto` lacks the permissions and the owner chose not to widen it. A failed run is visible only as a gap in the live log and in the Lambda's CloudWatch logs.
+22. **Absorb the streaming log into Silver** (item 10) and refresh the 449-day window once Silver is current; the live record already runs past the window's end (2026-10-23).
+23. **Paper (IEEE format; owner, 2026-11-17).** The research dossier is §15; the extra experiments that would strengthen the paper are listed there (§15.8).
 
 ---
 
@@ -1954,3 +2003,840 @@ Notes:
   repo (it's the write-up, not the code/data artifact this repo tracks).
   Add it under a `docs/proposal/` folder if version-controlling it
   alongside the code is wanted.
+
+---
+
+## 15. Research dossier for the IEEE paper
+
+*Added 2026-11-17. The owner's decision: the next step is an IEEE-format paper, written with this README and Claude as research helpers. Every external fact below is dated; anything marked "check" must be re-checked before it goes into a submission.*
+
+### 15.0 How to use this section
+- It turns the README into a working knowledge base. Each statement is one of three kinds: **generated** from the committed result files (the table says which), **read from the code** (a path is given), or a **plan or judgement** (labelled as such). If a sentence in a draft cannot be traced to one of these, it does not go into the paper.
+- Read §15.1 (what may be claimed) and §15.13 (the rules for working with Claude) before drafting anything. The Handoff block above gives the current state; Phases 5-13 give the history behind each number.
+- Where to find things: data and splits §15.3, method §15.4, results §15.5, pitfalls §15.6, threats §15.7, extra experiments §15.8, bibliography §15.9, figures §15.10, writing plan §15.11, reproducibility §15.12, decisions needed §15.15, checklist §15.16.
+
+### 15.1 The paper at a glance
+**Working titles (pick one with the advisor).**
+1. *Is the LSTM Better Than Repeating Yesterday? A Causal Walk-Forward Audit of Next-Day Gold Price Forecasting*
+2. *Calibrated but Not Skilled: Honest 90% Intervals for an LSTM Gold Price Forecast*
+3. *When Deep Learning Meets the Random Walk: Evaluation Pitfalls in Gold Price Forecasting and a Reproducible Causal Protocol*
+
+**Research questions.** RQ1: does a walk-forward LSTM forecast the next-day closing price of gold more accurately than the no-change forecast ("the simple guess")? RQ2: do extra inputs (macro and cross-asset prices, release calendars, trader positioning), other horizons (5 and 20 days) or hourly data change the answer? RQ3: can a 90% prediction interval be calibrated honestly (using only information known before each forecast), and which interval method works best? RQ4: which evaluation mistakes inflate apparent skill in this setting, and by how much?
+
+**The evidence supports (may be written, with the numbers and sources given):**
+1. On 449 walk-forward test days (2025-01-09 to 2026-10-23) the LSTM's MAE is \$46.83 against \$46.63 for no-change (Diebold-Mariano p = 0.385 with 24 lags, 0.400 with none): no evidence of skill (Table III).
+2. On returns there is no skill either: out-of-sample R² -0.011 against the rolling mean, Spearman IC +0.006 (p = 0.90) (Table III).
+3. Direction accuracy is 51.9% (Wilson 95% CI 47.3-56.5%), below the always-up rate of 55.2% (p = 0.155), AUC 0.463; the model says "up" on 88% of days (Table IV).
+4. The null holds for five input sets (Table V), for 5- and 20-day horizons (Table VI) and for hourly data (Phases 5-6).
+5. The shipped band (forecast ± 1.645 × an exponentially weighted average of past errors, decay 0.94, fixed in advance) covers 89.5% of the 389 scored days (Kupiec p = 0.725); empirical quantiles of all past errors, GARCH(1,1) and filtered historical simulation under-cover (85.3-85.9%, Kupiec p ≤ 0.010) and an LSTM trained on the quantiles is far too narrow (63.5%) (Table VII). Centring the same band on the no-change forecast instead of the LSTM gives the same coverage and an interval score that is no worse (314 against 317, p = 0.32): the interval's quality comes from the volatility model, not from the LSTM.
+6. For one-day variance forecasts the EWMA with decay 0.94 has the lowest QLIKE of seven candidates (Table VIII).
+7. The evaluation pitfalls found on the way are quantified (§15.6).
+8. A serverless pipeline has produced and scored live forecasts unattended since 2026-10-30 (11 scored on 2026-11-17; descriptive only).
+
+**The evidence does not support (do not write):**
+- That the LSTM forecasts gold prices accurately, beats its baselines or is useful for trading. On this evidence the opposite holds, and no strategy, transaction cost or economic value was tested.
+- The old "~70% accuracy" target: it is superseded, and always-up alone scores 55.2% (75.6% at 60 days, Table X).
+- That macro, calendar or positioning inputs cannot help: with 449 days the test has limited power, so the correct wording is "no evidence of an effect", not "no effect".
+- That one input set is best: FOMC+CPI shows 57.5% accuracy and AUC 0.520, but p against always-up is 0.367, and with five variants and many metrics some small p-values appear by chance.
+- Generality: one asset (COMEX gold futures as a proxy for XAU/USD), one 449-day window, mostly a rising market (55.2% up days).
+- That the live forecasts are "pre-registered" or immutable: the log can be overwritten (§12 item 19).
+- That the 89.5% coverage is a clean out-of-sample figure: the decay 0.94 was fixed in advance, but the alternatives were compared on the same window, so it is slightly optimistic.
+
+**Contributions (draft).** C1: a causal, leakage-tested walk-forward protocol with regression-first metrics and Diebold-Mariano tests against no-change, released as code. C2: a documented null across models, five input sets, three horizons and two data frequencies. C3: an interval comparison showing that an EWMA of past errors beats GARCH, filtered historical simulation, empirical quantiles, an LSTM quantile model and VIX-scaled variants on honest coverage. C4: a quantified catalogue of evaluation pitfalls from the project's own mistakes. C5: an unattended AWS pipeline with a live scoring log (descriptive).
+
+**Abstract draft (about 180 words; the JCSSE limit is about 150, so trim).** Deep sequence models are often reported to forecast gold prices well, but such reports rarely test against the strongest benchmark: repeating the last close. We build a causal walk-forward evaluation (retraining every 7 trading days on 365 days; 449 out-of-sample days from 2025 to 2026) of an LSTM with a 20-day window that predicts the next-day log-return of COMEX gold futures from 16 scale-free price features. The LSTM's mean absolute error (USD 46.83) is statistically indistinguishable from the no-change forecast (USD 46.63; Diebold-Mariano p = 0.38), its out-of-sample R² is -0.011 and its rank correlation with realised returns is +0.006 (p = 0.90). Adding macro, calendar and positioning data, forecasting 5 or 20 days ahead, and using hourly data do not change this. A 90% prediction interval built from an exponentially weighted average of past errors covers 89.5% of 389 scored days and outperforms GARCH, empirical-quantile and LSTM-quantile alternatives. We quantify four evaluation pitfalls (price-level scaling, majority-class accuracy, test-window calibration and bid-ask artefacts) and describe an unattended live forecasting pipeline.
+
+**Keywords / IEEE Index Terms (candidates; check against the IEEE Thesaurus).** Forecasting, Long short-term memory, Predictive models, Time series analysis, Neural networks, Reproducibility of results, Uncertainty; free keywords: gold price, walk-forward validation, prediction intervals, Diebold-Mariano test, negative results.
+
+### 15.2 Venues and IEEE format
+*Checked on 2026-11-17 from the venues' own pages and search results; deadlines move, so check again.*
+
+| Venue | Why it fits | Facts | Deadlines |
+|---|---|---|---|
+| **JCSSE 2027**, the 24th International Joint Conference on Computer Science and Software Engineering, 16-18 June 2027, Chiang Rai | Co-organised by the School of Applied Digital Technology at Mae Fah Luang University (the owner's school); track "Machine Learning and Intelligent Systems" | 4-6 A4 pages in PDF, 10-pt Times New Roman, abstract about 150 words, strictly the IEEE conference template (Word and LaTeX); double-blind review (at least three reviewers); similarity score at most 25% for IEEE Xplore; any use of generative AI must be fully declared at submission; submissions through EDAS. Accepted papers are "submitted for possible inclusion into IEEE Xplore", not guaranteed. At least one author must register and present. Fees in THB, early / late: IEEE member or student 12,600 / 14,000, non-member 14,000 / 15,500, participant 7,000. There is no finance track | 1st round **27 Nov 2026** (notification 15 Jan 2027, too soon for a full paper); **2nd round 22 Jan 2027** (notification 5 Mar 2027); final manuscript 7 May 2027. Source: jcsse2027.mfu.ac.th. Check: the CFP PDF was not read, the registration page gives two early-bird dates (5 Feb and 23 Apr), and an aggregator listing and a search snippet gave other dates |
+| **IEEE Access** (journal) | Rolling submission; has "Applied Research" and "Negative Result" article types; no page limit | APC USD 2,160 plus local taxes (5% off for IEEE members, 20% off for IEEE and society members, none for students; discounts do not stack); single-anonymised review with at least two reviews and a binary accept/reject decision; acceptance about 20%; 4-6 weeks from submission to publication; 20 pages or fewer recommended; double-column IEEE Access template (Word and LaTeX source plus PDF both required); ORCID for the submitting author and 3-10 keywords; submissions must "present a clear advance over the state-of-the-art" or are desk-rejected, and a negative result is acceptable only if the question is meaningful and the study rigorous; AI-generated text must be disclosed in the acknowledgements; a conference paper may be extended if similarity is below 35%. Source: ieeeaccess.ieee.org/authors | Rolling |
+| Not available now | IEEE CIFEr / SSCI 2027 (Gold Coast, 14-17 Feb 2027; deadlines 10 Aug and 10 Sep 2026 passed); ICSEC 2026 (Kasetsart, 18-21 Nov 2026); ICMLA 2026 (5-7 Oct 2026; the 2027 call is not out); IEEE CIFEr 2026 (Tokyo, Sep 2026); IEEE CAI 2027 (Singapore, 30 Nov-2 Dec 2027; paper deadline "coming soon") | | Watch the CAI and ICMLA 2027 calls |
+
+**Plan (judgement, not fact).** (1) Aim at the JCSSE 2027 second round (22 Jan 2027) with a 4-6 page paper built on RQ1-RQ3 and the pitfalls; the first round on 27 Nov is not realistic. (2) December 2026: freeze the protocol, run the cheap experiments E1, E8, E9 and E10 (§15.8), draft the Introduction, Method and Results. (3) Early January: figures, full draft, advisor review. (4) By 22 Jan: anonymise (§15.15) and submit. (5) After the conference or in parallel: an extended IEEE Access article (Applied Research or Negative Result) adding E2-E7; keep the overlap with the conference paper below 35% similarity. A top-tier venue is not a realistic target for a single-asset null result unless E3-E6 produce a stronger story (angle A with B, §15.8).
+
+**IEEE format, general conventions (the venue's template and instructions override these).** LaTeX class `IEEEtran`: `\documentclass[conference]{IEEEtran}` (add `a4paper` for JCSSE) and the `IEEEtran.bst` bibliography style, numbered references in order of first citation. Abstract in one paragraph without citations, formulas or abbreviations that are not defined; then Index Terms. Table captions above the table (TABLE I, roman numerals, small capitals); figure captions below ("Fig. 1."); figures at 300 dpi or vector, legible when printed in grey, 3.5 in wide for one column and 7.2 in for two; equations numbered and referred to as (1); define every abbreviation at first use; no footnotes in the abstract. For a double-blind review remove author names, affiliations, acknowledgements and any URL that identifies the authors (the public GitHub repository and the dashboard do), and cite one's own work in the third person.
+
+### 15.3 Data
+**Table I. Data and splits** (`daily/results/build_report.json`).
+
+| Item | Value |
+|---|---|
+| Raw daily bars | 5,631 (2004-06-01 to 2026-10-26), no duplicate dates, no gap longer than 5 days |
+| Modelling table | 5,531 rows (2004-08-26 to 2026-10-23), 16 features |
+| Train / validation / test rows | 4,835 / 247 / 449 (embargo 5 bars; up-day share 52.6% / 57.9% / 55.2%) |
+| Invalid OHLC rows | 347 (6.2%; by year 2004 33%, 2005 26%, 2006 34%, 2007 28%, 2008 17%, 2009 4%, 2010 2%, 2011 8%); features use the close only |
+| Zero-volume share | 2.8% (volume is not used) |
+| Extreme one-day moves (|log return| above 7%) | 2006-06-13 (-7.6%); 2008-09-17 (+8.6%); 2009-03-19 (+7.5%); 2013-04-15 (-9.8%); 2026-01-30 (-11.4%) |
+
+**Sources.**
+- **Daily gold**: COMEX gold futures, continuous contract `GC=F`, from Yahoo Finance (`yfinance`), 2004-06-01 onwards; the live pipeline appends settled bars from the Yahoo chart endpoint each morning. It is a futures series (roll effects, settlement at the COMEX close), a proxy for spot XAU/USD: the paper must say so. The cleaned history is in S3 (`silver/xauusd_daily_clean.parquet`, last row 2026-09-21) and newer bars are in `bronze/streaming/xauusd_daily_incremental.csv`. Every feature is computed from the close alone because open, high and low are unreliable before 2012.
+- **Hourly gold**: Dukascopy spot XAU/USD bid and ask, 2004-2026, hourly (used only in the side experiments, Phases 5-6); mid = (bid + ask) / 2. Auxiliary hourly series: silver, EUR/USD, S&P 500 index (from 2011-09) and a dollar-index proxy (from 2017-12). Ask data are missing for 2026-09 and 2026-10 (rate limiting); the raw data must not be redistributed.
+- **Macro and cross-asset (daily, Yahoo)**: DXY (`DX-Y.NYB`), silver (`SI=F`), S&P 500 (`^GSPC`), VIX (`^VIX`), 10-year yield (`^TNX`) and TIP. **Calendars**: NFP (first Friday of the month), FOMC dates (204) and CPI release dates (271), lists inside `daily/build_daily_dataset.py`. **Positioning**: CFTC Legacy Commitments of Traders (public Socrata API), made available at report date + 3 days to avoid look-ahead.
+- **Data-quality findings** (reported in `daily/results/build_report.json` and Phases 5-7): 6.2% of daily rows have inconsistent OHLC (mostly 2004-2011); the Silver `_1w` and `_1m` columns hold the period's final values and are therefore never used; the hourly downloader saved partial files when the feed answered HTTP 429, which row-count checks caught; about a third of hourly rows were market-closed bars with zero volume.
+- **Licences (check).** The vendors' terms decide whether data may be redistributed; the repository commits no raw vendor data (`.gitignore` excludes the parquet and array files). Draft data-availability statement: *Daily prices were obtained from Yahoo Finance and hourly spot prices from Dukascopy; their terms do not allow redistribution of the raw series, so only code and derived result files are released at <anonymised link>.*
+
+### 15.4 Method (reproducible detail)
+**Notation.** Day t, close c_t, log-return r_t = ln(c_t / c_{t-1}). A forecast made at the close of day t targets y_{t+1} = r_{t+1}; the forecast price is ĉ_{t+1} = c_t · exp(ŷ_{t+1}); the no-change ("simple guess") forecast is ĉ_{t+1} = c_t, i.e. a return forecast of 0.
+
+**Features (16, all computed from the close, causal and scale-free; `make_features` in `daily/build_daily_dataset.py`).** f_ret_n = ln(c_t / c_{t-n}) for n = 1, 3, 5, 10, 20, 60; f_vol_n = standard deviation of the daily log-returns over the last n days for n = 5, 20, 60; f_ma_gap_n = c_t / mean(c over the last n days) - 1 for n = 7, 14, 30, 60; f_rsi_14 = 100 - 100 / (1 + mean gain / mean loss) over 14 days (simple means of the price differences); f_dow_sin and f_dow_cos = sin and cos of 2π · weekday / 5. The extra input sets add 18 (macro and cross-asset returns, VIX change and z-score, gold/silver ratio), 2 (NFP day, days since NFP), 4 (FOMC and CPI day and days since) and 4 (COT positioning) features (Table V).
+
+**Splits.** Train to 2023-12-31, validation to 2024-12-31, test from 2025; an embargo of 5 bars (at least the longest horizon) separates the splits. The evaluation itself is walk-forward, so the split only fixes where the test window starts (2025-01-09).
+
+**Walk-forward protocol (`daily/walk_forward.py`).** For each block of 7 consecutive test days, fit every model on the 365 labelled rows that precede the block (a label is known only after its day), predict the block, then move forward. Standardisation (mean and standard deviation of the training window, missing values set to 0, clipped to ±10) is re-fitted inside every window; the return target is divided by the training window's standard deviation. The first 20-day input window reaches back 19 days before the first training row. Result: 449 one-step forecasts (2025-01-09 to 2026-10-23).
+
+**LSTM (`build_rnn` in `hourly/train_models.py`).** Input: 20 days × 16 features. LSTM(32) → Dropout(0.2) → Dense(32, ReLU) → two heads: a linear head for the standardised return (Huber loss, δ = 1) and a sigmoid head for the direction (binary cross-entropy), loss weights 1:1. Adam, learning rate 1e-3, batch size 64, at most 30 epochs, early stopping on the validation loss (the last 15% of the training window, taken chronologically) with patience 3 and the best weights restored. Three seeds (0-2) are trained per block and their predictions averaged. The forecast price uses the return head; the direction head is used only for the secondary direction metrics.
+
+**Baselines on identical rows.** No-change; rolling drift (the training window's mean return, a constant forecast, which is "always up"); Ridge (median imputation, standardisation, α = 100) and gradient-boosted trees (`HistGradientBoostingRegressor`: depth 3, learning rate 0.05, 200 iterations, L2 1.0) on the 16 features of day t; a gradient-boosting classifier for direction; the momentum rule (sign of the recent return).
+
+**Metrics (`daily/regression_metrics.py`).** MAE and RMSE in dollars of the price error; MAPE; skill 1 - MAE / MAE_no-change; Theil's U = RMSE / RMSE_no-change; R² on returns (sklearn definition: the total sum of squares is centred on the mean return, so a constant zero forecast scores slightly below 0); out-of-sample R² against zero and against the rolling mean, 1 - SSE / SSE_benchmark; information coefficient IC = Spearman rank correlation between forecast and realised return, with a p-value from the t distribution using n_eff = n / h.
+
+**Tests.** *Diebold-Mariano* on the squared **return** errors against the no-change forecast (whose return error is y_t): loss differential d_t = e_t² - y_t², Bartlett-kernel long-run variance with L lags, two-sided normal p-value; L = 24 for the headline p (carried over from the hourly pipeline), L = 0 also reported; no Harvey-Leybourne-Newbold small-sample correction. This is not the loss of the dollar-MAE headline: a DM test on absolute price errors would match MAE better (experiment E1). *Direction*: accuracy of the sign, Wilson 95% interval, exact binomial test against the always-up rate, AUC from the direction head. For h > 1 labels overlap, so n_eff = n / h and the DM variance uses h-dependent lags (max(24, 2h)).
+
+**Interval methods (`daily/regression_metrics.py`, `daily/interval_experiment.py`, `daily/lstm_quantile.py`, `daily/interval_vix.py`).** Shipped band: σ_t² = Σ_k λ^k e²_{t-1-k} / Σ_k λ^k with λ = 0.94 over all past return errors e (known before day t), price interval c_t · exp(ŷ_{t+1} ± 1.645 σ_t); first scored forecast after a 60-day warm-up (449 - 60 = 389 scored days). Alternatives: the 5% and 95% empirical quantiles of all past errors; GARCH(1,1) with Gaussian errors and with filtered historical simulation, refitted every 7 days; an LSTM trained with the pinball loss to output the quantiles directly (2 seeds); σ = exp(a + b ln EWMA + c ln VIX) fitted by Gaussian quasi-maximum-likelihood on the last 1,000 days (with same-day VIX, previous-day VIX or no VIX). Scores: coverage, mean width, interval score (Gneiting-Raftery, α = 0.10: width + (2/α) × distance outside), Kupiec proportion-of-failures test, coverage in each half.
+
+**Volatility (`daily/volatility_experiment.py`).** One-day variance forecasts of r_{t+1}² scored with QLIKE = ln σ² + r² / σ² (Patton) and a DM test with HAC lag 5, against EWMA 0.94.
+
+**Multi-day horizons (`daily/walk_forward_horizon.py`).** The same protocol forecasting the price h = 5 and 20 trading days ahead against "price in h days = price today"; training rows stop h days before each block (a label is only known h days later); n_eff = n / h with a HAC DM variance.
+
+**Causality and correctness tests (all plain Python scripts, all pass on 2026-11-17).** `daily/test_no_lookahead_daily.py` (edits future prices and asserts past features do not change; multiplying all prices by a constant changes no feature; covers the price, macro, calendar and COT features), `daily/test_regression_metrics.py` (known values by hand, perfect and no-change forecasts, a band that covers about 90% on i.i.d. errors, bands use only past errors), `daily/test_serving.py` (the numpy forward pass equals Keras to about 1e-8; features from a short tail equal those from the full history), `automation/test_lambda_function.py` (the handler against an in-memory S3: idempotent replays, scoring of the previous forecast, a critical data-quality failure publishes nothing). The hourly pipeline adds a mutation check (the tests fail when a look-ahead feature is injected) and a label-shuffle control (Phase 5).
+
+**Live system (descriptive; §11, Phase 11).** EventBridge Scheduler (03:00 UTC) → Lambda (python3.12) that appends the newest settled bar, runs data-quality checks, computes the 20-day feature window, runs the LSTM forward pass in numpy from the weights in `model/serving/serving_model.npz`, adds the EWMA band and writes `latest_forecast.json`; every earlier forecast is scored once its next close is known (`forecast_log.csv`). The model is retrained by hand (`automation/retrain.py`) on the latest 365 labelled days.
+
+### 15.5 Results for the paper
+*Tables I and III-VIII are generated from the committed result files on 2026-11-17 (449 test days unless stated); Tables IX and X are copied from the Phase 5-8 notes; regenerate after any refresh. "OS R²" is out-of-sample R² against the rolling mean; p-values below 0.001 are shown as <0.001.*
+
+**Table II. Model hyperparameters.** Section 15.4 lists them; the protocol block in `walk_forward_results.json` records: retrain every 7 days, 365 training days, window 20, 32 LSTM units, 3 seeds, target "log-return of next-day close".
+
+**Table III. Price accuracy** (`walk_forward_results.json`, `regression_metrics.json`).
+
+| Model | MAE (\$) | RMSE (\$) | MAPE (%) | MAE vs no-change | DM p (lag 0) | DM p (lag 24) | R² (returns) | OS R² vs rolling mean | IC (Spearman) | IC p |
+|---|---|---|---|---|---|---|---|---|---|---|
+| No-change (the simple guess) | 46.63 | 68.94 | 1.143 | – | – | – | -0.003 | -0.0006 | – | – |
+| Rolling drift (always up) | 46.36 | 69.07 | 1.136 | -0.6% | 0.951 | 0.941 | -0.003 | +0.0000 | -0.027 | 0.561 |
+| Ridge | 47.87 | 70.35 | 1.171 | +2.7% | 0.028 | 0.023 | -0.045 | -0.0427 | -0.103 | 0.029 |
+| Gradient boosting (regressor) | 50.68 | 75.05 | 1.237 | +8.7% | <0.001 | <0.001 | -0.186 | -0.1833 | -0.034 | 0.473 |
+| **LSTM (walk-forward)** | 46.83 | 69.45 | 1.147 | +0.4% | 0.400 | 0.385 | -0.014 | -0.0113 | +0.006 | 0.896 |
+
+Reading: the LSTM's MAE is 0.4% above no-change (p = 0.385); Ridge and gradient boosting are significantly worse; every learned model has a negative out-of-sample R²; the rolling drift is level with no-change.
+
+**Table IV. Direction (secondary check).**
+
+| Model | Direction accuracy | Wilson 95% CI | vs always-up (pt; always-up = 55.2%) | p vs always-up | AUC |
+|---|---|---|---|---|---|
+| Rolling drift (always up) | 55.2% | 50.6% to 59.8% | +0.0 | 1.000 | – |
+| Ridge (sign of forecast) | 49.0% | 44.4% to 53.6% | -6.2 | 0.009 | – |
+| Gradient boosting regressor (sign) | 50.3% | 45.7% to 54.9% | -4.9 | 0.041 | – |
+| Gradient boosting classifier | 52.6% | 47.9% to 57.1% | -2.7 | 0.255 | 0.498 |
+| **LSTM (direction head)** | 51.9% | 47.3% to 56.5% | -3.3 | 0.155 | 0.463 |
+| Momentum rule | 45.2% | 40.7% to 49.8% | -10.0 | <0.001 | – |
+
+Reading: always-up scores 55.2% because 55.2% of the test days were up; the LSTM says "up" on 88% of days, so its accuracy mostly follows how often gold rose.
+
+**Table V. Input sets** (`daily/results/with_*/`; same 449 rows; LSTM only).
+
+| LSTM input set | Features | Test days | LSTM MAE (\$) | No-change MAE (\$) | DM p | Direction acc. | AUC | p vs always-up | IC | OS R² |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Price history only (main run) | 16 | 449 | 46.83 | 46.63 | 0.385 | 51.9% | 0.463 | 0.155 | +0.006 | -0.011 |
+| + macro and cross-asset prices | 34 | 449 | 46.80 | 46.63 | 0.461 | 55.2% | 0.510 | 1.000 | +0.043 | -0.014 |
+| + NFP release days | 36 | 449 | 46.74 | 46.63 | 0.595 | 55.0% | 0.514 | 0.924 | +0.055 | -0.010 |
+| + FOMC and CPI release days | 40 | 449 | 46.38 | 46.63 | 0.974 | 57.5% | 0.520 | 0.367 | +0.070 | -0.001 |
+| + CFTC positioning | 44 | 449 | 46.62 | 46.63 | 0.797 | 54.6% | 0.498 | 0.776 | +0.054 | -0.005 |
+
+Reading: no input set beats the main run's MAE significantly; the best direction result (FOMC and CPI days) is not significant (p against always-up 0.367).
+
+**Table VI. Horizons** (`daily/results/horizon_h5/`, `horizon_h20/`).
+
+| Horizon (trading days) | n / n_eff | No-change MAE (\$) | LSTM MAE (\$) | LSTM vs no-change | DM p | OS R² | IC (p) |
+|---|---|---|---|---|---|---|---|
+| 1 | 449 / 449 | 46.63 | 46.83 | +0.4% | 0.385 | -0.011 | +0.006 (0.90) |
+| 5 | 444 / 88 | 109.19 | 109.50 | +0.3% | 0.430 | -0.040 | -0.018 (0.87) |
+| 20 | 429 / 21 | 219.40 | 216.95 | -1.1% | 0.586 | +0.034 | +0.085 (0.72) |
+
+Reading: at 20 days the LSTM is 1.1% better in MAE with a positive OS R², but n_eff = 21 and p = 0.59.
+
+**Table VII. 90% interval methods** (`interval_comparison.json`; 389 scored days).
+
+| Method | Coverage (goal 90%) | Mean width \$ (% of price) | Interval score (\$) | Kupiec p | Coverage 1st / 2nd half | Score minus EWMA (p) |
+|---|---|---|---|---|---|---|
+| EWMA Gaussian, lambda 0.94 (current) | 89.5% | 223 (5.28%) | 317 | 0.725 | 88% / 91% | +0.0 (1.00) |
+| Empirical quantiles, all past errors | 85.9% | 194 (4.68%) | 334 | 0.010 | 86% / 86% | +16.6 (0.16) |
+| GARCH(1,1), Gaussian | 85.6% | 203 (4.80%) | 322 | 0.006 | 83% / 88% | +5.3 (0.24) |
+| GARCH(1,1), filtered historical sim. | 85.3% | 200 (4.74%) | 322 | 0.004 | 83% / 88% | +4.9 (0.31) |
+| No-change centre, EWMA (reference) | 88.7% | 221 (5.24%) | 314 | 0.398 | 87% / 91% | -3.0 (0.32) |
+| LSTM quantile (pinball loss) | 63.5% | 129 (3.04%) | 457 | <0.001 | 63% / 64% | +140.2 (<0.01) |
+
+Reading: the shipped EWMA band is the only method whose coverage a Kupiec test at 5% does not reject; centring it on the no-change forecast instead of the LSTM gives the same coverage and a similar score. VIX variants (`interval_vix.json`):
+
+| Method | Coverage (goal 90%) | Mean width \$ (% of price) | Interval score (\$) | Kupiec p | Coverage 1st / 2nd half | Score minus EWMA (p) |
+|---|---|---|---|---|---|---|
+| EWMA lambda 0.94 (current) | 89.5% | 223 (5.28%) | 317 | 0.725 | 88% / 91% | +0.0 (1.00) |
+| EWMA, intercept+slope refit (no VIX) | 87.1% | 208 (4.91%) | 322 | 0.071 | 84% / 90% | +4.5 (0.31) |
+| EWMA + VIX (same-day close) | 86.1% | 203 (4.78%) | 322 | 0.015 | 83% / 89% | +4.8 (0.29) |
+| EWMA + VIX (previous day) | 86.4% | 203 (4.79%) | 322 | 0.023 | 83% / 90% | +4.4 (0.32) |
+| VIX only (previous day) | 77.1% | 148 (3.56%) | 359 | <0.001 | 79% / 75% | +41.7 (0.01) |
+
+**Table VIII. One-day variance forecasts** (`volatility_comparison.json`; DM with HAC lag 5).
+
+| Variance forecast | QLIKE (lower is better) | QLIKE minus EWMA 0.94 | DM p | Mean sigma (% per day) |
+|---|---|---|---|---|
+| EWMA 0.94 (current) | -7.355 | +0.000 | – | 1.51 |
+| EWMA 0.97 | -7.325 | +0.031 | 0.273 | 1.53 |
+| GARCH(1,1) | -7.288 | +0.067 | 0.069 | 1.39 |
+| VIX scaled (ratio refit) | -6.686 | +0.669 | 0.065 | 1.02 |
+| EWMA 0.94 + VIX | -7.292 | +0.063 | 0.175 | 1.39 |
+| EWMA 0.94 + EWMA 0.985 | -7.278 | +0.077 | 0.050 | 1.41 |
+| EWMA 0.94 + EWMA 0.985 + VIX | -7.267 | +0.088 | 0.073 | 1.38 |
+
+Reading: EWMA 0.94 has the lowest QLIKE; the differences from GARCH(1,1) (p = 0.069) and from EWMA 0.94 + EWMA 0.985 (p = 0.050) are borderline and untested for multiplicity.
+
+**Table IX. Hourly side experiments** (Dukascopy XAU/USD, test 2025+, `hourly/results/`; window 48 bars, 21 features, two-head GRU; always-up is the baseline). Bid prices (Phase 5), then mid prices (Phase 6):
+
+| Horizon | Always up | Best model accuracy | AUC range | n_eff |
+|---|---|---|---|---|
+| 1 bar | 51.5% | 51.4% (GRU ensemble) | 0.517-0.518 | 10,197 |
+| 4 bars | 52.9% | 51.5% (HistGB regressor) | 0.495-0.500 | 2,548 |
+| 24 bars | 55.1% | 53.7% (HistGB regressor) | 0.497-0.520 | 424 |
+
+| Horizon (mid prices) | Always up | Best model accuracy | AUC range | n_eff |
+|---|---|---|---|---|
+| 1 bar | 51.7% | 51.6% (HistGB regressor) | 0.514-0.516 | 9,780 |
+| 4 bars | 53.2% | 51.1% (HistGB regressor) | 0.495-0.499 | 2,444 |
+| 24 bars | 55.8% | 54.2% (HistGB classifier) | 0.510-0.520 | 406 |
+
+Adding silver, EUR/USD, S&P 500 and a dollar-index proxy changed nothing (IC with and without the extras: HistGB 0.0246 to 0.0244, GRU 0.0279 to 0.0275; Phase 6 addendum, `hourly/results/with_aux_mid/`).
+
+**Table X. Always-up by horizon** (`daily/horizon_always_up.py`; share of up days).
+
+| Horizon (trading days) | Test 2025-01-09 to 2026-10-23 | All years 2004-2026 | Test n_eff |
+|---|---|---|---|
+| 1 | 55.1% | 52.7% | 448 |
+| 5 | 58.8% | 55.9% | 88 |
+| 20 | 62.0% | 56.3% | 21 |
+| 60 | 75.6% | 62.9% | 6 |
+| 120 | 71.1% | 68.9% | 2 |
+
+**Live record (descriptive, 2026-11-17).** 12 forecasts logged since 2026-10-28, 11 scored: MAE \$48.49 against \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything.
+
+### 15.6 Evaluation pitfalls found in this project (the audit angle)
+**Table XI. Evaluation pitfalls.**
+
+| # | Pitfall | What happened | Size of the effect | Where |
+|---|---|---|---|---|
+| 1 | Price-level target with train-only scalers | When gold rose above \$4,000 in 2025-26, inputs and targets left the range the scalers and the model had seen | MAE about \$639 against about \$51 for trivial baselines; fixed with a log-return target and scale-free features | Phase 7 |
+| 2 | Majority-class accuracy | Gold trends up, so "always up" scores 55.2% (daily test) and 51.5 / 52.9 / 55.1% (hourly, 1 / 4 / 24 bars); the LSTM says "up" on 88% of days | The LSTM is 3.3 points below always-up; "76% accuracy at 60 days" needs no model (always-up 75.6%) | Phases 7-8, Tables IV and X |
+| 3 | Interval calibrated on the test window | "Covers 90% of test days" was true by construction | The honest empirical-quantile band covers 85.9%; the EWMA of past errors 89.5% | Phase 10, Table VII |
+| 4 | Bid-only prices | A gradient-boosting "56-60% on confident predictions" came from the hours around the daily break, where the spread widens 2-3 times | Top-5% edge over always-up +6.7 points (bid) against +0.2 (mid) | Phase 6 |
+| 5 | Silent partial downloads | The hourly downloader saved partial files on HTTP 429 | Caught by row-count and coverage checks | Phase 5 |
+| 6 | Future information in aggregate columns | The Silver `_1w` and `_1m` columns hold the period's final values | Not used; look-ahead tests added | Phase 7 |
+| 7 | Wrong direction definition | The old code compared day-to-day changes of predictions with those of prices instead of the signs of returns | Definition fixed | Phase 7 |
+| 8 | A "fix" verified on the latest weeks only | The MAE fix held for three weeks of the test period | Re-checked over the whole period | Phase 7 |
+| 9 | Picking the best of many variants | FOMC+CPI shows 57.5% direction accuracy | p = 0.367; a handful of p-values between 0.006 and 0.04 are what multiple testing alone produces | Phase 9, Table V |
+| 10 | Test choices that could change the verdict | DM lag 0 against 24 | p = 0.40 against 0.385, conclusion unchanged | Phase 10, Table III |
+| 11 | Comparing alternatives on the window used to report the winner | The EWMA decay was fixed in advance, the alternatives were compared on the same window | The 89.5% is slightly optimistic | Phase 10 |
+| 12 | Claiming more than was live | "Every forecast is saved before the day" is true of live forecasts only; the replayed ones were not | Wording corrected | Phase 13 |
+
+### 15.7 Threats to validity and limitations (write these into the paper)
+- **Construct.** Gold futures (`GC=F`, a continuous contract) stand in for spot XAU/USD. The headline MAE is in dollars (it depends on the price level), the models predict log-returns, and the DM test uses squared return errors: say which loss each statement refers to (E1 adds an absolute-error DM and bootstrap intervals).
+- **Internal.** Look-ahead tests cannot prove the absence of leakage. Hyperparameters (window 20, 32 units, dropout 0.2, learning rate, patience) are not tuned inside the walk-forward loop; the repository holds six static-training variants (`daily/results/model_results_lstm_w*.json`: window 20 or 60, horizons 1 and 5, training from 2012) and no other tuning record, so the paper must state which settings were fixed beforehand (question for the owner, §15.15). Seed variance is not reported (E2).
+- **Statistical.** n = 449 (n_eff 88 and 21 at 5 and 20 days); about twenty tests are reported without a multiplicity correction (E3); the DM test assumes forecasts could be compared as such although the models are re-estimated every 7 days (Giacomini-White is the matching framework); the test window is one rising market (55.2% up days); the interval's 89.5% is slightly optimistic (pitfall 11).
+- **External.** One asset, one period, one frequency (plus a side experiment on hourly data); a null here says nothing about other assets, regimes or information sets.
+- **Reproducibility.** TensorFlow training is not bit-reproducible across machines; vendor data can be revised (a continuous futures series can be rewritten); raw data cannot be redistributed; the live log can be overwritten (§12 item 19); the serving model has not been retrained since 2026-10-29.
+- **Ethics.** The work is a student project and not trading advice; no personal data is involved; AI assistance must be disclosed (§15.12).
+
+### 15.8 Extra experiments that would strengthen the paper (plan)
+Each runs in its own results folder (for example `daily/results/paper_*/`) so that the dashboard's 449-day window and the numbers above stay consistent; add the code under `daily/` with tests, and record outcomes here.
+
+| ID | Experiment | Reviewer question it answers | Design | Effort | Expectation |
+|---|---|---|---|---|---|
+| E1 | Bootstrap intervals and better DM tests | Is MAE equal to no-change, and is the test appropriate? | Moving-block bootstrap CI of the MAE and RMSE differences; DM on absolute price errors; Harvey-Leybourne-Newbold correction; Giacomini-White | hours | Null stays; CI width shows the power |
+| E2 | Seed variance and ablations | Is the null robust to hyperparameters? | 10 seeds; GRU, MLP and a linear model on the same features; window 5 / 10 / 20 / 60; units 16 / 32 / 64 | a day of compute | Null stays |
+| E3 | Multiplicity correction | Could a "best" variant be luck, and is anything better than no-change after correction? | Hansen SPA and the model confidence set over every model and input set tried (about 30 candidates); the `arch` package has both | 1-2 days | Nothing survives |
+| E4 | Long window and power analysis | Does the null hold across regimes? | Walk-forward over about 2010-2026 (retrain every 20 days to cut compute); minimum detectable MAE gain at n = 449 | several days | Null stays; shows low power in 2025-26 |
+| E5 | Multi-asset replication | Is it gold-specific? | Same pipeline on silver, EUR/USD, S&P 500, 10-year yield | several days | Null stays; supports a general audit |
+| E6 | Volatility track (the positive-result candidate) | Is risk predictable when price is not? | Realised volatility from the hourly data; HAR-RV with NFP, FOMC and CPI days against EWMA, GARCH and an LSTM; QLIKE and DM | a week | Probably a positive result |
+| E7 | Conformal intervals | Can distribution-free intervals match EWMA? | Split conformal and adaptive conformal inference around the LSTM and no-change centres | 2-3 days | Comparable coverage |
+| E8 | Conditional coverage | Are violations independent? | Christoffersen independence and conditional-coverage tests on the current bands | hours | Mild clustering likely |
+| E9 | Forecast encompassing | Does the LSTM add anything to no-change? | Mincer-Zarnowitz regression of realised on forecast returns; encompassing test | hours | Slope near 0 |
+| E10 | Live-log hardening | Can the live record be trusted? | S3 versioning with Object Lock or a daily commit of the log; back it up (§12 items 19-20) | hours | Needed before citing the live record |
+| E11 | Frozen protocol | Were choices made before seeing results? | Commit and tag a protocol file before any long-window or multi-asset run | an hour | Credibility |
+| E12 | Search log | How many variants were tried? | Count every model, input set, horizon and interval method tried (needed for E3 and for deflated claims) | an hour | About 30 |
+
+**Angles (from the 2026-11-09 discussion).** (A) Audit paper: this project's pitfalls plus E3-E5; (B) "predictable risk, unpredictable price": E6 with E7-E8 as the positive-result section; (C) a multi-asset benchmark that includes time-series foundation models. Suggested: A as the backbone, B as the positive-result section.
+
+### 15.9 Related work map and bibliography
+*Every DOI below was looked up in Crossref and every arXiv identifier in the arXiv API on 2026-11-17 (title, authors, journal, volume and pages matched). Items without a DOI are marked. Only these references may be cited; add a new one only after checking it the same way (§15.13). The Welch-Goyal paper is cited as Welch and Goyal, the order in the journal.*
+
+**What to claim from the literature.** (1) Simple benchmarks are hard to beat out of sample [1], [3], [38]-[39]: the no-change forecast is the right yardstick and a null is the expected result under market efficiency [36]-[37]. (2) Evaluation of forecasts needs care: accuracy measures [5], pitfalls [4], validation schemes [6]-[7], overlapping labels and backtest overfitting [8]-[9], multiple testing [10]-[13]. (3) Comparing forecasts: Diebold-Mariano [14] with its small-sample correction [15] and caveats [16], conditional predictive ability for rolling estimation [17]. (4) Intervals and volatility: coverage tests [18]-[19], interval score [20], EWMA [21], GARCH [22], filtered historical simulation [23], QLIKE [24], HAR-RV [25], conformal intervals [26]-[27], Wilson interval [28]. (5) Deep learning in finance and for gold [29]-[35]: report that headline gains rarely survive a no-change benchmark, and cite [32] (LSTM for gold) as the closest prior work.
+
+| # (★ = core for the short paper) | Reference (IEEE style) | Use in the paper |
+|---|---|---|
+| | **Forecast evaluation, benchmarks and pitfalls** | |
+| 1 ★ | I. Welch and A. Goyal, "A comprehensive look at the empirical performance of equity premium prediction," *Review of Financial Studies*, vol. 21, no. 4, pp. 1455–1508, 2008. doi: `10.1093/rfs/hhm014` | Simple benchmarks (the historical mean) are hard to beat out of sample: motivates the no-change benchmark |
+| 2 | S. Gu, B. Kelly, and D. Xiu, "Empirical asset pricing via machine learning," *Review of Financial Studies*, vol. 33, no. 5, pp. 2223–2273, 2020. doi: `10.1093/rfs/hhaa009` | Out-of-sample R-squared convention; machine learning can help in the cross-section (contrast with our single-asset null) |
+| 3 ★ | S. Makridakis, E. Spiliotis, and V. Assimakopoulos, "Statistical and machine learning forecasting methods: Concerns and ways forward," *PLOS ONE*, vol. 13, no. 3, Art. no. e0194889, 2018. doi: `10.1371/journal.pone.0194889` | Machine-learning forecasts often fail to beat simple statistical benchmarks |
+| 4 ★ | H. Hewamalage, K. Ackermann, and C. Bergmeir, "Forecast evaluation for data scientists: common pitfalls and best practices," *Data Mining and Knowledge Discovery*, vol. 37, no. 2, pp. 788–832, 2023. doi: `10.1007/s10618-022-00894-5` | Catalogue of evaluation pitfalls; frames our audit |
+| 5 ★ | R. J. Hyndman and A. B. Koehler, "Another look at measures of forecast accuracy," *International Journal of Forecasting*, vol. 22, no. 4, pp. 679–688, 2006. doi: `10.1016/j.ijforecast.2006.03.001` | Choice of accuracy measures (MAE, RMSE, MAPE, scaled errors) |
+| 6 | C. Bergmeir and J. M. Benítez, "On the use of cross-validation for time series predictor evaluation," *Information Sciences*, vol. 191, pp. 192–213, 2012. doi: `10.1016/j.ins.2011.12.028` | Validation schemes for time series (why we use walk-forward) |
+| 7 | C. Bergmeir, R. J. Hyndman, and B. Koo, "A note on the validity of cross-validation for evaluating autoregressive time series prediction," *Computational Statistics & Data Analysis*, vol. 120, pp. 70–83, 2018. doi: `10.1016/j.csda.2017.11.003` | When ordinary cross-validation is valid for autoregressive models |
+| 8 ★ | M. López de Prado, *Advances in Financial Machine Learning*. Hoboken, NJ, USA: Wiley, 2018. ISBN 978-1-119-48208-6 | Embargo and purging of overlapping labels; backtest overfitting |
+| 9 | D. H. Bailey and M. López de Prado, "The deflated Sharpe ratio: Correcting for selection bias, backtest overfitting, and non-normality," *Journal of Portfolio Management*, vol. 40, no. 5, pp. 94–107, 2014. doi: `10.3905/jpm.2014.40.5.094` | Selection bias when many variants are tried |
+| 10 | C. R. Harvey, Y. Liu, and H. Zhu, "… and the cross-section of expected returns," *Review of Financial Studies*, vol. 29, no. 1, pp. 5–68, 2016. doi: `10.1093/rfs/hhv059` | Multiple testing: nominal p-values overstate evidence when many factors are tried |
+| 11 | H. White, "A reality check for data snooping," *Econometrica*, vol. 68, no. 5, pp. 1097–1126, 2000. doi: `10.1111/1468-0262.00152` | Data-snooping correction (bootstrap reality check) |
+| 12 | P. R. Hansen, "A test for superior predictive ability," *Journal of Business & Economic Statistics*, vol. 23, no. 4, pp. 365–380, 2005. doi: `10.1198/073500105000000063` | SPA test: planned correction over every model tried (experiment E3) |
+| 13 | P. R. Hansen, A. Lunde, and J. M. Nason, "The model confidence set," *Econometrica*, vol. 79, no. 2, pp. 453–497, 2011. doi: `10.3982/ECTA5771` | Model confidence set (experiment E3) |
+| | **Comparing forecasts** | |
+| 14 ★ | F. X. Diebold and R. S. Mariano, "Comparing predictive accuracy," *Journal of Business & Economic Statistics*, vol. 13, no. 3, pp. 253–263, 1995. doi: `10.1080/07350015.1995.10524599` | The Diebold-Mariano test used against the no-change forecast |
+| 15 ★ | D. Harvey, S. Leybourne, and P. Newbold, "Testing the equality of prediction mean squared errors," *International Journal of Forecasting*, vol. 13, no. 2, pp. 281–291, 1997. doi: `10.1016/S0169-2070(96)00719-4` | Small-sample correction of the DM test (not yet applied; experiment E1) |
+| 16 | F. X. Diebold, "Comparing predictive accuracy, twenty years later: A personal perspective on the use and abuse of Diebold-Mariano tests," *Journal of Business & Economic Statistics*, vol. 33, no. 1, p. 1, 2015. doi: `10.1080/07350015.2014.983236` | Correct and incorrect uses of DM tests (they compare forecasts, not models) |
+| 17 ★ | R. Giacomini and H. White, "Tests of conditional predictive ability," *Econometrica*, vol. 74, no. 6, pp. 1545–1578, 2006. doi: `10.1111/j.1468-0262.2006.00718.x` | Predictive-ability tests that remain valid with rolling-window estimation, as in walk-forward retraining |
+| | **Intervals, scoring rules and volatility** | |
+| 18 ★ | P. H. Kupiec, "Techniques for verifying the accuracy of risk measurement models," *Journal of Derivatives*, vol. 3, no. 2, pp. 73–84, 1995. doi: `10.3905/jod.1995.407942` | Proportion-of-failures coverage test (Kupiec p) |
+| 19 | P. F. Christoffersen, "Evaluating interval forecasts," *International Economic Review*, vol. 39, no. 4, pp. 841–862, 1998. doi: `10.2307/2527341` | Independence and conditional-coverage tests (experiment E8) |
+| 20 ★ | T. Gneiting and A. E. Raftery, "Strictly proper scoring rules, prediction, and estimation," *Journal of the American Statistical Association*, vol. 102, no. 477, pp. 359–378, 2007. doi: `10.1198/016214506000001437` | The interval score used to compare intervals |
+| 21 ★ | J.P. Morgan/Reuters, *RiskMetrics - Technical Document, 4th ed.*. J.P. Morgan/Reuters, New York, 1996. (UNVERIFIED metadata: no DOI; check the page number of the lambda = 0.94 recommendation before citing it) | Origin of the EWMA decay 0.94 used for the shipped band |
+| 22 | T. Bollerslev, "Generalized autoregressive conditional heteroskedasticity," *Journal of Econometrics*, vol. 31, no. 3, pp. 307–327, 1986. doi: `10.1016/0304-4076(86)90063-1` | GARCH(1,1) alternative |
+| 23 | G. Barone-Adesi, K. Giannopoulos, and L. Vosper, "VaR without correlations for portfolios of derivative securities," *Journal of Futures Markets*, vol. 19, no. 5, pp. 583–602, 1999. doi: `10.1002/(SICI)1096-9934(199908)19:5<583::AID-FUT5>3.0.CO;2-S` | Filtered historical simulation alternative |
+| 24 ★ | A. J. Patton, "Volatility forecast comparison using imperfect volatility proxies," *Journal of Econometrics*, vol. 160, no. 1, pp. 246–256, 2011. doi: `10.1016/j.jeconom.2010.03.034` | QLIKE is a robust loss for volatility forecasts |
+| 25 | F. Corsi, "A simple approximate long-memory model of realized volatility," *Journal of Financial Econometrics*, vol. 7, no. 2, pp. 174–196, 2009. doi: `10.1093/jjfinec/nbp001` | HAR-RV model for the volatility track (experiment E6) |
+| 26 | I. Gibbs and E. Candès, "Adaptive conformal inference under distribution shift," in *Advances in Neural Information Processing Systems 34 (NeurIPS)*, 2021. arXiv: `2106.00170` | Adaptive conformal intervals for non-stationary series (experiment E7) |
+| 27 | C. Xu and Y. Xie, "Conformal prediction interval for dynamic time-series," in *Proceedings of the 38th International Conference on Machine Learning (ICML), PMLR 139*, 2021. arXiv: `2010.09107` | Conformal intervals for time series (experiment E7) |
+| 28 ★ | E. B. Wilson, "Probable inference, the law of succession, and statistical inference," *Journal of the American Statistical Association*, vol. 22, no. 158, pp. 209–212, 1927. doi: `10.1080/01621459.1927.10502953` | Wilson confidence interval for direction accuracy |
+| | **Deep learning for finance and gold** | |
+| 29 ★ | S. Hochreiter and J. Schmidhuber, "Long short-term memory," *Neural Computation*, vol. 9, no. 8, pp. 1735–1780, 1997. doi: `10.1162/neco.1997.9.8.1735` | The LSTM |
+| 30 ★ | T. Fischer and C. Krauss, "Deep learning with long short-term memory networks for financial market predictions," *European Journal of Operational Research*, vol. 270, no. 2, pp. 654–669, 2018. doi: `10.1016/j.ejor.2017.11.054` | LSTM for financial prediction; reported gains that later weakened |
+| 31 ★ | O. B. Sezer, M. U. Gudelek, and A. M. Ozbayoglu, "Financial time series forecasting with deep learning: A systematic literature review: 2005-2019," *Applied Soft Computing*, vol. 90, Art. no. 106181, 2020. doi: `10.1016/j.asoc.2020.106181` | Survey of deep learning for financial time series |
+| 32 ★ | I. E. Livieris, E. Pintelas, and P. Pintelas, "A CNN-LSTM model for gold price time-series forecasting," *Neural Computing and Applications*, vol. 32, no. 23, pp. 17351–17360, 2020. doi: `10.1007/s00521-020-04867-x` | Closest prior work: deep learning for gold price forecasting |
+| 33 | A. Vidal and W. Kristjanpoller, "Gold volatility prediction using a CNN-LSTM approach," *Expert Systems with Applications*, vol. 157, Art. no. 113481, 2020. doi: `10.1016/j.eswa.2020.113481` | Deep learning for gold volatility (relevant to the volatility track) |
+| 34 | D. G. Baur and B. M. Lucey, "Is gold a hedge or a safe haven? An analysis of stocks, bonds and gold," *The Financial Review*, vol. 45, no. 2, pp. 217–229, 2010. doi: `10.1111/j.1540-6288.2010.00244.x` | Why gold is studied (hedge and safe haven) |
+| 35 | D. G. Baur and T. K. McDermott, "Is gold a safe haven? International evidence," *Journal of Banking & Finance*, vol. 34, no. 8, pp. 1886–1898, 2010. doi: `10.1016/j.jbankfin.2009.12.008` | Safe-haven evidence across countries |
+| | **Market efficiency** | |
+| 36 ★ | E. F. Fama, "Efficient capital markets: A review of theory and empirical work," *Journal of Finance*, vol. 25, no. 2, pp. 383–417, 1970. doi: `10.2307/2325486` | Efficient-market hypothesis: why a no-change forecast is hard to beat |
+| 37 ★ | A. Timmermann and C. W. J. Granger, "Efficient market hypothesis and forecasting," *International Journal of Forecasting*, vol. 20, no. 1, pp. 15–27, 2004. doi: `10.1016/S0169-2070(03)00012-8` | Forecasting under market efficiency; data-mining risk |
+| 38 | R. A. Meese and K. Rogoff, "Empirical exchange rate models of the seventies: Do they fit out of sample?," *Journal of International Economics*, vol. 14, no. 1-2, pp. 3–24, 1983. doi: `10.1016/0022-1996(83)90017-X` | Classic: structural models do not beat a random walk out of sample |
+| 39 | A. W. Lo, "The adaptive markets hypothesis: Market efficiency from an evolutionary perspective," *Journal of Portfolio Management*, vol. 30, no. 5, pp. 15–29, 2004. doi: `10.3905/jpm.2004.442611` | Predictability may vary over time (limits of a null result) |
+
+<details><summary>BibTeX for all 39 references (verified 2026-11-17)</summary>
+
+```bibtex
+@article{welch2008,
+  author = {Welch, Ivo and Goyal, Amit},
+  title = {A comprehensive look at the empirical performance of equity premium prediction},
+  journal = {Review of Financial Studies},
+  year = {2008},
+  volume = {21},
+  number = {4},
+  pages = {1455--1508},
+  doi = {10.1093/rfs/hhm014}
+}
+
+@article{gu2020,
+  author = {Gu, Shihao and Kelly, Bryan and Xiu, Dacheng},
+  title = {Empirical asset pricing via machine learning},
+  journal = {Review of Financial Studies},
+  year = {2020},
+  volume = {33},
+  number = {5},
+  pages = {2223--2273},
+  doi = {10.1093/rfs/hhaa009}
+}
+
+@article{makridakis2018,
+  author = {Makridakis, Spyros and Spiliotis, Evangelos and Assimakopoulos, Vassilios},
+  title = {Statistical and machine learning forecasting methods: Concerns and ways forward},
+  journal = {PLOS ONE},
+  year = {2018},
+  volume = {13},
+  number = {3},
+  pages = {e0194889},
+  doi = {10.1371/journal.pone.0194889}
+}
+
+@article{hewamalage2023,
+  author = {Hewamalage, Hansika and Ackermann, Klaus and Bergmeir, Christoph},
+  title = {Forecast evaluation for data scientists: common pitfalls and best practices},
+  journal = {Data Mining and Knowledge Discovery},
+  year = {2023},
+  volume = {37},
+  number = {2},
+  pages = {788--832},
+  doi = {10.1007/s10618-022-00894-5}
+}
+
+@article{hyndman2006,
+  author = {Hyndman, Rob J. and Koehler, Anne B.},
+  title = {Another look at measures of forecast accuracy},
+  journal = {International Journal of Forecasting},
+  year = {2006},
+  volume = {22},
+  number = {4},
+  pages = {679--688},
+  doi = {10.1016/j.ijforecast.2006.03.001}
+}
+
+@article{bergmeir2012,
+  author = {Bergmeir, Christoph and Benítez, José M.},
+  title = {On the use of cross-validation for time series predictor evaluation},
+  journal = {Information Sciences},
+  year = {2012},
+  volume = {191},
+  pages = {192--213},
+  doi = {10.1016/j.ins.2011.12.028}
+}
+
+@article{bergmeir2018,
+  author = {Bergmeir, Christoph and Hyndman, Rob J. and Koo, Bonsoo},
+  title = {A note on the validity of cross-validation for evaluating autoregressive time series prediction},
+  journal = {Computational Statistics \& Data Analysis},
+  year = {2018},
+  volume = {120},
+  pages = {70--83},
+  doi = {10.1016/j.csda.2017.11.003}
+}
+
+@book{lopezdeprado2018,
+  author = {López de Prado, Marcos},
+  title = {Advances in Financial Machine Learning},
+  publisher = {Wiley},
+  address = {Hoboken, NJ, USA},
+  year = {2018},
+  isbn = {978-1-119-48208-6}
+}
+
+@article{bailey2014,
+  author = {Bailey, David H. and López de Prado, Marcos},
+  title = {The deflated {S}harpe ratio: Correcting for selection bias, backtest overfitting, and non-normality},
+  journal = {Journal of Portfolio Management},
+  year = {2014},
+  volume = {40},
+  number = {5},
+  pages = {94--107},
+  doi = {10.3905/jpm.2014.40.5.094}
+}
+
+@article{harvey2016,
+  author = {Harvey, Campbell R. and Liu, Yan and Zhu, Heqing},
+  title = {\ldots and the cross-section of expected returns},
+  journal = {Review of Financial Studies},
+  year = {2016},
+  volume = {29},
+  number = {1},
+  pages = {5--68},
+  doi = {10.1093/rfs/hhv059}
+}
+
+@article{white2000,
+  author = {White, Halbert},
+  title = {A reality check for data snooping},
+  journal = {Econometrica},
+  year = {2000},
+  volume = {68},
+  number = {5},
+  pages = {1097--1126},
+  doi = {10.1111/1468-0262.00152}
+}
+
+@article{hansen2005,
+  author = {Hansen, Peter R.},
+  title = {A test for superior predictive ability},
+  journal = {Journal of Business \& Economic Statistics},
+  year = {2005},
+  volume = {23},
+  number = {4},
+  pages = {365--380},
+  doi = {10.1198/073500105000000063}
+}
+
+@article{hansen2011,
+  author = {Hansen, Peter R. and Lunde, Asger and Nason, James M.},
+  title = {The model confidence set},
+  journal = {Econometrica},
+  year = {2011},
+  volume = {79},
+  number = {2},
+  pages = {453--497},
+  doi = {10.3982/ECTA5771}
+}
+
+@article{diebold1995,
+  author = {Diebold, Francis X. and Mariano, Roberto S.},
+  title = {Comparing predictive accuracy},
+  journal = {Journal of Business \& Economic Statistics},
+  year = {1995},
+  volume = {13},
+  number = {3},
+  pages = {253--263},
+  doi = {10.1080/07350015.1995.10524599}
+}
+
+@article{harvey1997,
+  author = {Harvey, David and Leybourne, Stephen and Newbold, Paul},
+  title = {Testing the equality of prediction mean squared errors},
+  journal = {International Journal of Forecasting},
+  year = {1997},
+  volume = {13},
+  number = {2},
+  pages = {281--291},
+  doi = {10.1016/S0169-2070(96)00719-4}
+}
+
+@article{diebold2015,
+  author = {Diebold, Francis X.},
+  title = {Comparing predictive accuracy, twenty years later: A personal perspective on the use and abuse of {Diebold-Mariano} tests},
+  journal = {Journal of Business \& Economic Statistics},
+  year = {2015},
+  volume = {33},
+  number = {1},
+  pages = {1},
+  doi = {10.1080/07350015.2014.983236}
+}
+
+@article{giacomini2006,
+  author = {Giacomini, Raffaella and White, Halbert},
+  title = {Tests of conditional predictive ability},
+  journal = {Econometrica},
+  year = {2006},
+  volume = {74},
+  number = {6},
+  pages = {1545--1578},
+  doi = {10.1111/j.1468-0262.2006.00718.x}
+}
+
+@article{kupiec1995,
+  author = {Kupiec, Paul H.},
+  title = {Techniques for verifying the accuracy of risk measurement models},
+  journal = {Journal of Derivatives},
+  year = {1995},
+  volume = {3},
+  number = {2},
+  pages = {73--84},
+  doi = {10.3905/jod.1995.407942}
+}
+
+@article{christoffersen1998,
+  author = {Christoffersen, Peter F.},
+  title = {Evaluating interval forecasts},
+  journal = {International Economic Review},
+  year = {1998},
+  volume = {39},
+  number = {4},
+  pages = {841--862},
+  doi = {10.2307/2527341}
+}
+
+@article{gneiting2007,
+  author = {Gneiting, Tilmann and Raftery, Adrian E.},
+  title = {Strictly proper scoring rules, prediction, and estimation},
+  journal = {Journal of the American Statistical Association},
+  year = {2007},
+  volume = {102},
+  number = {477},
+  pages = {359--378},
+  doi = {10.1198/016214506000001437}
+}
+
+@techreport{riskmetrics1996,
+  author = {{J.P. Morgan/Reuters}},
+  title = {RiskMetrics - Technical Document, 4th ed.},
+  institution = {J.P. Morgan/Reuters, New York},
+  year = {1996},
+  note = {4th ed.; no DOI}
+}
+
+@article{bollerslev1986,
+  author = {Bollerslev, Tim},
+  title = {Generalized autoregressive conditional heteroskedasticity},
+  journal = {Journal of Econometrics},
+  year = {1986},
+  volume = {31},
+  number = {3},
+  pages = {307--327},
+  doi = {10.1016/0304-4076(86)90063-1}
+}
+
+@article{barone1999,
+  author = {Barone-Adesi, Giovanni and Giannopoulos, Kostas and Vosper, Les},
+  title = {{VaR} without correlations for portfolios of derivative securities},
+  journal = {Journal of Futures Markets},
+  year = {1999},
+  volume = {19},
+  number = {5},
+  pages = {583--602},
+  doi = {10.1002/(SICI)1096-9934(199908)19:5<583::AID-FUT5>3.0.CO;2-S}
+}
+
+@article{patton2011,
+  author = {Patton, Andrew J.},
+  title = {Volatility forecast comparison using imperfect volatility proxies},
+  journal = {Journal of Econometrics},
+  year = {2011},
+  volume = {160},
+  number = {1},
+  pages = {246--256},
+  doi = {10.1016/j.jeconom.2010.03.034}
+}
+
+@article{corsi2009,
+  author = {Corsi, Fulvio},
+  title = {A simple approximate long-memory model of realized volatility},
+  journal = {Journal of Financial Econometrics},
+  year = {2009},
+  volume = {7},
+  number = {2},
+  pages = {174--196},
+  doi = {10.1093/jjfinec/nbp001}
+}
+
+@misc{gibbs2021,
+  author = {Gibbs, Isaac and Candès, Emmanuel},
+  title = {Adaptive conformal inference under distribution shift},
+  year = {2021},
+  eprint = {2106.00170},
+  archivePrefix = {arXiv},
+  note = {Advances in Neural Information Processing Systems 34 (NeurIPS)}
+}
+
+@misc{xu2021,
+  author = {Xu, Chen and Xie, Yao},
+  title = {Conformal prediction interval for dynamic time-series},
+  year = {2021},
+  eprint = {2010.09107},
+  archivePrefix = {arXiv},
+  note = {Proceedings of the 38th International Conference on Machine Learning (ICML), PMLR 139}
+}
+
+@article{wilson1927,
+  author = {Wilson, Edwin B.},
+  title = {Probable inference, the law of succession, and statistical inference},
+  journal = {Journal of the American Statistical Association},
+  year = {1927},
+  volume = {22},
+  number = {158},
+  pages = {209--212},
+  doi = {10.1080/01621459.1927.10502953}
+}
+
+@article{hochreiter1997,
+  author = {Hochreiter, Sepp and Schmidhuber, Jürgen},
+  title = {Long short-term memory},
+  journal = {Neural Computation},
+  year = {1997},
+  volume = {9},
+  number = {8},
+  pages = {1735--1780},
+  doi = {10.1162/neco.1997.9.8.1735}
+}
+
+@article{fischer2018,
+  author = {Fischer, Thomas and Krauss, Christopher},
+  title = {Deep learning with long short-term memory networks for financial market predictions},
+  journal = {European Journal of Operational Research},
+  year = {2018},
+  volume = {270},
+  number = {2},
+  pages = {654--669},
+  doi = {10.1016/j.ejor.2017.11.054}
+}
+
+@article{sezer2020,
+  author = {Sezer, Omer Berat and Gudelek, Mehmet Ugur and Ozbayoglu, Ahmet Murat},
+  title = {Financial time series forecasting with deep learning: A systematic literature review: 2005-2019},
+  journal = {Applied Soft Computing},
+  year = {2020},
+  volume = {90},
+  pages = {106181},
+  doi = {10.1016/j.asoc.2020.106181}
+}
+
+@article{livieris2020,
+  author = {Livieris, Ioannis E. and Pintelas, Emmanuel and Pintelas, Panagiotis},
+  title = {A {CNN}-{LSTM} model for gold price time-series forecasting},
+  journal = {Neural Computing and Applications},
+  year = {2020},
+  volume = {32},
+  number = {23},
+  pages = {17351--17360},
+  doi = {10.1007/s00521-020-04867-x}
+}
+
+@article{vidal2020,
+  author = {Vidal, Andrés and Kristjanpoller, Werner},
+  title = {Gold volatility prediction using a {CNN}-{LSTM} approach},
+  journal = {Expert Systems with Applications},
+  year = {2020},
+  volume = {157},
+  pages = {113481},
+  doi = {10.1016/j.eswa.2020.113481}
+}
+
+@article{baur2010,
+  author = {Baur, Dirk G. and Lucey, Brian M.},
+  title = {Is gold a hedge or a safe haven? An analysis of stocks, bonds and gold},
+  journal = {The Financial Review},
+  year = {2010},
+  volume = {45},
+  number = {2},
+  pages = {217--229},
+  doi = {10.1111/j.1540-6288.2010.00244.x}
+}
+
+@article{baur2010b,
+  author = {Baur, Dirk G. and McDermott, Thomas K.},
+  title = {Is gold a safe haven? International evidence},
+  journal = {Journal of Banking \& Finance},
+  year = {2010},
+  volume = {34},
+  number = {8},
+  pages = {1886--1898},
+  doi = {10.1016/j.jbankfin.2009.12.008}
+}
+
+@article{fama1970,
+  author = {Fama, Eugene F.},
+  title = {Efficient capital markets: A review of theory and empirical work},
+  journal = {Journal of Finance},
+  year = {1970},
+  volume = {25},
+  number = {2},
+  pages = {383--417},
+  doi = {10.2307/2325486}
+}
+
+@article{timmermann2004,
+  author = {Timmermann, Allan and Granger, Clive W. J.},
+  title = {Efficient market hypothesis and forecasting},
+  journal = {International Journal of Forecasting},
+  year = {2004},
+  volume = {20},
+  number = {1},
+  pages = {15--27},
+  doi = {10.1016/S0169-2070(03)00012-8}
+}
+
+@article{meese1983,
+  author = {Meese, Richard A. and Rogoff, Kenneth},
+  title = {Empirical exchange rate models of the seventies: Do they fit out of sample?},
+  journal = {Journal of International Economics},
+  year = {1983},
+  volume = {14},
+  number = {1-2},
+  pages = {3--24},
+  doi = {10.1016/0022-1996(83)90017-X}
+}
+
+@article{lo2004,
+  author = {Lo, Andrew W.},
+  title = {The adaptive markets hypothesis: Market efficiency from an evolutionary perspective},
+  journal = {Journal of Portfolio Management},
+  year = {2004},
+  volume = {30},
+  number = {5},
+  pages = {15--29},
+  doi = {10.3905/jpm.2004.442611}
+}
+```
+
+</details>
+
+### 15.10 Figures and tables plan
+| Item | Content | Data source | Status |
+|---|---|---|---|
+| Fig. 1 | Protocol and system diagram: data → features → walk-forward retraining → forecast + EWMA band → live scoring | §15.4 | to draw (TikZ or draw.io) |
+| Fig. 2 | Actual close, LSTM forecast and 90% band (zoom on the last 120 test days) with the daily miss as bars | `wf_predictions.csv`, band from `volatility_forecast.csv` | to create (dashboard has an equivalent chart) |
+| Fig. 3 | MAE by model with the DM p-values | Table III | to create |
+| Fig. 4 | Coverage by interval method against the 90% goal, with the Kupiec 5% acceptance region | Table VII | to create |
+| Fig. 5 | Input sets: AUC (with CI) against always-up | Table V | optional, for the extended version |
+| Fig. 6 | Live record: scored forecasts with their ranges | `forecast_log.csv` (S3) | when the record is longer |
+| Tables | I data and splits, II hyperparameters, III price accuracy, IV direction, V input sets, VI horizons, VII intervals, VIII volatility, IX hourly, X always-up by horizon, XI pitfalls (§15.6) | §15.3-15.6 | generate with a script from the result files, never type numbers |
+
+For the 4-6 page conference paper use Tables I (compact), III, VII and XI (pitfalls, short form), Fig. 1 and either Fig. 2 or Fig. 4; move the rest to the extended version. Style: serif font (Times), 3.5 in or 7.2 in wide, vector PDF, readable in grey; keep the colour identity of the dashboard (the model in blue, `COLORS["model"]` in `dashboard/ui/theme.py`; actual in orange). Put the figure and table scripts in `paper/` when writing starts.
+
+### 15.11 Writing plan
+**Conference paper (JCSSE, 4-6 A4 pages, about 150-word abstract).** I Introduction (0.6 page: claims of deep learning for gold, the missing benchmark, RQ1-RQ3, contributions); II Related work (0.5: groups 1, 2, 5 of §15.9); III Data (0.4: Table I); IV Method (1.2: features, LSTM, walk-forward, baselines, metrics and tests, intervals); V Results (1.5: Tables III, V-compact, VII, Fig. 2 or 4); VI Discussion and limitations (0.5: why a null is expected, the pitfalls of §15.6, the threats of §15.7); VII Conclusion (0.2); Acknowledgements (AI-use statement, §15.12); References (about 20 of the 39).
+
+**Journal article (IEEE Access, about 10-14 pages).** Add the extended related work, the ablations (E2), SPA and MCS (E3), the long window and power analysis (E4), the volatility track (E6), conformal intervals (E7) and the live record; keep the similarity to the conference paper below 35%.
+
+**LaTeX skeleton.**
+```latex
+\documentclass[conference,a4paper]{IEEEtran}
+\usepackage{cite,amsmath,graphicx,booktabs}
+\begin{document}
+\title{Is the LSTM Better Than Repeating Yesterday? A Causal Walk-Forward Audit of Next-Day Gold Price Forecasting}
+\author{\IEEEauthorblockN{Anonymous for review}}   % JCSSE is double-blind: no names, no affiliations
+\maketitle
+\begin{abstract} ... \end{abstract}
+\begin{IEEEkeywords} gold price, long short-term memory, walk-forward validation, prediction intervals, negative results \end{IEEEkeywords}
+\section{Introduction} ...
+\section*{Acknowledgment}  % disclose AI assistance here (and at submission, as JCSSE asks)
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+\end{document}
+```
+
+### 15.12 Reproducibility, availability and ethics
+- **Environment (this machine, 2026-11-17).** Python 3.12.5 locally (3.11 on Streamlit Cloud, `.python-version`); TensorFlow 2.21.0, Keras 3.15.1, NumPy 1.26.4, pandas 3.0.2, scikit-learn 1.9.1, SciPy 1.17.1, yfinance 1.7.0. The pins for the dashboard are in `dashboard/requirements.txt`. Hardware and run time of one full walk-forward are not recorded: measure and add them (needed for the paper). Seeds 0-2 per block (`keras.utils.set_random_seed`); no GPU.
+- **Reproduce each table.** Table III-IV: `daily/walk_forward.py` then `daily/regression_metrics.py`; Table V: `daily/build_daily_dataset.py` with the flags listed in the Handoff block, then `walk_forward.py` per folder; Table VI: `daily/walk_forward_horizon.py`; Table VII: `daily/interval_experiment.py`, `daily/lstm_quantile.py`, `daily/interval_vix.py`; Table VIII: `daily/volatility_experiment.py`; Table IX: `hourly/run_full_pipeline.sh`, `hourly/train_models.py`; Table X: `daily/horizon_always_up.py`. The silver data must first be extended to the test window's end (Handoff, "Refreshing the results").
+- **Code availability.** Public repository https://github.com/aphiwat-data/lstm_dashboard; cite a tagged commit (create the tag `paper-v1` at submission). **Check: the repository has no LICENSE file**, so by default all rights are reserved; choose one (for example MIT or Apache-2.0) before the paper points to it. For a double-blind review use an anonymised mirror and say so.
+- **Data availability.** §15.3. **Live log**: not public; the dashboard shows the last 15 scored forecasts.
+- **AI-assistance disclosure.** IEEE requires AI-generated content in an article (text, figures, images, code) to be disclosed in the acknowledgements, naming the system and the sections concerned; JCSSE asks for full declaration at submission; IEEE Access rejects articles with fabricated content. Draft statement: *The authors used Claude (Anthropic) as a research assistant for code review, drafting and editing of text and checking of references. All numbers were produced by the authors' code and verified against the result files, all references were checked against Crossref, and the authors take full responsibility for the content.* Do not list an AI system as an author.
+- **Ethics.** No human subjects or personal data; the work is not financial advice (keep the disclaimer); the student names and IDs on the dashboard are public by the owner's choice.
+
+### 15.13 Working with Claude (rules)
+1. **Read first.** The Handoff block, §15.1, this list and `AGENTS.md` before any drafting.
+2. **Numbers come only from files.** Every number in a draft is quoted from a result file or from a table in §15.5, with the file and key; if it is not there, compute it with a script (not by hand) or say it is missing. Never round up, never mix windows.
+3. **References only from §15.9.** No citation, DOI, page number or quotation from memory. A new reference is checked against Crossref (or the publisher's page) and added to §15.9 and the BibTeX first; unverified ones are marked UNVERIFIED and kept out of the text.
+4. **Metric policy.** Lead with price error against the simple guess; direction accuracy is a labelled secondary check; no trading advice and no claim of profit.
+5. **One results window.** Headline numbers are on the 449-day window; any other window (long window, other assets) lives in its own results folder and is labelled in text and tables.
+6. **Claims discipline.** Use the supported and unsupported lists of §15.1. Say "no evidence of skill", not "no skill"; say "not significantly different", not "equal"; report effect sizes with intervals (E1) as soon as they exist.
+7. **Provenance of external facts.** Venue rules, deadlines and fees come from §15.2 with their date; re-check before use.
+8. **Privacy.** No AWS identifiers or credentials; author names only where the venue allows (double-blind review needs anonymisation, §15.15).
+9. **Disclose AI assistance** as §15.12 says, at the venue's required place.
+10. **End every session** by updating §15.15 (decisions and open questions) and §12; paper drafts, scripts and figures live in `paper/` (create it when writing starts); results and decisions are still recorded in this README only.
+
+**Prompt templates.** (a) "Generate Table III in IEEE LaTeX (`booktabs`) from `daily/results/walk_forward_results.json` and `regression_metrics.json`; do not type numbers." (b) "Write the Related Work paragraph on forecast evaluation using only [1], [3]-[7] from §15.9; list each claim and its reference." (c) "Audit this paragraph: list every factual claim, the file or table that supports it, and flag the unsupported ones." (d) "Implement experiment E1 in `daily/` with tests, run it into `daily/results/paper_e1/` and add the result table to §15.5." (e) "Trim the abstract to 150 words without losing a number." (f) "Anonymise the manuscript for double-blind review and list what you removed."
+
+**Definition of done for a section.** Every number traced; every reference in §15.9; limits and threats stated; no sentence that claims more than §15.1 allows; compiles with `IEEEtran`; within the page budget.
+
+### 15.14 Notation and glossary
+| Symbol or term | Meaning |
+|---|---|
+| c_t, r_t | close and log-return of day t |
+| y_{t+1}, ŷ_{t+1} | next-day log-return and its forecast |
+| simple guess, no-change | the forecast that tomorrow's close equals today's (return forecast 0) |
+| e_t | return error y_t - ŷ_t |
+| σ_t, λ | EWMA volatility of past errors, decay 0.94 |
+| MAE, RMSE, MAPE | mean absolute error, root mean squared error, mean absolute percentage error |
+| OS R² | out-of-sample R² against a benchmark (zero or the rolling mean) |
+| IC | Spearman rank correlation of forecast and realised return |
+| DM | Diebold-Mariano test of equal predictive accuracy |
+| AUC | area under the ROC curve of the direction head |
+| Kupiec p | p-value of the proportion-of-failures test for interval coverage |
+| interval score | width + (2/α) × distance outside the interval (α = 0.10) |
+| QLIKE | ln σ² + r² / σ², a robust loss for variance forecasts |
+| walk-forward | repeated retraining on the past and testing on the days that follow |
+| n_eff | effective sample size n / h when labels overlap over h days |
+
+### 15.15 Decisions and open questions (update every session)
+1. **Venue and timeline.** JCSSE 2027 second round (22 Jan 2027) then IEEE Access? Who registers and presents (at least one author must; budget THB 12,600-14,000 for an IEEE member or student)? *Open.*
+2. **Angle.** A with B (§15.8)? Which experiments are in scope before 22 Jan (suggested: E1, E8, E9, E10, E11, E12 only)? *Open.*
+3. **Authors and affiliations.** Order, the advisor's role, the committee's role, affiliations, ORCID iDs (required by IEEE Access). *Open.*
+4. **Anonymisation.** JCSSE is double-blind; the public repository and the dashboard identify the authors. Use an anonymised mirror for review and the public link after acceptance? *Open.*
+5. **Licence.** Which licence for the code (§15.12)? *Open.*
+6. **Hyperparameter history.** Were window 20, 32 units, dropout 0.2 and patience 3 chosen before looking at the test window, or tuned on it? The paper must say. *Open: owner to confirm.*
+7. **Live record.** Harden the log (E10) before citing it, or describe it only as a demonstration? *Open.*
+8. **Compute budget** for E2, E4-E6 (CPU only so far). *Open.*
+9. **Advisor's expectation** of the venue tier and the deadline. *Open.*
+
+### 15.16 Pre-submission checklist
+- [ ] Every number traced to a file (rule 2); tables generated by script; figures regenerated from the result files.
+- [ ] Every reference in §15.9 with its DOI; BibTeX compiles; no unverified entry in the text.
+- [ ] IEEE template for the venue; page limit and abstract length met; Index Terms; units and abbreviations defined.
+- [ ] Claims within §15.1; limitations and threats stated (§15.7); no trading advice.
+- [ ] Double-blind: names, affiliations, acknowledgements and identifying links removed; similarity check below the venue's limit (25% for IEEE Xplore at JCSSE).
+- [ ] AI-use disclosure in the acknowledgements and at submission; data and code availability statements; licence chosen.
+- [ ] A clean clone reproduces the tables (commands of §15.12); environment and run time recorded; commit tagged.
+- [ ] Registration, copyright form and presentation arranged (one author must present).

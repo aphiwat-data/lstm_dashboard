@@ -42,6 +42,7 @@ The owner writes in Thai. Reply in Thai; keep code, README text and commit messa
   `python3 -m py_compile dashboard/app.py dashboard/ui/*.py` before pushing.
 - **Document results in `README.md` only.** The owner will rewrite the paper from scratch, so do not edit Chapter 3 or other Word files; keep the
   README (Journey / Phase notes, scoreboard, Handoff) current after every piece of work.
+- **Paper work (IEEE format, from 2026-11-17).** The paper is written from README §15 (the rules R1-R10 are in §15.13): every number comes from a committed result file or a table in §15 (never typed from memory), references come only from §15.9 (DOIs verified with Crossref on 2026-11-17; verify any new one the same way before adding it, never cite or quote from memory), lead with price error against the simple guess (direction accuracy is secondary, no trading claims), keep one results window (449 days; any other window goes in its own results folder and is labelled), disclose AI assistance in the acknowledgements and wherever the venue asks, and keep privacy (a double-blind venue needs an anonymised repository link). Paper drafts, scripts and figures go in `paper/` once writing starts; results and decisions are still recorded in the README only.
 
 ## Commands
 
