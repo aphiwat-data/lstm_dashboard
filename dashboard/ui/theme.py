@@ -28,9 +28,9 @@ def chart_title(text: str, help: str | None = None) -> None:
     st.subheader(text, help=help, anchor=False, width="content")
 
 
-def highlight(text: str) -> str:
-    """Plotly label markup that makes a word stand out: bold, in the model's blue (the colour of the LSTM bars). Used for "(this model)"."""
-    return f"<b><span style='color:{COLORS['model']}'>{text}</span></b>"
+def highlight(text: str, size: int | None = None) -> str:
+    """Plotly label markup that makes a word stand out: bold, in the model's blue (the colour of the LSTM bars), optionally larger. Used for "(this model)", its name and its number."""
+    return f"<b><span style='color:{COLORS['model']}{f';font-size:{size}px' if size else ''}'>{text}</span></b>"
 
 
 def panel_title(fig: go.Figure, text: str) -> go.Figure:
