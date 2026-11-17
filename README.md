@@ -553,7 +553,7 @@ Request: make the UI much easier to read and as professional as possible. The ol
 Keras model and the S3 Gold table at start-up (~30 s cold start) to feed views of the superseded price-level pipeline. It was rebuilt rather than patched.
 
 - **Structure.** `dashboard/app.py` (30 lines) wires `dashboard/ui/`: `data.py` (cached loaders: results from `daily/results`, the live forecast, track record and price history from S3),
-  `logic.py` (price and direction verdicts), `theme.py` (colours, `usd()`, one shared Plotly style), `header.py`, `sidebar.py`, `tab_track.py`, `tab_market.py`, `tab_reliability.py`
+  `logic.py` (the price verdict and the chip colour), `theme.py` (colours, `usd()`, one shared Plotly style), `header.py`, `sidebar.py`, `tab_track.py`, `tab_market.py`, `tab_reliability.py`
   and `tab_about.py`. The original-pipeline views (60-day price-level LSTM, AR(5) baselines, Gold-table feature explorer) were removed from the page; this README is their record.
   `requirements.txt` dropped tensorflow, awswrangler and scikit-learn and gained pyarrow. A warm page paints in about a second; segmented controls are `st.fragment`s, so changing a
   chart window re-runs only that chart.
@@ -688,6 +688,57 @@ the backtest first; actual values beside the forecasts in the "Price history and
   at 1366 x 650, 1280 and 1024 px. The sidebar still fits 857 px without scrolling. After the second revision (forecast day top-right, note cards; the later moves of the day above the price and the removal of the briefing were checked on 1.56 and 1.66.1 at 1512 x 857 with no exception, no chart text overlap and the sidebar fitting) the page was re-checked on 1.56 at 1512 x 857 and 759 px (sidebar collapsed) and on 1.66.1 at
   1268 px (sidebar open): no exception, no overlap, no horizontal overflow; the four scorecard cards are 161 px wide at 1268 px and 142 px at 759 px, equal in height, with the notes wrapping to three or four lines. The browser pane
   kept changing width while testing, so 1024 px was not re-measured for the second revision. An offline run (S3 unreachable) and an online run of the whole page under `AppTest` raise nothing.
+- **The verdict box, the side check, the statistics table and four tooltips leave *How reliable?* (owner, 17 Nov).** The owner asked to remove the heading "Can this forecast be relied on?" with the verdict box under it, the two expanders at the bottom of *How reliable?* ("Side check: does it get up or down right?" and "All the statistics, model by model")
+  and the four `?` tooltips of the evidence block (the heading and the MAE, R² and range-reliability rows), and to keep their content in the README. The section now starts with the evidence block and ends with the range chart; the one-line explanation beside each evidence number stays.
+  The code that only served the removed parts is gone too (`_verdict`, `_direction`, `_details`, `MODEL_LABELS`, `logic.direction_verdict`, `logic.pct_miss`, `logic.PHRASE`). The content is recorded in "Content removed from the dashboard" below.
+  The table's CSV download (`daily_walk_forward_metrics.csv`) went with it; the backtest section keeps its own predictions CSV. Direction accuracy stays a labelled secondary check, now in the README only.
+
+#### Content removed from the dashboard (November 17, 2026)
+
+The owner asked for these parts to leave the page and to keep their content here. Everything is rebuilt from `daily/results/walk_forward_results.json` and `regression_metrics.json` (449 test days, 2025-01-09 to 2026-10-23);
+the code is in git history (last commit that still had it: `618b274`).
+
+**The heading "Can this forecast be relied on?" and the verdict box under it** (top of *How reliable?*). The box had three wordings, picked by the Diebold-Mariano test of the MAE against the simple guess (p below 0.05 and a clearly lower or higher MAE; otherwise "same"):
+
+- better: "**A measurable edge.** The average miss (MAE) is clearly lower than a simple guess (repeating the last close)."
+- worse: "**Worse than a simple guess.** The average miss (MAE) is clearly higher than just repeating today's price."
+- same (the one shown for the 449-day window, p = 0.38): "**Not better than a simple guess.** Read the forecast as *about today's close*. The range, however, is trustworthy."
+
+**Side check: "does it get up or down right?"** (an expander at the bottom of *How reliable?*; direction is a classification metric, so it was only a labelled side check).
+
+Right on **51.9%** of days; always saying “up” scores **55.2%**. The model cannot be told apart from that (p = 0.15).
+
+Tooltip: Calling up or down is a yes/no question, not how a price forecast is judged, so this is only a side check. The model says “up” on about nine days in ten, so its score mostly follows how often gold rose. 95% interval: 47.3% to 56.5%; the bars showed the same intervals.
+
+Bars it showed (direction accuracy with its 95% interval; the dashed line was the always-up score):
+
+| Model | Direction right | 95% interval | vs. always up (p) |
+|---|---|---|---|
+| Always guess up | 55.2% | 50.6% to 59.8% | 1.000 |
+| Follow last move | 45.2% | 40.7% to 49.8% | 0.000 |
+| Ridge (linear) | 49.0% | 44.4% to 53.6% | 0.009 |
+| Gradient boosting (trees) | 52.6% | 47.9% to 57.1% | 0.255 |
+| LSTM (this model) | 51.9% | 47.3% to 56.5% | 0.155 |
+
+**All the statistics, model by model** (the second expander).
+
+| Model | MAE (\$) | Error % (MAPE) | RMSE (\$) | vs. baseline (p) | R² out-of-sample | Rank correlation | Direction right (%) | vs. always up (p) | AUC |
+|---|---|---|---|---|---|---|---|---|---|
+| Recent average return | \$46.36 | 1.136% | \$69.07 | 0.941 | +0.000 | -0.027 | 55.2% | 1.000 | - |
+| Ridge | \$47.87 | 1.171% | \$70.35 | 0.023 | -0.043 | -0.103 | 49.0% | 0.009 | - |
+| Gradient boosting | \$50.68 | 1.237% | \$75.05 | 0.000 | -0.183 | -0.034 | 50.3% | 0.041 | - |
+| Gradient boosting (up/down) | - | - | - | - | - | - | 52.6% | 0.255 | 0.498 |
+| LSTM (this model) | \$46.83 | 1.147% | \$69.45 | 0.385 | -0.011 | +0.006 | 51.9% | 0.155 | 0.463 |
+| Follow last move | - | - | - | - | - | - | 45.2% | 0.000 | - |
+
+Caption: p below 0.05 = a clear difference. 449 test days, 2025-01-09 to 2026-10-23; the baseline (a simple guess: repeat the last close) has MAE \$46.63. The expander also offered the table as `daily_walk_forward_metrics.csv`; the same numbers are in `daily/results/walk_forward_results.json` and `regression_metrics.json`.
+
+**Tooltips of the evidence block** (the heading and the three rows; the one-line explanation beside each number stayed).
+
+- *The evidence* (heading): Based on 449 test days (2025-01-09 to 2026-10-23); small differences are within noise.
+- *MAE · average miss*: A simple guess (repeating the last close) misses by \$46.63 a day, 1.14% of the price. The model cannot be told apart from it (p = 0.38; below 0.05 counts as a clear difference).
+- *R² · predicts moves?*: Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: +0.006 (p = 0.90).
+- *Range reliability*: The real close stayed inside the range on 348 of 389 test days. Ideal: 90%. Its width, \$223, is the same as a no-change range (\$221): the model does not narrow the uncertainty.
 
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
