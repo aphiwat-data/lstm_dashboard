@@ -694,9 +694,11 @@ the backtest first; actual values beside the forecasts in the "Price history and
   and to keep the information in the README. The navigation bar now has three sections. `tab_about.py` and the loaders only it used (`data.horizons`, `data.feature_rows`, `data.FEATURE_SETS`, `data.REPO_URL`) are deleted.
   The content is recorded in "Content removed from the dashboard" below, rebuilt from the result files (the table holds the same data as the "What we tried" chart). The page no longer links to the repository or to this README, because the two buttons lived only in that section;
   the "Made only for a Computer Engineering senior project, not trading advice" line stays under the accuracy cards.
-- **A one-line project description is back under the title (owner, 17 Nov).** The explanation of the project that used to sit under "Gold Price Forecast" (three lines on 9 Nov, two lines until 14 Nov, then removed) returns, shortened to one line of 16 words:
-  "An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range." It names the model (the glossary left with the About section) and the range, and it does not mention the simple guess (owner, 14 and 17 Nov). The three-line original read: "An LSTM neural network forecasts the next trading day's gold price (XAU/USD)
+- **A short project description is back under the title (owner, 17 Nov).** The explanation of the project that used to sit under "Gold Price Forecast" (three lines on 9 Nov, two lines until 14 Nov, then removed) returns, first shortened to one line of 16 words ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range."), then, at the owner's request ("a bit longer"), to two lines of 30 words:
+  "An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range." / "Live forecasts are saved before the day happens, then scored against the real close." It names the model (the glossary left with the About section) and the range, says *live* because the replayed forecasts were not saved beforehand, and does not mention the simple guess (owner, 14 and 17 Nov). The three-line original read: "An LSTM neural network forecasts the next trading day's gold price (XAU/USD)
   and a 90% range around it. Every forecast is saved before the day happens, then scored against the real close. It is judged against a simple guess, tomorrow = today: the model has to beat that to be useful."
+- **The `?` of the header chart title leaves (owner, 17 Nov).** "Actual vs Forecast" has no tooltip any more; what it said is kept in "Content removed from the dashboard" below. The *Forecast vs. actual* section still tells replayed from real forecasts with its two badges
+  ("Simulated on past data", "Real forecasts").
 
 #### Content removed from the dashboard (November 17, 2026)
 
@@ -744,6 +746,10 @@ Caption: p below 0.05 = a clear difference. 449 test days, 2025-01-09 to 2026-10
 - *MAE · average miss*: A simple guess (repeating the last close) misses by \$46.63 a day, 1.14% of the price. The model cannot be told apart from it (p = 0.38; below 0.05 counts as a clear difference).
 - *R² · predicts moves?*: Out-of-sample R²: 0 means no better than a simple average, below 0 is worse. Rank correlation with the actual moves: +0.006 (p = 0.90).
 - *Range reliability*: The real close stayed inside the range on 348 of 389 test days. Ideal: 90%. Its width, \$223, is the same as a no-change range (\$221): the model does not narrow the uncertainty.
+
+**Tooltip of the header chart "Actual vs Forecast"** (the `?` next to its title; the date was read from the live log).
+
+- Orange line: the real closing price each day. Blue dashed line: the forecast made the day before, with its range shaded light blue. Blue diamond: the new forecast and its range. Bars at the bottom: how far off each forecast was (red: the price ended higher than forecast, blue: lower). Forecasts before 29 Oct are replayed on past data; from then on they are real forecasts, saved before each day.
 
 **The *About the project* section** (the fourth section of the navigation bar; it only explained what was built and tried). Its parts in the order shown, with every number rebuilt from the same result files:
 

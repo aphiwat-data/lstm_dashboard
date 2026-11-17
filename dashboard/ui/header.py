@@ -13,7 +13,8 @@ from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_t
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
-BRIEFING = "An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range."  # one line under the title; it must not mention the simple guess (owner)
+BRIEFING = ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range.  \n"
+            "Live forecasts are saved before the day happens, then scored against the real close.")  # two lines under the title; it must not mention the simple guess (owner)
 
 
 def _age_text(hours: float | None) -> str:
@@ -79,11 +80,8 @@ def forecast_chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict, days: int) -
 
 @st.fragment
 def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
-    live_from = fh.loc[fh["source"] == "live", "for_date"].min()
-    since = f"Forecasts before {live_from.day} {live_from:%b} are replayed on past data; from then on they are real forecasts, saved before each day." if pd.notna(live_from) else ""
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-        chart_title("Actual vs Forecast", help="Orange line: the real closing price each day. Blue dashed line: the forecast made the day before, with its range shaded light blue. "
-                   "Blue diamond: the new forecast and its range. Bars at the bottom: how far off each forecast was (red: the price ended higher than forecast, blue: lower). " + since)
+        chart_title("Actual vs Forecast")
         window = st.segmented_control("History shown", list(WINDOWS), default="1M", key="hero_window", label_visibility="collapsed") or "1M"
     st.plotly_chart(forecast_chart(hist, fh, cur, WINDOWS[window]), width="stretch", config={"displayModeBar": False})
 
