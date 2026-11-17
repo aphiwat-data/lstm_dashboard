@@ -54,7 +54,7 @@ already does this, and so does Chapter 3 (price accuracy first, direction as a s
 one `tab_*.py` per tab, `theme.py` colours and the shared chart style, `logic.py` verdict rules). It no longer imports TensorFlow (requirements: streamlit, boto3, pandas, numpy,
 plotly, pyarrow), so a page loads in about a second instead of ~30 s. Every number in the prose is read from the result files (for example the test-day count), so a results
 refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml`.
-Layout since Phase 13: a header (the title with a status badge, the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
+Layout since Phase 13: a header (the title with a status badge and a one-line project description, the forecast card with the forecast day right above the price, the 90% range joined with its *range reliability*, the chart of actual vs. past forecasts,
 an accuracy scorecard with MAE / RMSE / error % / R², the four cards show only the label and the number; the simple guess's score is in each tooltip), then a navigation bar of three sections in one row (nothing is shown until one is clicked; since 14 Nov, before that tabs and for a few hours stacked panels): *Forecast vs. actual* (backtest first, then the live record), *Actual market data*, *How reliable?* (all visualisations). The fourth section, *About the project*, was removed on 17 Nov; its content is in "Content removed from the dashboard" (Phase 13).
 
 **Regression-first metric rewrite (2026-10-27/29, done).** `daily/regression_metrics.py` (tests in `daily/test_regression_metrics.py`,
@@ -694,6 +694,9 @@ the backtest first; actual values beside the forecasts in the "Price history and
   and to keep the information in the README. The navigation bar now has three sections. `tab_about.py` and the loaders only it used (`data.horizons`, `data.feature_rows`, `data.FEATURE_SETS`, `data.REPO_URL`) are deleted.
   The content is recorded in "Content removed from the dashboard" below, rebuilt from the result files (the table holds the same data as the "What we tried" chart). The page no longer links to the repository or to this README, because the two buttons lived only in that section;
   the "Made only for a Computer Engineering senior project, not trading advice" line stays under the accuracy cards.
+- **A one-line project description is back under the title (owner, 17 Nov).** The explanation of the project that used to sit under "Gold Price Forecast" (three lines on 9 Nov, two lines until 14 Nov, then removed) returns, shortened to one line of 16 words:
+  "An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range." It names the model (the glossary left with the About section) and the range, and it does not mention the simple guess (owner, 14 and 17 Nov). The three-line original read: "An LSTM neural network forecasts the next trading day's gold price (XAU/USD)
+  and a 90% range around it. Every forecast is saved before the day happens, then scored against the real close. It is judged against a simple guess, tomorrow = today: the model has to beat that to be useful."
 
 #### Content removed from the dashboard (November 17, 2026)
 
