@@ -13,26 +13,15 @@ from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_t
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
+BRIEFING = ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range.  \n"
+            "Live forecasts are saved before the day happens, then scored against the real close.  \n"
+            "Made only for a Computer Engineering senior project. This is not trading advice.")  # under the title: three concise lines (owner, 17 Nov); never mention the simple guess
 
 
 def _age_text(hours: float | None) -> str:
     if hours is None:
         return "recently"
     return "just now" if hours < 1 else f"{hours:.0f} h ago" if hours < 48 else f"{hours / 24:.0f} days ago"
-
-
-def _briefing(res: dict | None, reg: dict | None) -> str:
-    """Under the title: what the model is and how it is built, the live record, then the senior-project disclaimer (owner, 17 Nov: it moved here from under the accuracy cards). The numbers
-    are read from the result files, so a refresh needs no edit. It must not mention the simple guess (owner), and it says *live* forecasts are saved beforehand because the replayed ones were not."""
-    lines = ["An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range."]
-    if res:
-        p = res["protocol"]
-        lines.append(f"It reads the last {p['window']} days of prices and is retrained weekly on the latest {p['train_len_days']} days.")
-        if reg:
-            lines.append(f"Tests use only unseen days (walk-forward). The range is the forecast ± 1.645 × a weighted average of recent errors (EWMA {reg['protocol']['ewma_lambda']}).")
-    lines.append("Live forecasts are saved before the day happens, then scored against the real close.")
-    lines.append("Made only for a Computer Engineering senior project. This is not trading advice.")
-    return "  \n".join(lines)
 
 
 def freshness(cur: dict) -> tuple[str, str, str]:
@@ -151,7 +140,7 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
         st.markdown("## Gold Price Forecast")
         st.badge(label, icon=icon, color=color, help="The forecast is refreshed every morning at 10:00 (Thailand time). "
                  f"It uses prices up to {cur['as_of_date']}" + (f"; the model was last trained on data up to {trained}." if trained else "."))
-    st.caption(_briefing(res, reg))
+    st.caption(BRIEFING)
 
     fc, last, lo, hi = cur["predicted_next_close"], cur["latest_close"], cur["interval_90_close"][0], cur["interval_90_close"][1]
     change, pct = fc - last, (fc / last - 1) * 100
