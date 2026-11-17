@@ -669,7 +669,7 @@ the backtest first; actual values beside the forecasts in the "Price history and
   if a Plotly build ever showed the tags as text, drop the `<span>` and keep `<b>` (the owner's screenshot later showed the 14 px bold blue rendering correctly: $46.83 in bold blue, larger than the other values).
   The owner then asked for "LSTM" instead of "Recent errors" on the first bar of the range chart. "Recent errors" had named the *method*, not the model: the range is the forecast +/- 1.645 x an exponentially weighted average (lambda 0.94, recent days count more)
   of the model's own past errors, while the bar "All past errors" takes the 5th and 95th percentile of every past error with all days weighted equally (85.9% coverage, it adapts slowly). The chart tooltip now says "this model's range (sized from its recent errors)";
-  the last bar keeps "Recent errors + VIX" (the same range with VIX added to the width model).
+  the last bar, first labelled "Recent errors + VIX", was then renamed "LSTM + VIX" (owner, 17 Nov): it is the same range with the VIX added to the width model, not the VIX fed into the LSTM, and the tooltip says so.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
   section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.

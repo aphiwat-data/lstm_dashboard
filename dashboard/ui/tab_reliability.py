@@ -84,10 +84,9 @@ def _range_chart(compare: list | None, vix: list | None) -> None:
     wanted = [("EWMA Gaussian, lambda 0.94 (current)", f"{highlight('LSTM', 14)}<br>{highlight('(this model)')}"), ("Empirical quantiles, all past errors", "All past errors"), ("GARCH(1,1), Gaussian", "GARCH<br>(volatility model)"), ("LSTM quantile (pinball loss)", "LSTM learns<br>the range")]
     by = {r["method"]: r for r in compare}
     rows = [(label, by[key]["coverage"]) for key, label in wanted if key in by]
-    if vix:
-        v = next((r for r in vix if r["method"].startswith("EWMA + VIX (previous day)")), None)
-        if v:
-            rows.append(("Recent errors<br>+ VIX", v["coverage"]))
+    v = next((r for r in vix if r["method"].startswith("EWMA + VIX (previous day)")), None) if vix else None
+    if v:
+        rows.append(("LSTM + VIX", v["coverage"]))
     colors = [COLORS["model"] if i == 0 else COLORS["naive"] for i in range(len(rows))]
     fig = go.Figure(go.Bar(x=[f"{r[0]}<br>" + (highlight(f"{r[1]:.1%}", 14) if i == 0 else f"<b>{r[1]:.1%}</b>") for i, r in enumerate(rows)], customdata=[_plain(r[0]) for r in rows], y=[r[1] * 100 for r in rows], marker_color=colors,
                            hovertemplate="%{customdata}<br>%{y:.1f}%<extra></extra>"))
@@ -97,7 +96,7 @@ def _range_chart(compare: list | None, vix: list | None) -> None:
     fig.update_yaxes(range=[50, 100], ticksuffix="%")
     used, others = rows[0][1], [r[1] for r in rows[1:]]
     chart_title("Range reliability by method", help=f"How often the close landed inside the 90% range. Dashed line: the 90% goal. We compared {len(rows)} ways to draw the range." + (" The first one, this model's range (sized from its recent errors), landed closest to 90%." if all(abs(used - 0.9) <= abs(o - 0.9) for o in others) else "")
-                + (" The others were too narrow." if all(o < used for o in others) else ""))
+                + (" The others were too narrow." if all(o < used for o in others) else "") + (" “LSTM + VIX” also uses the VIX to size the range." if v else ""))
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
