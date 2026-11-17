@@ -78,12 +78,11 @@ def _live(log: pd.DataFrame | None) -> None:
         st.info("**Just started.** The first forecast is scored after the next close.", icon=":material/hourglass_top:")
         return
     miss_model = (scored["actual_next_close"] - scored["predicted_next_close"]).abs().mean()
-    miss_naive = (scored["actual_next_close"] - scored["latest_close"]).abs().mean()
     inside = scored["inside_90"].astype(str).str.lower().eq("true")
     with card_row():
         metric_card("Forecasts scored", f"{len(scored)}")
         metric_card("MAE · average miss", usd(miss_model),
-                    help=f"The average miss of the live forecasts so far, in dollars. A simple guess (repeating the last close) misses by {usd(miss_naive)} on the same days.")
+                    help="The average miss of the live forecasts so far, in dollars. Lower is better.")
         metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days",
                     help=f"{inside.mean():.0%} of the scored days. With so few days this says little yet.")
     _live_chart(scored.tail(15).reset_index(drop=True), log[log["actual_next_close"].isna()])

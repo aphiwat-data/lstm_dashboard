@@ -114,7 +114,7 @@ def _footer() -> None:
     with st.container(horizontal=True, gap="small"):
         st.link_button("Source code", REPO_URL, icon=":material/code:")
         st.link_button("Full write-up (README)", f"{REPO_URL}/blob/main/README.md", icon=":material/description:")
-    st.caption("Research project, not financial advice · Prices: Yahoo Finance (GC=F)")
+    st.caption("Made only for a Computer Engineering senior project, not trading advice · Prices: Yahoo Finance (GC=F)")
 
 
 def render(res: dict | None, reg: dict | None, px: pd.DataFrame | None) -> None:

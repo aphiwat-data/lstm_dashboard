@@ -9,7 +9,6 @@ from plotly.subplots import make_subplots
 
 from .cards import card_row, metric_card
 from .data import next_trading_day, run_age_hours
-from .logic import price_verdict
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, signed_usd, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
@@ -64,10 +63,6 @@ def forecast_chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict, days: int) -
     fig.add_trace(go.Bar(x=past["for_date"], y=past["miss"], marker_color=[ERROR_UNDER if m >= 0 else ERROR_OVER for m in past["miss"]], marker_line_width=0, showlegend=False,
                          hovertemplate="%{y:+,.2f}<extra>Actual − Forecast</extra>"), row=2, col=1)
     fig.add_hline(y=0, line_color="rgba(128,128,128,.6)", line_width=1, row=2, col=1)
-    live = past[past["source"] == "live"]
-    if len(live) and past["source"].nunique() > 1:  # the stretch before this line is the backtest (the model replayed on past data), after it real forecasts
-        fig.add_vline(x=live["for_date"].min() - pd.Timedelta(hours=12), line_dash="dot", line_color="rgba(128,128,128,.7)", row=1, col=1,
-                      annotation_text="Live forecasts start", annotation_position="top left", annotation_font_size=11)
     span = max((fc_date - h["date"].min()).days, 10)
     y_lo, y_hi = min(h["close"].min(), lo, past["lo"].min() if past["lo"].notna().any() else lo), max(h["close"].max(), hi, past["hi"].max() if past["hi"].notna().any() else hi)
     pad = (y_hi - y_lo) * 0.08
@@ -83,11 +78,12 @@ def forecast_chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict, days: int) -
 
 @st.fragment
 def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
+    live_from = fh.loc[fh["source"] == "live", "for_date"].min()
+    since = f"Forecasts before {live_from.day} {live_from:%b} are replayed on past data; from then on they are real forecasts, saved before each day." if pd.notna(live_from) else ""
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-        chart_title("Price history and forecast", help="Orange line: the real closing price each day. Blue dashed line: the forecast made the day before, with its range shaded light blue. "
-                   "Blue diamond: the new forecast and its range. Bars at the bottom: how far off each forecast was (red: the price ended higher than forecast, blue: lower). "
-                   "Left of the dotted line the forecasts are replayed on past data; right of it they are real forecasts, saved before each day.")
-        window = st.segmented_control("History shown", list(WINDOWS), default="3M", key="hero_window", label_visibility="collapsed") or "3M"
+        chart_title("Actual vs Forecast", help="Orange line: the real closing price each day. Blue dashed line: the forecast made the day before, with its range shaded light blue. "
+                   "Blue diamond: the new forecast and its range. Bars at the bottom: how far off each forecast was (red: the price ended higher than forecast, blue: lower). " + since)
+        window = st.segmented_control("History shown", list(WINDOWS), default="1M", key="hero_window", label_visibility="collapsed") or "1M"
     st.plotly_chart(forecast_chart(hist, fh, cur, WINDOWS[window]), width="stretch", config={"displayModeBar": False})
 
 
@@ -109,24 +105,21 @@ def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | Non
 
 
 def _scorecard(res: dict, reg: dict | None) -> None:
-    """Accuracy on the backtest window, with the technical names (MAE, RMSE, ...) visible; the comparison with the simple guess sits in the tooltips."""
+    """Accuracy on the backtest window, with the technical names (MAE, RMSE, ...) visible; definitions sit in the tooltips."""
     lstm = res["models"]["lstm"]
-    conclusion = {"better": "so the model is clearly better", "same": "so there is no clear difference", "worse": "so the model is clearly worse"}[price_verdict(lstm)]
     chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days",
-                help=f"The model was tested on {res['protocol']['n_test']} past days. For each day it forecast the close without having seen it. Every number below is compared with a simple guess: repeating the last close. "
-                     f"That guess misses by {usd(lstm['naive_mae_usd'])} a day on average and this model by {usd(lstm['mae_usd'])}, {conclusion}.")
+                help=f"The model was tested on {res['protocol']['n_test']} past days. For each day it forecast the close without having seen it, so these numbers show how it would have done in real use.")
     with card_row():
         metric_card("MAE · average miss", usd(lstm["mae_usd"]),
-                    help=f"The average miss: on a typical day the forecast was about this many dollars away from the real close. Lower is better. A simple guess (repeating the last close) misses by {usd(lstm['naive_mae_usd'])}.")
+                    help="The average miss: on a typical day the forecast was about this many dollars away from the real close. Lower is better.")
         metric_card("RMSE", usd(lstm["rmse_usd"]),
-                    help=f"Like the average miss, but big misses count more than small ones, so it shows how bad the worst days were. Lower is better. A simple guess (repeating the last close) scores {usd(lstm['naive_rmse_usd'])}.")
+                    help="Like the average miss, but big misses count more than small ones, so it shows how bad the worst days were. Lower is better.")
         if reg:
-            m, nc = reg["models"]["lstm"], reg["no_change"]
-            r2, r2_naive = (f"{x:+.3f}".replace("-", "−") for x in (m["r2_os_vs_rolling_mean"], nc["r2_os_vs_rolling_mean"]))
+            m = reg["models"]["lstm"]
             metric_card("Error % (MAPE)", f"{m['mape_pct']:.2f}%",
-                        help=f"The average miss as a percentage of the price, so it means the same whether gold is cheap or expensive. Lower is better. A simple guess (repeating the last close) scores {nc['mape_pct']:.2f}%.")
-            metric_card("R² (out-of-sample)", r2,
-                        help=f"How much of each day's price move the forecast explains, measured on days it had not seen. 0 means no better than guessing the usual average move; below 0 means worse than that. A simple guess (repeating the last close) scores {r2_naive}.")
+                        help="The average miss as a percentage of the price, so it means the same whether gold is cheap or expensive. Lower is better.")
+            metric_card("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"),
+                        help="Like a test score for catching the daily ups and downs. 1 means every move was predicted; 0 means none was caught, no better than assuming a typical day; below 0 means worse than that. Measured only on days the model had never seen.")
 
 
 def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
@@ -155,10 +148,10 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
     if res is not None:
         _scorecard(res, reg)
         with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
-            st.caption("Research only, not trading advice.")
+            st.caption("Made only for a Computer Engineering senior project. This is not trading advice.")
             with st.popover("How to read this", icon=":material/help:"):
                 st.markdown(
                     "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
                     "- **Range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing.\n"
-                    "- **MAE, RMSE, error %:** how far off the forecast was on the test days. The yardstick is a simple guess: repeating the last close."
+                    "- **MAE, RMSE, error %:** how far off the forecast was on the test days."
                 )
