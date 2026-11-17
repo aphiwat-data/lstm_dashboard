@@ -28,6 +28,11 @@ def chart_title(text: str, help: str | None = None) -> None:
     st.subheader(text, help=help, anchor=False, width="content")
 
 
+def highlight(text: str) -> str:
+    """Plotly label markup that makes a word stand out: bold, in the model's blue (the colour of the LSTM bars). Used for "(this model)"."""
+    return f"<b><span style='color:{COLORS['model']}'>{text}</span></b>"
+
+
 def panel_title(fig: go.Figure, text: str) -> go.Figure:
     """Style the title of one subplot panel (the label above a chart panel): bold, a little larger and darker than the axis text."""
     fig.update_annotations(selector=dict(text=f"<b>{text}</b>"), font=dict(size=13, color="#344054", family=CHART_FONT), xanchor="left", x=0)

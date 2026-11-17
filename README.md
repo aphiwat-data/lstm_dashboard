@@ -662,6 +662,10 @@ the backtest first; actual values beside the forecasts in the "Price history and
   from the real close." (it was "A simple guess, repeating the last close, misses by $46.63"), R² "A test score for catching the daily ups and downs: 1 means every move was predicted, 0 means none was." (it was the rank correlation line) and
   range reliability "How often the real close stayed inside the range. The aim is 9 days out of 10." (it was "The range held on 348 of 389 test days"). The facts that left the visible line moved into each row's tooltip: the simple guess's miss
   ($46.63 a day, 1.14% of the price) with the p-value, the rank correlation (+0.006, p = 0.90) and 348 of 389 test days. The chips ("+$0.20 vs. baseline", "No predictive power", "goal 90%") are unchanged.
+- **"(this model)" stands out; LSTM first (owner, 17 Nov).** In "Average miss (MAE) by model" the LSTM bar is now the first bar (then the simple guess, Ridge and gradient boosting) and the words "(this model)" under it are bold and in the model's blue;
+  the same emphasis is on the first bar of "Range reliability by method" ("Recent errors (this model)") and on the LSTM label of the side-check chart. One helper does it, `theme.highlight()` (Plotly label markup: bold `<span>` in the model
+  blue), so any new chart label for this model should use it; hover texts keep plain words (`tab_reliability._plain`). The Browser pane's page tools were unavailable that day, so the markup was checked on the figure objects, not on screen:
+  if a Plotly build ever showed the tags as text, drop the `<span>` and keep `<b>`.
 - **Tabs.** *Forecast vs. actual* (the model's forecasts next to what happened), *Actual market data* (real prices and what can be measured from them), *How reliable?*, *About the project*. (They first started with a one-line caption each; removed on 14 Nov, the tab names and
   section titles say the same.) Inside *Forecast vs. actual* the **backtest comes first** with a grey badge "Simulated on past data"; the **live record** follows with a green badge "Real forecasts", so the
   reader can tell the replayed past from forecasts that were saved before the day happened.

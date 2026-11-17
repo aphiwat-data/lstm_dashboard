@@ -1,12 +1,14 @@
 """How reliable? The verdict first, then the evidence in plain words; statistics are one click deeper."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from .logic import PHRASE, direction_verdict, edge_color, pct_miss, price_verdict
-from .theme import COLORS, chart_title, finish, signed_usd, usd
+from .theme import COLORS, chart_title, finish, highlight, signed_usd, usd
 
 MODEL_LABELS = {"drift": "Recent average return", "ridge": "Ridge", "hist_gb_reg": "Gradient boosting", "hist_gb_clf": "Gradient boosting (up/down)", "lstm": "LSTM (this model)", "momentum_rule": "Follow last move"}
 
@@ -53,10 +55,14 @@ def _evidence(res: dict, preds: pd.DataFrame, reg: dict | None, verdict: str) ->
 def _mae_chart(res: dict) -> None:
     models = res["models"]
     naive = models["lstm"]["naive_mae_usd"]
-    entries = [("Simple guess<br>(repeat last close)", naive, COLORS["naive"]), ("Ridge<br>(linear model)", models["ridge"]["mae_usd"], COLORS["ridge"]),
-               ("Gradient boosting<br>(tree model)", models["hist_gb_reg"]["mae_usd"], COLORS["hgb"]), ("LSTM<br>(this model)", models["lstm"]["mae_usd"], COLORS["model"])]
-    vals = [v for _, v, _ in entries]
-    fig = go.Figure(go.Bar(x=[f"{n}<br><b>${v:,.2f}</b>" for n, v, _ in entries], customdata=[n.replace("<br>", " ") for n, _, _ in entries], y=vals, marker=dict(color=[c for *_, c in entries], pattern_shape=["/", "", "", ""], pattern_fgcolor="rgba(255,255,255,0.55)"),
+    # (name for the hover, label under the bar, value, colour, hatch): this model first, its label in bold blue so it cannot be missed
+    entries = [("LSTM (this model)", f"LSTM<br>{highlight('(this model)')}", models["lstm"]["mae_usd"], COLORS["model"], ""),
+               ("Simple guess (repeat last close)", "Simple guess<br>(repeat last close)", naive, COLORS["naive"], "/"),
+               ("Ridge (linear model)", "Ridge<br>(linear model)", models["ridge"]["mae_usd"], COLORS["ridge"], ""),
+               ("Gradient boosting (tree model)", "Gradient boosting<br>(tree model)", models["hist_gb_reg"]["mae_usd"], COLORS["hgb"], "")]
+    vals = [e[2] for e in entries]
+    fig = go.Figure(go.Bar(x=[f"{label}<br><b>${v:,.2f}</b>" for _, label, v, _, _ in entries], customdata=[e[0] for e in entries], y=vals,
+                           marker=dict(color=[e[3] for e in entries], pattern_shape=[e[4] for e in entries], pattern_fgcolor="rgba(255,255,255,0.55)"),
                            hovertemplate="%{customdata}<br>%{y:$,.2f}<extra></extra>"))
     fig.add_hline(y=naive, layer="below", line_dash="dash", line_color=COLORS["naive"], line_width=1.2)
     finish(fig, 300, hover="closest")
@@ -67,10 +73,15 @@ def _mae_chart(res: dict) -> None:
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
+def _plain(label: str) -> str:
+    """A chart label without its markup (for the hover text)."""
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", label)).strip()
+
+
 def _range_chart(compare: list | None, vix: list | None) -> None:
     if not compare:
         return
-    wanted = [("EWMA Gaussian, lambda 0.94 (current)", "Recent errors<br>(this model)"), ("Empirical quantiles, all past errors", "All past errors"), ("GARCH(1,1), Gaussian", "GARCH<br>(volatility model)"), ("LSTM quantile (pinball loss)", "LSTM learns<br>the range")]
+    wanted = [("EWMA Gaussian, lambda 0.94 (current)", f"Recent errors<br>{highlight('(this model)')}"), ("Empirical quantiles, all past errors", "All past errors"), ("GARCH(1,1), Gaussian", "GARCH<br>(volatility model)"), ("LSTM quantile (pinball loss)", "LSTM learns<br>the range")]
     by = {r["method"]: r for r in compare}
     rows = [(label, by[key]["coverage"]) for key, label in wanted if key in by]
     if vix:
@@ -78,7 +89,7 @@ def _range_chart(compare: list | None, vix: list | None) -> None:
         if v:
             rows.append(("Recent errors<br>+ VIX", v["coverage"]))
     colors = [COLORS["model"] if i == 0 else COLORS["naive"] for i in range(len(rows))]
-    fig = go.Figure(go.Bar(x=[f"{r[0]}<br><b>{r[1]:.1%}</b>" for r in rows], customdata=[r[0].replace("<br>", " ") for r in rows], y=[r[1] * 100 for r in rows], marker_color=colors,
+    fig = go.Figure(go.Bar(x=[f"{r[0]}<br><b>{r[1]:.1%}</b>" for r in rows], customdata=[_plain(r[0]) for r in rows], y=[r[1] * 100 for r in rows], marker_color=colors,
                            hovertemplate="%{customdata}<br>%{y:.1f}%<extra></extra>"))
     fig.add_hline(y=90, layer="below", line_dash="dash", line_color=COLORS["actual"], line_width=1.2)
     finish(fig, 300, hover="closest")
@@ -101,7 +112,7 @@ def _direction(res: dict) -> None:
                     help="Calling up or down is a yes/no question, not how a price forecast is judged, so this is only a side check. The model says “up” on about nine days in ten, "
                          f"so its score mostly follows how often gold rose. 95% interval: {hd['ci95'][0]:.1%} to {hd['ci95'][1]:.1%}; the bars show the same intervals.")
         entries = [("Always guess up", models["drift"]["direction_from_sign"]), ("Follow last move", models["momentum_rule"]["direction_from_head"]), ("Ridge (linear)", models["ridge"]["direction_from_sign"]),
-                   ("Gradient boosting (trees)", models["hist_gb_clf"]["direction_from_head"]), ("LSTM (this model)", models["lstm"]["direction_from_head"])]
+                   ("Gradient boosting (trees)", models["hist_gb_clf"]["direction_from_head"]), (f"LSTM {highlight('(this model)')}", models["lstm"]["direction_from_head"])]
         acc = [d["acc"] * 100 for _, d in entries]
         fig = go.Figure(go.Bar(x=[f"{n}<br><b>{a:.1f}%</b>" for (n, _), a in zip(entries, acc)], y=acc, marker_color=[COLORS["naive"], COLORS["good"], COLORS["ridge"], COLORS["hgb"], COLORS["model"]],
                                error_y=dict(type="data", symmetric=False, array=[(d["ci95"][1] - d["acc"]) * 100 for _, d in entries], arrayminus=[(d["acc"] - d["ci95"][0]) * 100 for _, d in entries], thickness=1.2, width=4)))
