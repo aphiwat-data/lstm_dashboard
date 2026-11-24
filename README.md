@@ -48,6 +48,7 @@ better:
 | Direction (secondary) | 51.9% vs always-up 55.2% (p = 0.155), AUC 0.463; the model says "up" on about 88% of days |
 | 90% range | Reliable: the real close stayed inside it on 348 of 389 scored test days (89.5%, goal 90%; Kupiec p = 0.73). It is as wide as a no-change range (\$223 vs \$221), so it tracks market volatility, not model skill |
 | Live record (2026-11-17) | 11 real forecasts scored since 2026-10-28: MAE \$48.49 vs \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything; it grows by one trading day each morning |
+| Risk (E6, 2026-11-24) | Volatility is predictable and its R² is positive: Mincer-Zarnowitz R² 0.19 for the shipped EWMA and 0.29 for HAR-RV with release days (2010-2026); HAR-RV beats the EWMA (QLIKE -0.054, p < 0.001; not significant on 2025-26, p = 0.10); an LSTM does not help. The return R² (-0.011) is unchanged (§15.5) |
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
@@ -883,6 +884,7 @@ Longer-horizon p-values are adjusted for overlapping forecasts.
   and correct the *Live record* tooltip, which still says nothing can be edited afterwards.
 - **Paper: an IEEE-format paper is the next step (owner, 2026-11-17).** The advisor wants a publication; the owner will work with this README and Claude as research helpers. §15 is the research dossier: the claim the evidence supports, every number with its source file, the method in reproducible detail,
   threats to validity, extra experiments to strengthen the paper, a checked bibliography, an IEEE venue shortlist, a section-by-section writing plan and the rules for working with Claude.
+- **Risk track (E6, done 2026-11-24):** volatility is predictable (positive R²) and HAR-RV on hourly realised variance beats the shipped EWMA over 2010-2026; the price R² stays negative. Results in §15.5, protocol in §15.8; follow-ups: intervals built on the HAR-RV volatility, E3, E7-E8.
 - **Housekeeping:** detach `AmazonEC2ContainerRegistryFullAccess` from `Auto`, stop the SageMaker notebook instance when idle, and optionally refresh the 449-day window with new data (§12 item 12).
 
 ---
@@ -2032,6 +2034,7 @@ Notes:
 6. For one-day variance forecasts the EWMA with decay 0.94 has the lowest QLIKE of seven candidates (Table VIII).
 7. The evaluation pitfalls found on the way are quantified (§15.6).
 8. A serverless pipeline has produced and scored live forecasts unattended since 2026-10-30 (11 scored on 2026-11-17; descriptive only).
+9. Risk, unlike price, is predictable (E6, Tables E6-1 to E6-6): the R² of every volatility forecast against the realised variance is positive (the shipped EWMA 0.19, HAR-RV with release-day dummies 0.29 on 2010-2026), and HAR-RV built on hourly realised variance beats the shipped EWMA on the long window (QLIKE -0.054, DM p < 0.001, lower in 15 of 17 years for HAR-RV logs); on the 428-day primary window the same models are better but not significantly (p = 0.10), and an LSTM does not help.
 
 **The evidence does not support (do not write):**
 - That the LSTM forecasts gold prices accurately, beats its baselines or is useful for trading. On this evidence the opposite holds, and no strategy, transaction cost or economic value was tested.
@@ -2039,6 +2042,7 @@ Notes:
 - That macro, calendar or positioning inputs cannot help: with 449 days the test has limited power, so the correct wording is "no evidence of an effect", not "no effect".
 - That one input set is best: FOMC+CPI shows 57.5% accuracy and AUC 0.520, but p against always-up is 0.367, and with five variants and many metrics some small p-values appear by chance.
 - Generality: one asset (COMEX gold futures as a proxy for XAU/USD), one 449-day window, mostly a rising market (55.2% up days).
+- That HAR-RV beats the shipped EWMA with statistical significance on the 2025-2026 window (p = 0.10 for HAR-RV-X; the significant result is the long window), that the LSTM helps volatility forecasts (it does not), or that the volatility result changes the return R² (it does not).
 - That the live forecasts are "pre-registered" or immutable: the log can be overwritten (§12 item 19).
 - That the 89.5% coverage is a clean out-of-sample figure: the decay 0.94 was fixed in advance, but the alternatives were compared on the same window, so it is slightly optimistic.
 
@@ -2192,7 +2196,7 @@ Reading: the shipped EWMA band is the only method whose coverage a Kupiec test a
 | EWMA 0.94 + EWMA 0.985 | -7.278 | +0.077 | 0.050 | 1.41 |
 | EWMA 0.94 + EWMA 0.985 + VIX | -7.267 | +0.088 | 0.073 | 1.38 |
 
-Reading: EWMA 0.94 has the lowest QLIKE; the differences from GARCH(1,1) (p = 0.069) and from EWMA 0.94 + EWMA 0.985 (p = 0.050) are borderline and untested for multiplicity. Risk is weakly predictable even though price is not: a Mincer-Zarnowitz regression of the realised squared return on the EWMA variance forecast gives R² = 0.020 (slope 0.55), and the Spearman correlation between the realised |return| and the forecast sigma is +0.203 over the 449 days (positive but small, as expected when one squared return is a noisy proxy for a day's variance; angle B in §15.8, experiment E6, would use realised volatility from the hourly data).
+Reading: EWMA 0.94 has the lowest QLIKE; the differences from GARCH(1,1) (p = 0.069) and from EWMA 0.94 + EWMA 0.985 (p = 0.050) are borderline and untested for multiplicity. Risk is weakly predictable even though price is not: a Mincer-Zarnowitz regression of the realised squared return on the EWMA variance forecast gives R² = 0.020 (slope 0.55), and the Spearman correlation between the realised |return| and the forecast sigma is +0.203 over the 449 days (positive but small, as expected when one squared return is a noisy proxy for a day's variance). E6, which uses realised variance from the hourly data instead, finds a Mincer-Zarnowitz R² of 0.17 to 0.30 (Tables E6-1 to E6-6).
 
 **Table IX. Hourly side experiments** (Dukascopy XAU/USD, test 2025+, `hourly/results/`; window 48 bars, 21 features, two-head GRU; always-up is the baseline). Bid prices (Phase 5), then mid prices (Phase 6):
 
@@ -2221,6 +2225,110 @@ Adding silver, EUR/USD, S&P 500 and a dollar-index proxy changed nothing (IC wit
 | 120 | 71.1% | 68.9% | 2 |
 
 **Live record (descriptive, 2026-11-17).** 12 forecasts logged since 2026-10-28, 11 scored: MAE \$48.49 against \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything.
+
+### E6 results (Tables E6-1 to E6-6) (2026-11-24; protocol in §15.8; code `daily/volatility_har_experiment.py`; files `daily/results/paper_e6/e6_summary.json` and `e6_primary_forecasts.csv`)
+*Primary window: 428 origins (2025-01-09 to 2026-09-24; the hourly data end on 2026-09-25). Long window: 4,118 origins (2010-01-04 to 2026-09-24; no LSTM). Settlement boundary chosen on the development window: 13:30 ET. "QLIKE minus EWMA" is negative when the model is better; the DM test uses a Bartlett HAC variance with 5 lags and the Bonferroni level for the six comparisons is 0.0083. The multiplier "matched" means the EWMA and GARCH forecasts were rescaled to the RV level with a constant fitted on the training window.*
+
+**Table E6-1. Primary window, target = realised variance of the next day.**
+
+| Variance forecast | QLIKE | QLIKE minus EWMA 0.94 (matched) | DM p | Mincer-Zarnowitz R² | MZ slope | Mean forecast / mean target |
+|---|---|---|---|---|---|---|
+| EWMA 0.94 (matched) | -7.564 | +0.000 | – | 0.172 | 0.96 | 1.00 |
+| GARCH(1,1) (matched) | -7.545 | +0.020 | 0.356 | 0.189 | 1.11 | 0.82 |
+| EWMA 0.94 of RV | -7.552 | +0.012 | 0.381 | 0.136 | 0.86 | 0.97 |
+| HAR-RV levels | -7.590 | -0.025 | 0.343 | 0.209 | 0.53 | 0.92 |
+| HAR-RV logs | -7.594 | -0.030 | 0.147 | 0.239 | 1.27 | 0.80 |
+| HAR-RV-X | -7.625 | -0.060 | 0.103 | 0.302 | 1.33 | 0.81 |
+| LSTM-RV | -7.493 | +0.071 | 0.171 | 0.130 | 1.60 | 0.67 |
+| EWMA 0.94 (shipped, unmatched) | -7.566 | -0.001 | 0.882 | 0.185 | 0.97 | 1.08 |
+
+**Table E6-2. Long window, target = realised variance of the next day.**
+
+| Variance forecast | QLIKE | QLIKE minus EWMA 0.94 (matched) | DM p | Mincer-Zarnowitz R² | MZ slope | Mean forecast / mean target |
+|---|---|---|---|---|---|---|
+| EWMA 0.94 (matched) | -8.310 | +0.000 | – | 0.187 | 0.81 | 1.05 |
+| GARCH(1,1) (matched) | -8.295 | +0.015 | 0.178 | 0.189 | 1.08 | 1.02 |
+| EWMA 0.94 of RV | -8.321 | -0.011 | 0.133 | 0.175 | 0.89 | 1.00 |
+| HAR-RV levels | -8.335 | -0.025 | 0.001 | 0.275 | 0.96 | 1.00 |
+| HAR-RV logs | -8.339 | -0.029 | <0.001 | 0.246 | 1.25 | 0.94 |
+| HAR-RV-X | -8.364 | -0.054 | <0.001 | 0.289 | 1.28 | 0.94 |
+| EWMA 0.94 (shipped, unmatched) | -8.315 | -0.005 | 0.052 | 0.195 | 0.81 | 1.10 |
+
+**Table E6-3. The same forecasts scored against the squared futures return of the next day** (the product's own, very noisy, target; primary window, then long window).
+
+| Variance forecast | QLIKE | QLIKE minus EWMA 0.94 (matched) | DM p | Mincer-Zarnowitz R² | MZ slope | Mean forecast / mean target |
+|---|---|---|---|---|---|---|
+| EWMA 0.94 (matched) | -7.311 | +0.000 | – | 0.019 | 0.56 | 0.92 |
+| GARCH(1,1) (matched) | -7.222 | +0.089 | 0.042 | 0.019 | 0.60 | 0.75 |
+| EWMA 0.94 of RV | -7.350 | -0.039 | 0.462 | 0.034 | 0.74 | 0.89 |
+| HAR-RV levels | -7.362 | -0.051 | 0.584 | 0.086 | 0.59 | 0.84 |
+| HAR-RV logs | -7.367 | -0.056 | 0.435 | 0.074 | 1.21 | 0.73 |
+| HAR-RV-X | -7.379 | -0.068 | 0.312 | 0.081 | 1.19 | 0.74 |
+| LSTM-RV | -7.229 | +0.082 | 0.150 | 0.030 | 1.32 | 0.61 |
+| EWMA 0.94 (shipped, unmatched) | -7.337 | -0.026 | 0.115 | 0.020 | 0.55 | 0.98 |
+
+| Variance forecast | QLIKE | QLIKE minus EWMA 0.94 (matched) | DM p | Mincer-Zarnowitz R² | MZ slope | Mean forecast / mean target |
+|---|---|---|---|---|---|---|
+| EWMA 0.94 (matched) | -8.154 | +0.000 | – | 0.042 | 0.70 | 0.95 |
+| GARCH(1,1) (matched) | -8.153 | +0.001 | 0.955 | 0.035 | 0.84 | 0.93 |
+| EWMA 0.94 of RV | -8.190 | -0.037 | 0.034 | 0.054 | 0.90 | 0.91 |
+| HAR-RV levels | -8.199 | -0.045 | 0.007 | 0.093 | 1.01 | 0.91 |
+| HAR-RV logs | -8.191 | -0.038 | 0.011 | 0.072 | 1.22 | 0.85 |
+| HAR-RV-X | -8.237 | -0.083 | <0.001 | 0.085 | 1.26 | 0.86 |
+| EWMA 0.94 (shipped, unmatched) | -8.169 | -0.015 | <0.001 | 0.042 | 0.68 | 1.00 |
+
+**Table E6-4. QLIKE by year, long window** (target = realised variance).
+
+| Year | Days | EWMA 0.94 (matched) | GARCH(1,1) (matched) | HAR-RV logs | HAR-RV-X |
+|---|---|---|---|---|---|
+| 2010 | 252 | -8.140 | -8.138 | -8.165 | -8.166 |
+| 2011 | 252 | -7.872 | -7.874 | -7.915 | -7.924 |
+| 2012 | 250 | -8.345 | -8.314 | -8.369 | -8.372 |
+| 2013 | 252 | -7.843 | -7.842 | -7.820 | -7.849 |
+| 2014 | 252 | -8.522 | -8.534 | -8.545 | -8.556 |
+| 2015 | 252 | -8.360 | -8.394 | -8.380 | -8.424 |
+| 2016 | 250 | -8.137 | -8.182 | -8.221 | -8.243 |
+| 2017 | 251 | -9.070 | -9.017 | -9.071 | -9.101 |
+| 2018 | 250 | -9.158 | -9.169 | -9.190 | -9.193 |
+| 2019 | 252 | -8.919 | -8.845 | -8.934 | -8.982 |
+| 2020 | 230 | -7.821 | -7.632 | -7.925 | -7.918 |
+| 2021 | 231 | -8.374 | -8.390 | -8.379 | -8.415 |
+| 2022 | 251 | -8.282 | -8.304 | -8.335 | -8.369 |
+| 2023 | 251 | -8.655 | -8.611 | -8.630 | -8.670 |
+| 2024 | 207 | -8.405 | -8.449 | -8.470 | -8.542 |
+| 2025 | 252 | -7.995 | -7.970 | -8.027 | -8.012 |
+| 2026 | 183 | -7.000 | -6.974 | -7.026 | -7.117 |
+
+HAR-RV logs has the lower QLIKE than EWMA 0.94 in 15 of 17 years.
+
+**Table E6-5. Pre-specified pairs** (first model minus second).
+
+| Window | Pair (first minus second, QLIKE on RV) | QLIKE difference | DM p |
+|---|---|---|---|
+| primary | HAR-RV-X vs HAR-RV logs | -0.0303 | 0.238 |
+| primary | LSTM-RV vs HAR-RV-X | +0.1317 | 0.072 |
+| primary | HAR-RV logs vs GARCH(1,1) (matched) | -0.0497 | 0.089 |
+| long | HAR-RV-X vs HAR-RV logs | -0.0251 | <0.001 |
+| long | HAR-RV logs vs GARCH(1,1) (matched) | -0.0440 | <0.001 |
+
+**Table E6-6. Realised variance on scheduled-release days, 2004-2026** (descriptive; the day-of flags use the futures-day label of the target day).
+
+| Day type | Event days | Mean RV on event days / other days | Mean log difference | Welch t |
+|---|---|---|---|---|
+| NFP day | 249 | 1.21 | +0.313 | +5.4 |
+| CPI day | 262 | 1.07 | +0.120 | +2.0 |
+| FOMC decision day | 193 | 0.74 | -0.279 | -3.8 |
+| day after FOMC | 194 | 2.13 | +0.738 | +10.5 |
+
+**Reading (written after the results; nothing in the protocol was changed).**
+1. *Risk is predictable, and the R² is positive for every model.* Against the realised variance the Mincer-Zarnowitz R² of the level-matched shipped EWMA is 0.17 (primary) and 0.19 (long); HAR-RV-X reaches 0.30 and 0.29. This is a risk result: the R² of the *return* forecast (Table III, -0.011) is unchanged.
+2. *HAR-RV beats the shipped EWMA, but the evidence depends on the window.* On the long window all three HAR variants have a lower QLIKE (HAR-RV-X -0.054, logs -0.029, levels -0.025; DM p <0.001, <0.001, 0.001, all below the Bonferroni level) and HAR-RV logs wins in 15 of 17 years. On the 428-day primary window the same models are also better (-0.060, -0.030, -0.025) but not significantly (p = 0.103, 0.147, 0.343).
+3. *Release days matter.* HAR-RV-X beats HAR-RV logs on the long window (-0.025, p <0.001); on the primary window the sign is the same and the difference is not significant (p = 0.238). Realised variance is 1.21 times higher on NFP days (Welch t = 5.4), 1.07 times on CPI days (t = 2.0), 0.74 times on FOMC decision days (t = -3.8) and 2.13 times on the day after (t = 10.5): the 14:00 ET announcement falls after the 13:30 ET settlement, so its reaction lands in the next futures day (the model includes both dummies).
+4. *GARCH(1,1) and the EWMA of realised variance are no better than the shipped EWMA* (primary p = 0.356 and 0.381; long p = 0.178 and 0.133); HAR-RV logs beats GARCH on the long window (-0.044, p <0.001).
+5. *The LSTM does not help.* LSTM-RV has QLIKE +0.071 against the shipped EWMA (p = 0.171), +0.132 against HAR-RV-X with the same inputs (p = 0.072) and a Mincer-Zarnowitz R² of 0.13.
+6. *Against the squared return the ranking is the same on the long window* (HAR-RV-X -0.083, p <0.001; R² 0.042 to 0.085) and not significant on the primary window (p = 0.312); the squared return is a noisy proxy, so low R² there is expected.
+7. *Caveats.* The proxy is hourly bid-based realised variance with a settlement boundary chosen on 2006-2007; the DM test has no small-sample correction; the primary window lies inside the long window; the HAR logs and HAR-RV-X forecasts are low on the primary window (mean forecast 0.81 of the mean realised variance) because 2025-2026 variance was higher than in the training windows; HAR-RV needs hourly data, which the daily pipeline does not collect, so using it in the shipped band would be a new data feed.
+8. *Deviations from the protocol.* None in the models or the scoring. The experiment script stopped three times at its consistency check with the shipped EWMA before any model had run (the shipped run lacks the embargo days at the split boundaries and the trading day 2026-04-06, so the two EWMA paths differ by up to 10% in the first rows and up to 3% later); the check was loosened in code each time and no model result was seen before the final run. No exploratory variant was run after the results.
 
 ### 15.6 Evaluation pitfalls found in this project (the audit angle)
 **Table XI. Evaluation pitfalls.**
@@ -2259,7 +2367,7 @@ Each runs in its own results folder (for example `daily/results/paper_*/`) so th
 | E3 | Multiplicity correction | Could a "best" variant be luck, and is anything better than no-change after correction? | Hansen SPA and the model confidence set over every model and input set tried (about 30 candidates); the `arch` package has both | 1-2 days | Nothing survives |
 | E4 | Long window and power analysis | Does the null hold across regimes? | Walk-forward over about 2010-2026 (retrain every 20 days to cut compute); minimum detectable MAE gain at n = 449 | several days | Null stays; shows low power in 2025-26 |
 | E5 | Multi-asset replication | Is it gold-specific? | Same pipeline on silver, EUR/USD, S&P 500, 10-year yield | several days | Null stays; supports a general audit |
-| E6 | Volatility track (the positive-result candidate) | Is risk predictable when price is not? | Realised volatility from the hourly data; HAR-RV with NFP, FOMC and CPI days against EWMA, GARCH and an LSTM; QLIKE and DM | a week | Probably a positive result |
+| E6 | Volatility track (the positive-result candidate) | Is risk predictable when price is not? | Realised volatility from the hourly data; HAR-RV with NFP, FOMC and CPI days against EWMA, GARCH and an LSTM; QLIKE and DM | done 2026-11-24 (452 s of compute) | **Done, protocol frozen first:** positive R² for risk; HAR-RV beats the shipped EWMA on 2010-2026 (p < 0.001) and, not significantly, on the 428-day window; the LSTM does not help (Tables E6-1 to E6-6) |
 | E7 | Conformal intervals | Can distribution-free intervals match EWMA? | Split conformal and adaptive conformal inference around the LSTM and no-change centres | 2-3 days | Comparable coverage |
 | E8 | Conditional coverage | Are violations independent? | Christoffersen independence and conditional-coverage tests on the current bands | hours | Mild clustering likely |
 | E9 | Forecast encompassing | Does the LSTM add anything to no-change? | Mincer-Zarnowitz regression of realised on forecast returns; encompassing test | hours | Slope near 0 |
