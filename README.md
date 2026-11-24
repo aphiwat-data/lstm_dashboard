@@ -2122,7 +2122,7 @@ Notes:
 | Gradient boosting (regressor) | 50.68 | 75.05 | 1.237 | +8.7% | <0.001 | <0.001 | -0.186 | -0.1833 | -0.034 | 0.473 |
 | **LSTM (walk-forward)** | 46.83 | 69.45 | 1.147 | +0.4% | 0.400 | 0.385 | -0.014 | -0.0113 | +0.006 | 0.896 |
 
-Reading: the LSTM's MAE is 0.4% above no-change (p = 0.385); Ridge and gradient boosting are significantly worse; every learned model has a negative out-of-sample R²; the rolling drift is level with no-change.
+Reading: the LSTM's MAE is 0.4% above no-change (p = 0.385); Ridge and gradient boosting are significantly worse; every learned model has a negative out-of-sample R²; the rolling drift is level with no-change. All honest R² definitions are negative for the LSTM: -0.014 on returns, -0.011 out of sample against a zero forecast and -0.011 against the rolling mean (the no-change forecast scores -0.003 and -0.001). The R² of the *price level* is 0.989 for the LSTM and 0.989 for no-change (0.9892 against 0.9894): it looks excellent and says nothing, because prices are highly autocorrelated (pitfall 13).
 
 **Table IV. Direction (secondary check).**
 
@@ -2192,7 +2192,7 @@ Reading: the shipped EWMA band is the only method whose coverage a Kupiec test a
 | EWMA 0.94 + EWMA 0.985 | -7.278 | +0.077 | 0.050 | 1.41 |
 | EWMA 0.94 + EWMA 0.985 + VIX | -7.267 | +0.088 | 0.073 | 1.38 |
 
-Reading: EWMA 0.94 has the lowest QLIKE; the differences from GARCH(1,1) (p = 0.069) and from EWMA 0.94 + EWMA 0.985 (p = 0.050) are borderline and untested for multiplicity.
+Reading: EWMA 0.94 has the lowest QLIKE; the differences from GARCH(1,1) (p = 0.069) and from EWMA 0.94 + EWMA 0.985 (p = 0.050) are borderline and untested for multiplicity. Risk is weakly predictable even though price is not: a Mincer-Zarnowitz regression of the realised squared return on the EWMA variance forecast gives R² = 0.020 (slope 0.55), and the Spearman correlation between the realised |return| and the forecast sigma is +0.203 over the 449 days (positive but small, as expected when one squared return is a noisy proxy for a day's variance; angle B in §15.8, experiment E6, would use realised volatility from the hourly data).
 
 **Table IX. Hourly side experiments** (Dukascopy XAU/USD, test 2025+, `hourly/results/`; window 48 bars, 21 features, two-head GRU; always-up is the baseline). Bid prices (Phase 5), then mid prices (Phase 6):
 
@@ -2239,6 +2239,7 @@ Adding silver, EUR/USD, S&P 500 and a dollar-index proxy changed nothing (IC wit
 | 10 | Test choices that could change the verdict | DM lag 0 against 24 | p = 0.40 against 0.385, conclusion unchanged | Phase 10, Table III |
 | 11 | Comparing alternatives on the window used to report the winner | The EWMA decay was fixed in advance, the alternatives were compared on the same window | The 89.5% is slightly optimistic | Phase 10 |
 | 12 | Claiming more than was live | "Every forecast is saved before the day" is true of live forecasts only; the replayed ones were not | Wording corrected | Phase 13 |
+| 13 | R² on price levels | The R² of the forecast price against the actual price is 0.989 for the LSTM and 0.989 for the no-change forecast (0.9892 against 0.9894), because prices are highly autocorrelated; on returns the LSTM's R² is -0.014 | A positive-looking R² that no benchmark would fail to reach; the early "R² about 0.87" was this trap (§12 item 2) | Phase 7, Table III |
 
 ### 15.7 Threats to validity and limitations (write these into the paper)
 - **Construct.** Gold futures (`GC=F`, a continuous contract) stand in for spot XAU/USD. The headline MAE is in dollars (it depends on the price level), the models predict log-returns, and the DM test uses squared return errors: say which loss each statement refers to (E1 adds an absolute-error DM and bootstrap intervals).
