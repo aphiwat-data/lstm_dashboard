@@ -346,9 +346,10 @@ def main() -> None:
     # consistency checks with the main run (no model comparison involved)
     assert np.allclose(px_close(a, prim), p["meta_close"].to_numpy(), atol=1e-6), "daily closes differ from the main run"
     v_sig = pd.read_csv(HERE / "results" / "volatility_forecast.csv")["sigma_ewma_pct"].to_numpy() / 100
-    # the shipped EWMA ran on a dataset that lacks the embargo days at the split boundaries, so the two differ by up to 10% in the first test rows and by under 1% later
+    # the shipped EWMA ran on a dataset that lacks the embargo days at the split boundaries and a few trading days (for example 2026-04-06), so the two differ by up to 10% in the
+    # first test rows and by up to 3% later; a shift by one day would give a median difference of 2.5%, so the median bound below guards against a misalignment
     rel = np.abs(np.sqrt(a["v_ewma"][prim]) / v_sig - 1)
-    assert np.median(rel) < 1e-3 and rel[100:].max() < 1e-2, "EWMA 0.94 differs from the shipped one"
+    assert np.median(rel) < 1e-3 and rel[100:].max() < 5e-2, "EWMA 0.94 differs from the shipped one"
     prim = prim[(prim + 1 <= a["last_rv"]) & np.isfinite(a["inp"]["y"][prim])]
     long_rows = np.flatnonzero(dates >= LONG_START)
     long_rows = long_rows[(long_rows + 1 <= a["last_rv"])]
