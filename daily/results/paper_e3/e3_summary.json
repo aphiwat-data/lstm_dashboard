@@ -1,0 +1,949 @@
+{
+ "protocol": {
+  "block": 10,
+  "reps": 10000,
+  "seed": 20261128,
+  "stepm_size": 0.05,
+  "mcs_size": 0.1,
+  "hac_lag": 5
+ },
+ "families": {
+  "P1": {
+   "k": 16,
+   "n": 449,
+   "dropped_degenerate": [],
+   "spa_p": {
+    "lower": 0.6228,
+    "consistent": 0.7086,
+    "upper": 0.8794
+   },
+   "reality_check_p": 0.8882,
+   "stepm_superior": [],
+   "mcs_included": [
+    "BENCHMARK",
+    "Drift",
+    "LSTM [+ COT]",
+    "LSTM [+ FOMC+CPI]",
+    "LSTM [+ NFP]",
+    "LSTM [+ macro]",
+    "LSTM [price only]",
+    "Ridge [price only]"
+   ],
+   "mcs_excluded": [
+    "Boosting [+ COT]",
+    "Boosting [+ FOMC+CPI]",
+    "Boosting [+ NFP]",
+    "Boosting [+ macro]",
+    "Boosting [price only]",
+    "Ridge [+ COT]",
+    "Ridge [+ FOMC+CPI]",
+    "Ridge [+ NFP]",
+    "Ridge [+ macro]"
+   ],
+   "mcs_pvalues": {
+    "Boosting [+ COT]": 0.0028,
+    "Ridge [+ FOMC+CPI]": 0.007,
+    "Ridge [+ COT]": 0.007,
+    "Boosting [price only]": 0.007,
+    "Boosting [+ FOMC+CPI]": 0.0096,
+    "Ridge [+ NFP]": 0.021,
+    "Boosting [+ NFP]": 0.021,
+    "Ridge [+ macro]": 0.0223,
+    "Boosting [+ macro]": 0.0379,
+    "Ridge [price only]": 0.1366,
+    "LSTM [+ macro]": 0.7438,
+    "LSTM [price only]": 0.7991,
+    "LSTM [+ NFP]": 0.7991,
+    "LSTM [+ COT]": 0.9227,
+    "LSTM [+ FOMC+CPI]": 0.9949,
+    "BENCHMARK": 0.9949,
+    "Drift": 1.0
+   },
+   "spa_consistent_p_by_block": {
+    "5": 0.7252,
+    "20": 0.6961,
+    "10": 0.7086
+   },
+   "candidates": [
+    {
+     "name": "Drift",
+     "mean_loss": 0.0002551320689425189,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": 1.4152589905467695e-07,
+     "hac_t": 0.06593028713410706,
+     "p_one_sided": 0.47371666369425514,
+     "holm_p": 1.0,
+     "mcs_p": 1.0
+    },
+    {
+     "name": "Ridge [price only]",
+     "mean_loss": 0.0002660197154647037,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -1.0746120623130133e-05,
+     "hac_t": -1.941537997942149,
+     "p_one_sided": 0.9739034724420227,
+     "holm_p": 1.0,
+     "mcs_p": 0.1366
+    },
+    {
+     "name": "Boosting [price only]",
+     "mean_loss": 0.0003019055033395397,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -4.6631908497966094e-05,
+     "hac_t": -4.220862724759457,
+     "p_one_sided": 0.9999878315443204,
+     "holm_p": 1.0,
+     "mcs_p": 0.007
+    },
+    {
+     "name": "LSTM [price only]",
+     "mean_loss": 0.0002580096208348376,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -2.73602599326401e-06,
+     "hac_t": -0.820613687443509,
+     "p_one_sided": 0.7940668256319826,
+     "holm_p": 1.0,
+     "mcs_p": 0.7991
+    },
+    {
+     "name": "Ridge [+ macro]",
+     "mean_loss": 0.0002759168972897876,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -2.0643302448214025e-05,
+     "hac_t": -2.6711975148982465,
+     "p_one_sided": 0.9962209420682986,
+     "holm_p": 1.0,
+     "mcs_p": 0.0223
+    },
+    {
+     "name": "Boosting [+ macro]",
+     "mean_loss": 0.00028813052545916283,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -3.285693061758927e-05,
+     "hac_t": -3.035858194720749,
+     "p_one_sided": 0.9988007392996778,
+     "holm_p": 1.0,
+     "mcs_p": 0.0379
+    },
+    {
+     "name": "LSTM [+ macro]",
+     "mean_loss": 0.00025864768193433054,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -3.374087092756967e-06,
+     "hac_t": -0.7318166186112836,
+     "p_one_sided": 0.7678597478581659,
+     "holm_p": 1.0,
+     "mcs_p": 0.7438
+    },
+    {
+     "name": "Ridge [+ NFP]",
+     "mean_loss": 0.00027715373267132116,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -2.1880137829747558e-05,
+     "hac_t": -2.8288694619112524,
+     "p_one_sided": 0.9976643625941394,
+     "holm_p": 1.0,
+     "mcs_p": 0.021
+    },
+    {
+     "name": "Boosting [+ NFP]",
+     "mean_loss": 0.00029316062019435474,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -3.788702535278109e-05,
+     "hac_t": -3.4675898877537175,
+     "p_one_sided": 0.9997374259625961,
+     "holm_p": 1.0,
+     "mcs_p": 0.021
+    },
+    {
+     "name": "LSTM [+ NFP]",
+     "mean_loss": 0.0002576853177299839,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -2.4117228884103465e-06,
+     "hac_t": -0.5286280600143636,
+     "p_one_sided": 0.7014682544901154,
+     "holm_p": 1.0,
+     "mcs_p": 0.7991
+    },
+    {
+     "name": "Ridge [+ FOMC+CPI]",
+     "mean_loss": 0.00028153142401357795,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -2.6257829172004382e-05,
+     "hac_t": -3.3550527902942373,
+     "p_one_sided": 0.9996032507974812,
+     "holm_p": 1.0,
+     "mcs_p": 0.007
+    },
+    {
+     "name": "Boosting [+ FOMC+CPI]",
+     "mean_loss": 0.00029488128741936737,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -3.960769257779378e-05,
+     "hac_t": -3.7276678950161917,
+     "p_one_sided": 0.9999033700938439,
+     "holm_p": 1.0,
+     "mcs_p": 0.0096
+    },
+    {
+     "name": "LSTM [+ FOMC+CPI]",
+     "mean_loss": 0.0002553969273375788,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -1.2333249600526291e-07,
+     "hac_t": -0.03216785394893789,
+     "p_one_sided": 0.5128309041309755,
+     "holm_p": 1.0,
+     "mcs_p": 0.9949
+    },
+    {
+     "name": "Ridge [+ COT]",
+     "mean_loss": 0.0002829528462255251,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -2.7679251383951487e-05,
+     "hac_t": -3.220356220346331,
+     "p_one_sided": 0.9993598430112206,
+     "holm_p": 1.0,
+     "mcs_p": 0.007
+    },
+    {
+     "name": "Boosting [+ COT]",
+     "mean_loss": 0.0002921689690909008,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -3.689537424932726e-05,
+     "hac_t": -4.086675724906969,
+     "p_one_sided": 0.9999781200964011,
+     "holm_p": 1.0,
+     "mcs_p": 0.0028
+    },
+    {
+     "name": "LSTM [+ COT]",
+     "mean_loss": 0.0002563229795714958,
+     "benchmark_mean_loss": 0.0002552735948415736,
+     "mean_diff": -1.049384729922211e-06,
+     "hac_t": -0.25507787439183727,
+     "p_one_sided": 0.6006685236383557,
+     "holm_p": 1.0,
+     "mcs_p": 0.9227
+    }
+   ],
+   "nominal_rejections_5pct": 0,
+   "expected_rejections_under_null": 0.8
+  },
+  "P2": {
+   "k": 16,
+   "n": 449,
+   "dropped_degenerate": [],
+   "spa_p": {
+    "lower": 0.305,
+    "consistent": 0.355,
+    "upper": 0.5568
+   },
+   "reality_check_p": 0.7915,
+   "stepm_superior": [],
+   "mcs_included": [
+    "BENCHMARK",
+    "Drift",
+    "LSTM [+ COT]",
+    "LSTM [+ FOMC+CPI]",
+    "LSTM [+ NFP]",
+    "LSTM [+ macro]",
+    "LSTM [price only]"
+   ],
+   "mcs_excluded": [
+    "Boosting [+ COT]",
+    "Boosting [+ FOMC+CPI]",
+    "Boosting [+ NFP]",
+    "Boosting [+ macro]",
+    "Boosting [price only]",
+    "Ridge [+ COT]",
+    "Ridge [+ FOMC+CPI]",
+    "Ridge [+ NFP]",
+    "Ridge [+ macro]",
+    "Ridge [price only]"
+   ],
+   "mcs_pvalues": {
+    "Ridge [+ COT]": 0.0008,
+    "Boosting [+ COT]": 0.0015,
+    "Ridge [+ FOMC+CPI]": 0.002,
+    "Boosting [+ FOMC+CPI]": 0.0026,
+    "Ridge [+ NFP]": 0.0028,
+    "Ridge [+ macro]": 0.0028,
+    "Boosting [+ NFP]": 0.0029,
+    "Boosting [price only]": 0.0063,
+    "Boosting [+ macro]": 0.0067,
+    "Ridge [price only]": 0.0452,
+    "LSTM [+ macro]": 0.3901,
+    "LSTM [+ NFP]": 0.3901,
+    "LSTM [price only]": 0.57,
+    "LSTM [+ COT]": 0.6304,
+    "BENCHMARK": 0.6304,
+    "LSTM [+ FOMC+CPI]": 0.9756,
+    "Drift": 1.0
+   },
+   "spa_consistent_p_by_block": {
+    "5": 0.3394,
+    "20": 0.3666,
+    "10": 0.355
+   },
+   "candidates": [
+    {
+     "name": "Drift",
+     "mean_loss": 46.36380074931144,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": 0.26738976519997004,
+     "hac_t": 1.0762325322937367,
+     "p_one_sided": 0.14091163684463792,
+     "holm_p": 1.0,
+     "mcs_p": 1.0
+    },
+    {
+     "name": "Ridge [price only]",
+     "mean_loss": 47.87495757182842,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -1.2437670573170003,
+     "hac_t": -2.1529046153709923,
+     "p_one_sided": 0.9843369121513084,
+     "holm_p": 1.0,
+     "mcs_p": 0.0452
+    },
+    {
+     "name": "Boosting [price only]",
+     "mean_loss": 50.679016634632184,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -4.047826120120765,
+     "hac_t": -3.411560155099257,
+     "p_one_sided": 0.9996770387633306,
+     "holm_p": 1.0,
+     "mcs_p": 0.0063
+    },
+    {
+     "name": "LSTM [price only]",
+     "mean_loss": 46.83339373510878,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -0.20220322059736962,
+     "hac_t": -0.5032717091074557,
+     "p_one_sided": 0.6926133729372277,
+     "holm_p": 1.0,
+     "mcs_p": 0.57
+    },
+    {
+     "name": "Ridge [+ macro]",
+     "mean_loss": 48.9466676546683,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -2.3154771401568857,
+     "hac_t": -3.0265731890989085,
+     "p_one_sided": 0.9987632853311254,
+     "holm_p": 1.0,
+     "mcs_p": 0.0028
+    },
+    {
+     "name": "Boosting [+ macro]",
+     "mean_loss": 50.6109671041863,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -3.97977658967489,
+     "hac_t": -3.4197867577414702,
+     "p_one_sided": 0.999686648793592,
+     "holm_p": 1.0,
+     "mcs_p": 0.0067
+    },
+    {
+     "name": "LSTM [+ macro]",
+     "mean_loss": 46.803394813270195,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -0.17220429875878288,
+     "hac_t": -0.3349677798478012,
+     "p_one_sided": 0.6311753042507913,
+     "holm_p": 1.0,
+     "mcs_p": 0.3901
+    },
+    {
+     "name": "Ridge [+ NFP]",
+     "mean_loss": 49.073173652228824,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -2.4419831377174033,
+     "hac_t": -3.185988906743076,
+     "p_one_sided": 0.999278699356848,
+     "holm_p": 1.0,
+     "mcs_p": 0.0028
+    },
+    {
+     "name": "Boosting [+ NFP]",
+     "mean_loss": 51.178797633836425,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -4.547607119325021,
+     "hac_t": -3.910369334408397,
+     "p_one_sided": 0.9999539224489296,
+     "holm_p": 1.0,
+     "mcs_p": 0.0029
+    },
+    {
+     "name": "LSTM [+ NFP]",
+     "mean_loss": 46.741465567541105,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -0.11027505302968722,
+     "hac_t": -0.22637478769180308,
+     "p_one_sided": 0.5895450322539926,
+     "holm_p": 1.0,
+     "mcs_p": 0.3901
+    },
+    {
+     "name": "Ridge [+ FOMC+CPI]",
+     "mean_loss": 49.57950809850227,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -2.948317583990854,
+     "hac_t": -3.533106585484758,
+     "p_one_sided": 0.9997946465727306,
+     "holm_p": 1.0,
+     "mcs_p": 0.002
+    },
+    {
+     "name": "Boosting [+ FOMC+CPI]",
+     "mean_loss": 51.385069989149784,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -4.75387947463837,
+     "hac_t": -4.103384638757197,
+     "p_one_sided": 0.9999796425243922,
+     "holm_p": 1.0,
+     "mcs_p": 0.0026
+    },
+    {
+     "name": "LSTM [+ FOMC+CPI]",
+     "mean_loss": 46.37663118358401,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": 0.2545593309274016,
+     "hac_t": 0.5702644458161978,
+     "p_one_sided": 0.28424917580014997,
+     "holm_p": 1.0,
+     "mcs_p": 0.9756
+    },
+    {
+     "name": "Ridge [+ COT]",
+     "mean_loss": 49.70936817253854,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -3.0781776580271223,
+     "hac_t": -3.393486175660384,
+     "p_one_sided": 0.9996549547920174,
+     "holm_p": 1.0,
+     "mcs_p": 0.0008
+    },
+    {
+     "name": "Boosting [+ COT]",
+     "mean_loss": 51.2714838446547,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": -4.640293330143283,
+     "hac_t": -4.305660345241028,
+     "p_one_sided": 0.9999916755828139,
+     "holm_p": 1.0,
+     "mcs_p": 0.0015
+    },
+    {
+     "name": "LSTM [+ COT]",
+     "mean_loss": 46.62167361478947,
+     "benchmark_mean_loss": 46.63119051451142,
+     "mean_diff": 0.009516899721941228,
+     "hac_t": 0.019702547996574414,
+     "p_one_sided": 0.4921403290839471,
+     "holm_p": 1.0,
+     "mcs_p": 0.6304
+    }
+   ],
+   "nominal_rejections_5pct": 0,
+   "expected_rejections_under_null": 0.8
+  },
+  "D": {
+   "k": 20,
+   "n": 449,
+   "dropped_degenerate": [],
+   "spa_p": {
+    "lower": 0.2692,
+    "consistent": 0.558,
+    "upper": 0.6074
+   },
+   "reality_check_p": 0.6459,
+   "stepm_superior": [],
+   "mcs_included": [
+    "BENCHMARK",
+    "Boosting classifier [+ COT]",
+    "Boosting classifier [+ macro]",
+    "Boosting classifier [price only]",
+    "Boosting regressor [+ COT]",
+    "Boosting regressor [+ FOMC+CPI]",
+    "Boosting regressor [+ NFP]",
+    "Boosting regressor [+ macro]",
+    "Boosting regressor [price only]",
+    "LSTM [+ COT]",
+    "LSTM [+ FOMC+CPI]",
+    "LSTM [+ NFP]",
+    "LSTM [+ macro]",
+    "LSTM [price only]",
+    "Ridge [price only]"
+   ],
+   "mcs_excluded": [
+    "Boosting classifier [+ FOMC+CPI]",
+    "Boosting classifier [+ NFP]",
+    "Ridge [+ COT]",
+    "Ridge [+ FOMC+CPI]",
+    "Ridge [+ NFP]",
+    "Ridge [+ macro]"
+   ],
+   "mcs_pvalues": {
+    "Ridge [+ COT]": 0.0264,
+    "Ridge [+ FOMC+CPI]": 0.0339,
+    "Ridge [+ NFP]": 0.0341,
+    "Boosting classifier [+ FOMC+CPI]": 0.0453,
+    "Boosting classifier [+ NFP]": 0.0637,
+    "Ridge [+ macro]": 0.0915,
+    "Boosting regressor [+ FOMC+CPI]": 0.1394,
+    "Boosting classifier [+ macro]": 0.1719,
+    "Boosting classifier [+ COT]": 0.2199,
+    "Ridge [price only]": 0.248,
+    "Boosting regressor [+ NFP]": 0.3147,
+    "Boosting regressor [price only]": 0.3369,
+    "LSTM [price only]": 0.3818,
+    "Boosting regressor [+ COT]": 0.3818,
+    "Boosting regressor [+ macro]": 0.3818,
+    "Boosting classifier [price only]": 0.5296,
+    "LSTM [+ COT]": 0.5296,
+    "LSTM [+ macro]": 0.5296,
+    "LSTM [+ NFP]": 0.5296,
+    "BENCHMARK": 0.5296,
+    "LSTM [+ FOMC+CPI]": 1.0
+   },
+   "spa_consistent_p_by_block": {
+    "5": 0.4603,
+    "20": 0.6228,
+    "10": 0.558
+   },
+   "candidates": [
+    {
+     "name": "Ridge [price only]",
+     "mean_loss": 0.5100222717149221,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.062360801781737196,
+     "hac_t": -2.2736471214191285,
+     "p_one_sided": 0.9885063940664169,
+     "holm_p": 1.0,
+     "mcs_p": 0.248
+    },
+    {
+     "name": "Boosting regressor [price only]",
+     "mean_loss": 0.49665924276169265,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.04899777282850779,
+     "hac_t": -1.5923963598087885,
+     "p_one_sided": 0.9443521631758462,
+     "holm_p": 1.0,
+     "mcs_p": 0.3369
+    },
+    {
+     "name": "Boosting classifier [price only]",
+     "mean_loss": 0.47438752783964366,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.026726057906458798,
+     "hac_t": -0.9584144898794364,
+     "p_one_sided": 0.8310731042515905,
+     "holm_p": 1.0,
+     "mcs_p": 0.5296
+    },
+    {
+     "name": "LSTM [price only]",
+     "mean_loss": 0.48106904231625836,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.0334075723830735,
+     "hac_t": -1.8275554002054804,
+     "p_one_sided": 0.9661918477334244,
+     "holm_p": 1.0,
+     "mcs_p": 0.3818
+    },
+    {
+     "name": "Ridge [+ macro]",
+     "mean_loss": 0.5144766146993318,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.066815144766147,
+     "hac_t": -2.4796966354877843,
+     "p_one_sided": 0.9934252897829466,
+     "holm_p": 1.0,
+     "mcs_p": 0.0915
+    },
+    {
+     "name": "Boosting regressor [+ macro]",
+     "mean_loss": 0.47884187082405344,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.031180400890868598,
+     "hac_t": -1.1435744497401341,
+     "p_one_sided": 0.8735999185949546,
+     "holm_p": 1.0,
+     "mcs_p": 0.3818
+    },
+    {
+     "name": "Boosting classifier [+ macro]",
+     "mean_loss": 0.5011135857461024,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.053452115812917596,
+     "hac_t": -1.8514687378052312,
+     "p_one_sided": 0.9679489259035754,
+     "holm_p": 1.0,
+     "mcs_p": 0.1719
+    },
+    {
+     "name": "LSTM [+ macro]",
+     "mean_loss": 0.44766146993318484,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": 0.0,
+     "hac_t": 0.0,
+     "p_one_sided": 0.5,
+     "holm_p": 1.0,
+     "mcs_p": 0.5296
+    },
+    {
+     "name": "Ridge [+ NFP]",
+     "mean_loss": 0.5211581291759465,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.07349665924276169,
+     "hac_t": -2.8111994409457544,
+     "p_one_sided": 0.9975321409664768,
+     "holm_p": 1.0,
+     "mcs_p": 0.0341
+    },
+    {
+     "name": "Boosting regressor [+ NFP]",
+     "mean_loss": 0.48329621380846327,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.035634743875278395,
+     "hac_t": -1.30602176432544,
+     "p_one_sided": 0.9042274218380644,
+     "holm_p": 1.0,
+     "mcs_p": 0.3147
+    },
+    {
+     "name": "Boosting classifier [+ NFP]",
+     "mean_loss": 0.5033407572383074,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.0556792873051225,
+     "hac_t": -2.0856536920585262,
+     "p_one_sided": 0.9814949980064118,
+     "holm_p": 1.0,
+     "mcs_p": 0.0637
+    },
+    {
+     "name": "LSTM [+ NFP]",
+     "mean_loss": 0.44988864142538976,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.0022271714922048997,
+     "hac_t": -0.15147217574137073,
+     "p_one_sided": 0.5601983709449867,
+     "holm_p": 1.0,
+     "mcs_p": 0.5296
+    },
+    {
+     "name": "Ridge [+ FOMC+CPI]",
+     "mean_loss": 0.5167037861915368,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.06904231625835189,
+     "hac_t": -2.5750044040584563,
+     "p_one_sided": 0.9949880594855868,
+     "holm_p": 1.0,
+     "mcs_p": 0.0339
+    },
+    {
+     "name": "Boosting regressor [+ FOMC+CPI]",
+     "mean_loss": 0.5011135857461024,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.053452115812917596,
+     "hac_t": -1.7709571477800614,
+     "p_one_sided": 0.9617160860190442,
+     "holm_p": 1.0,
+     "mcs_p": 0.1394
+    },
+    {
+     "name": "Boosting classifier [+ FOMC+CPI]",
+     "mean_loss": 0.5055679287305123,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.05790645879732739,
+     "hac_t": -2.149150598002468,
+     "p_one_sided": 0.9841887680351288,
+     "holm_p": 1.0,
+     "mcs_p": 0.0453
+    },
+    {
+     "name": "LSTM [+ FOMC+CPI]",
+     "mean_loss": 0.42538975501113585,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": 0.022271714922048998,
+     "hac_t": 1.4687793790662107,
+     "p_one_sided": 0.0709463194547666,
+     "holm_p": 1.0,
+     "mcs_p": 1.0
+    },
+    {
+     "name": "Ridge [+ COT]",
+     "mean_loss": 0.5211581291759465,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.07349665924276169,
+     "hac_t": -2.8336470661757045,
+     "p_one_sided": 0.9976989936539071,
+     "holm_p": 1.0,
+     "mcs_p": 0.0264
+    },
+    {
+     "name": "Boosting regressor [+ COT]",
+     "mean_loss": 0.47884187082405344,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.031180400890868598,
+     "hac_t": -1.1151098300914046,
+     "p_one_sided": 0.8675983202212313,
+     "holm_p": 1.0,
+     "mcs_p": 0.3818
+    },
+    {
+     "name": "Boosting classifier [+ COT]",
+     "mean_loss": 0.48775055679287305,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.0400890868596882,
+     "hac_t": -1.486845515294761,
+     "p_one_sided": 0.9314721914250929,
+     "holm_p": 1.0,
+     "mcs_p": 0.2199
+    },
+    {
+     "name": "LSTM [+ COT]",
+     "mean_loss": 0.45434298440979953,
+     "benchmark_mean_loss": 0.44766146993318484,
+     "mean_diff": -0.0066815144766146995,
+     "hac_t": -0.704045214375073,
+     "p_one_sided": 0.7592976917491828,
+     "holm_p": 1.0,
+     "mcs_p": 0.5296
+    }
+   ],
+   "nominal_rejections_5pct": 0,
+   "expected_rejections_under_null": 1.0
+  },
+  "V1": {
+   "k": 7,
+   "n": 428,
+   "dropped_degenerate": [],
+   "spa_p": {
+    "lower": 0.1252,
+    "consistent": 0.3407,
+    "upper": 0.3407
+   },
+   "reality_check_p": 0.188,
+   "stepm_superior": [],
+   "mcs_included": [
+    "BENCHMARK",
+    "EWMA 0.94 (shipped, unmatched)",
+    "EWMA 0.94 of RV",
+    "GARCH(1,1) (matched)",
+    "HAR-RV levels",
+    "HAR-RV logs",
+    "HAR-RV-X",
+    "LSTM-RV"
+   ],
+   "mcs_excluded": [],
+   "mcs_pvalues": {
+    "EWMA 0.94 of RV": 0.2497,
+    "EWMA 0.94 (shipped, unmatched)": 0.311,
+    "LSTM-RV": 0.3381,
+    "BENCHMARK": 0.3695,
+    "GARCH(1,1) (matched)": 0.3695,
+    "HAR-RV levels": 0.3695,
+    "HAR-RV logs": 0.3695,
+    "HAR-RV-X": 1.0
+   },
+   "spa_consistent_p_by_block": {
+    "5": 0.3195,
+    "20": 0.3169,
+    "10": 0.3407
+   },
+   "candidates": [
+    {
+     "name": "GARCH(1,1) (matched)",
+     "mean_loss": -7.5447319681447755,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": -0.019630961632844474,
+     "hac_t": -0.922366836812441,
+     "p_one_sided": 0.8218313690301426,
+     "holm_p": 1.0,
+     "mcs_p": 0.3695
+    },
+    {
+     "name": "EWMA 0.94 of RV",
+     "mean_loss": -7.551920256561119,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": -0.012442673216501086,
+     "hac_t": -0.8762897278235545,
+     "p_one_sided": 0.8095637260413282,
+     "holm_p": 1.0,
+     "mcs_p": 0.2497
+    },
+    {
+     "name": "HAR-RV levels",
+     "mean_loss": -7.589645920210381,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": 0.025282990432761613,
+     "hac_t": 0.948347846720882,
+     "p_one_sided": 0.17147620019701382,
+     "holm_p": 0.8573810009850691,
+     "mcs_p": 0.3695
+    },
+    {
+     "name": "HAR-RV logs",
+     "mean_loss": -7.594461802088838,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": 0.030098872311219313,
+     "hac_t": 1.4488875734221116,
+     "p_one_sided": 0.0736844910074328,
+     "holm_p": 0.44210694604459677,
+     "mcs_p": 0.3695
+    },
+    {
+     "name": "HAR-RV-X",
+     "mean_loss": -7.624714441028908,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": 0.060351511251288244,
+     "hac_t": 1.6326906993747405,
+     "p_one_sided": 0.05126703225331297,
+     "holm_p": 0.3588692257731908,
+     "mcs_p": 1.0
+    },
+    {
+     "name": "LSTM-RV",
+     "mean_loss": -7.493054229417318,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": -0.07130870036030143,
+     "hac_t": -1.3678260442015762,
+     "p_one_sided": 0.9143167332973894,
+     "holm_p": 1.0,
+     "mcs_p": 0.3381
+    },
+    {
+     "name": "EWMA 0.94 (shipped, unmatched)",
+     "mean_loss": -7.565672835657948,
+     "benchmark_mean_loss": -7.5643629297776185,
+     "mean_diff": 0.0013099058803297734,
+     "hac_t": 0.14863102899114652,
+     "p_one_sided": 0.4409223936789397,
+     "holm_p": 1.0,
+     "mcs_p": 0.311
+    }
+   ],
+   "nominal_rejections_5pct": 0,
+   "expected_rejections_under_null": 0.35000000000000003
+  },
+  "V2": {
+   "k": 7,
+   "n": 428,
+   "dropped_degenerate": [],
+   "spa_p": {
+    "lower": 0.0776,
+    "consistent": 0.2925,
+    "upper": 0.2925
+   },
+   "reality_check_p": 0.3743,
+   "stepm_superior": [],
+   "mcs_included": [
+    "BENCHMARK",
+    "EWMA 0.94 (shipped, unmatched)",
+    "EWMA 0.94 of RV",
+    "GARCH(1,1) (matched)",
+    "HAR-RV levels",
+    "HAR-RV logs",
+    "HAR-RV-X",
+    "LSTM-RV"
+   ],
+   "mcs_excluded": [],
+   "mcs_pvalues": {
+    "GARCH(1,1) (matched)": 0.3678,
+    "LSTM-RV": 0.3678,
+    "BENCHMARK": 0.492,
+    "EWMA 0.94 of RV": 0.8546,
+    "EWMA 0.94 (shipped, unmatched)": 0.8546,
+    "HAR-RV logs": 0.8898,
+    "HAR-RV levels": 0.8898,
+    "HAR-RV-X": 1.0
+   },
+   "spa_consistent_p_by_block": {
+    "5": 0.1728,
+    "20": 0.2854,
+    "10": 0.2925
+   },
+   "candidates": [
+    {
+     "name": "GARCH(1,1) (matched)",
+     "mean_loss": -7.221996201662595,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": -0.08932993120718057,
+     "hac_t": -2.0286647424198034,
+     "p_one_sided": 0.9787537753208493,
+     "holm_p": 1.0,
+     "mcs_p": 0.3678
+    },
+    {
+     "name": "EWMA 0.94 of RV",
+     "mean_loss": -7.350492985525938,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": 0.039166852656162154,
+     "hac_t": 0.7357361629842888,
+     "p_one_sided": 0.23094563865491113,
+     "holm_p": 1.0,
+     "mcs_p": 0.8546
+    },
+    {
+     "name": "HAR-RV levels",
+     "mean_loss": -7.3619166162290846,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": 0.050590483359309935,
+     "hac_t": 0.547606753247193,
+     "p_one_sided": 0.29198097567885395,
+     "holm_p": 1.0,
+     "mcs_p": 0.8898
+    },
+    {
+     "name": "HAR-RV logs",
+     "mean_loss": -7.366922127452281,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": 0.055595994582506754,
+     "hac_t": 0.7804588018170355,
+     "p_one_sided": 0.21756043406602665,
+     "holm_p": 1.0,
+     "mcs_p": 0.8898
+    },
+    {
+     "name": "HAR-RV-X",
+     "mean_loss": -7.379255097157993,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": 0.067928964288218,
+     "hac_t": 1.009999293975671,
+     "p_one_sided": 0.15624781415021793,
+     "holm_p": 0.9374868849013076,
+     "mcs_p": 1.0
+    },
+    {
+     "name": "LSTM-RV",
+     "mean_loss": -7.229284520086655,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": -0.08204161278312015,
+     "hac_t": -1.4380418036914018,
+     "p_one_sided": 0.9247889033423404,
+     "holm_p": 1.0,
+     "mcs_p": 0.3678
+    },
+    {
+     "name": "EWMA 0.94 (shipped, unmatched)",
+     "mean_loss": -7.336961035551965,
+     "benchmark_mean_loss": -7.311326132869775,
+     "mean_diff": 0.02563490268218998,
+     "hac_t": 1.5741669626923966,
+     "p_one_sided": 0.05772442747207818,
+     "holm_p": 0.40407099230454724,
+     "mcs_p": 0.8546
+    }
+   ],
+   "nominal_rejections_5pct": 0,
+   "expected_rejections_under_null": 0.35000000000000003
+  }
+ },
+ "runtime_seconds": 26,
+ "arch_version": "9.0.0"
+}

@@ -50,6 +50,7 @@ better:
 | Live record (2026-11-17) | 11 real forecasts scored since 2026-10-28: MAE \$48.49 vs \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything; it grows by one trading day each morning |
 | Risk (E6, 2026-11-24) | Volatility is predictable and its R² is positive: Mincer-Zarnowitz R² 0.19 for the shipped EWMA and 0.29 for HAR-RV with release days (2010-2026); HAR-RV beats the EWMA (QLIKE -0.054, p < 0.001; not significant on 2025-26, p = 0.10); an LSTM does not help. The return R² (-0.011) is unchanged (§15.5) |
 | Conformal intervals (E7, 2026-11-27) | Split conformal and adaptive conformal inference match the shipped 90% band's coverage (ACI 91.0% and 90.5% against 89.5%; 90.0% on 2010-2026) and ACI steadies it over time, but they are wider and score slightly worse, so the shipped band stays (§15.5) |
+| Multiple testing (E3, 2026-11-28) | Nothing survives a correction for the number of candidates: Hansen's SPA p = 0.709 (returns), 0.558 (direction), 0.341 (variance), StepM sets empty, no nominal rejection in any family; the model confidence set keeps no-change and every LSTM variant and drops ridge and boosting (§15.5) |
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
@@ -887,6 +888,7 @@ Longer-horizon p-values are adjusted for overlapping forecasts.
   threats to validity, extra experiments to strengthen the paper, a checked bibliography, an IEEE venue shortlist, a section-by-section writing plan and the rules for working with Claude.
 - **Risk track (E6, done 2026-11-24):** volatility is predictable (positive R²) and HAR-RV on hourly realised variance beats the shipped EWMA over 2010-2026; the price R² stays negative. Results in §15.5, protocol in §15.8; follow-ups: intervals built on the HAR-RV volatility, E3, E7-E8.
 - **Interval track (E7, done 2026-11-27):** conformal and adaptive conformal intervals match the shipped band's coverage but do not beat it on width or interval score; ACI with step 0.02 is the option if a guard against drifting volatility is wanted.
+- **Multiplicity (E3, done 2026-11-28):** no candidate beats its benchmark after correction in any family; the open follow-up is an SPA on the long window of E6 (E3b), E1 (bootstrap intervals) and E2 (seeds and ablations).
 - **Housekeeping:** detach `AmazonEC2ContainerRegistryFullAccess` from `Auto`, stop the SageMaker notebook instance when idle, and optionally refresh the 449-day window with new data (§12 item 12).
 
 ---
@@ -2038,6 +2040,7 @@ Notes:
 8. A serverless pipeline has produced and scored live forecasts unattended since 2026-10-30 (11 scored on 2026-11-17; descriptive only).
 9. Risk, unlike price, is predictable (E6, Tables E6-1 to E6-6): the R² of every volatility forecast against the realised variance is positive (the shipped EWMA 0.19, HAR-RV with release-day dummies 0.29 on 2010-2026), and HAR-RV built on hourly realised variance beats the shipped EWMA on the long window (QLIKE -0.054, DM p < 0.001, lower in 15 of 17 years for HAR-RV logs); on the 428-day primary window the same models are better but not significantly (p = 0.10), and an LSTM does not help.
 10. Distribution-free intervals do not beat the shipped band (E7, Tables E7-1 to E7-4; this also completes E8): split conformal and adaptive conformal inference match its coverage (ACI 91.0% and 90.5% against 89.5% on the 389 scored days; 90.0% against 89.4% on 2010-2026) and ACI steadies it over time, but the intervals are wider and the interval score is the same or slightly worse (significantly so for ACI on the long window); no Christoffersen test rejects independence or conditional coverage.
+11. The null survives a correction for the number of candidates tried (E3, Tables E3-1 to E3-4): no candidate beats its benchmark in any of five families (Hansen's SPA p = 0.709, 0.355, 0.558, 0.341, 0.292; the StepM set of superior candidates is empty), no candidate is even nominally significant, and the 90% model confidence set keeps the no-change benchmark and every LSTM variant while dropping ridge and boosting.
 
 **The evidence does not support (do not write):**
 - That the LSTM forecasts gold prices accurately, beats its baselines or is useful for trading. On this evidence the opposite holds, and no strategy, transaction cost or economic value was tested.
@@ -2047,6 +2050,7 @@ Notes:
 - Generality: one asset (COMEX gold futures as a proxy for XAU/USD), one 449-day window, mostly a rising market (55.2% up days).
 - That HAR-RV beats the shipped EWMA with statistical significance on the 2025-2026 window (p = 0.10 for HAR-RV-X; the significant result is the long window), that the LSTM helps volatility forecasts (it does not), or that the volatility result changes the return R² (it does not).
 - That conformal or adaptive conformal intervals are better than the shipped band: they match its coverage and ACI steadies it over time, but they are wider and score slightly worse (E7).
+- That any single model or input set beats its benchmark after accounting for how many were tried (E3: SPA p between 0.29 and 0.71), or that HAR-RV-X is better than the EWMA on the 2025-2026 window once seven candidates are considered (SPA p = 0.34); E3 shows no evidence of an effect, not that an effect is absent.
 - That the live forecasts are "pre-registered" or immutable: the log can be overwritten (§12 item 19).
 - That the 89.5% coverage is a clean out-of-sample figure: the decay 0.94 was fixed in advance, but the alternatives were compared on the same window, so it is slightly optimistic.
 
@@ -2398,6 +2402,84 @@ HAR-RV logs has the lower QLIKE than EWMA 0.94 in 15 of 17 years.
 6. *Caveats.* One primary window of 389 days (coverage intervals of about ±3 points); the long window has no LSTM; the calibration window (250 scores) and the ACI steps were fixed in advance, not tuned; the finite-sample ACI guarantee is vacuous for 389 days and conformal validity needs exchangeability, which time series violate; the intervals are symmetric in the return.
 7. *Deviations from the protocol.* None; the experiment was run once, after the protocol was committed.
 
+### E3 results (Tables E3-1 to E3-4; 2026-11-28; protocol in §15.8; code `daily/multiplicity_experiment.py`; file `daily/results/paper_e3/e3_summary.json`; `arch` 9.0.0)
+*Stationary bootstrap with expected block length 10, 10,000 replications, seed 20261128. "Mean loss vs the benchmark" is the candidate's mean loss over the benchmark's, minus 1. P2, V2 and the per-candidate rows of the families not shown are in the JSON file.*
+
+**Table E3-1. Every family, every test.**
+
+| Family | Benchmark; loss | Candidates K (days) | White reality check p | Hansen SPA p (block 5 / 10 / 20) | StepM superior | Nominal rejections at 5% (expected under the null) | In the 90% model confidence set |
+|---|---|---|---|---|---|---|---|
+| P1 | No-change; squared return error | 16 (449) | 0.888 | 0.709 (0.725 / 0.709 / 0.696) | 0 | 0 (0.80) | 8 of 17 |
+| P2 | No-change; absolute price error (\$) | 16 (449) | 0.791 | 0.355 (0.339 / 0.355 / 0.367) | 0 | 0 (0.80) | 7 of 17 |
+| D | Always up; 0-1 direction error | 20 (449) | 0.646 | 0.558 (0.460 / 0.558 / 0.623) | 0 | 0 (1.00) | 15 of 21 |
+| V1 | EWMA 0.94 (matched); QLIKE vs realised variance | 7 (428) | 0.188 | 0.341 (0.320 / 0.341 / 0.317) | 0 | 0 (0.35) | 8 of 8 |
+| V2 | EWMA 0.94 (matched); QLIKE vs squared return | 7 (428) | 0.374 | 0.292 (0.173 / 0.292 / 0.285) | 0 | 0 (0.35) | 8 of 8 |
+
+**Table E3-2. Family P1 (next-day return forecasts, squared return error, benchmark no-change).**
+
+| Candidate | Mean loss vs the benchmark (negative = better) | Newey-West t (positive = better) | One-sided p | Holm p | In the model confidence set (p) |
+|---|---|---|---|---|---|
+| Drift | -0.06% | +0.07 | 0.474 | 1.000 | yes (1.000) |
+| Ridge [price only] | +4.21% | -1.94 | 0.974 | 1.000 | yes (0.137) |
+| Boosting [price only] | +18.27% | -4.22 | 1.000 | 1.000 | no (0.007) |
+| LSTM [price only] | +1.07% | -0.82 | 0.794 | 1.000 | yes (0.799) |
+| Ridge [+ macro] | +8.09% | -2.67 | 0.996 | 1.000 | no (0.022) |
+| Boosting [+ macro] | +12.87% | -3.04 | 0.999 | 1.000 | no (0.038) |
+| LSTM [+ macro] | +1.32% | -0.73 | 0.768 | 1.000 | yes (0.744) |
+| Ridge [+ NFP] | +8.57% | -2.83 | 0.998 | 1.000 | no (0.021) |
+| Boosting [+ NFP] | +14.84% | -3.47 | 1.000 | 1.000 | no (0.021) |
+| LSTM [+ NFP] | +0.94% | -0.53 | 0.701 | 1.000 | yes (0.799) |
+| Ridge [+ FOMC+CPI] | +10.29% | -3.36 | 1.000 | 1.000 | no (0.007) |
+| Boosting [+ FOMC+CPI] | +15.52% | -3.73 | 1.000 | 1.000 | no (0.010) |
+| LSTM [+ FOMC+CPI] | +0.05% | -0.03 | 0.513 | 1.000 | yes (0.995) |
+| Ridge [+ COT] | +10.84% | -3.22 | 0.999 | 1.000 | no (0.007) |
+| Boosting [+ COT] | +14.45% | -4.09 | 1.000 | 1.000 | no (0.003) |
+| LSTM [+ COT] | +0.41% | -0.26 | 0.601 | 1.000 | yes (0.923) |
+
+**Table E3-3. Family D (next-day direction, benchmark always up).**
+
+| Candidate | Mean loss vs the benchmark (negative = better) | Newey-West t (positive = better) | One-sided p | Holm p | In the model confidence set (p) |
+|---|---|---|---|---|---|
+| Ridge [price only] | +13.93% | -2.27 | 0.989 | 1.000 | yes (0.248) |
+| Boosting regressor [price only] | +10.95% | -1.59 | 0.944 | 1.000 | yes (0.337) |
+| Boosting classifier [price only] | +5.97% | -0.96 | 0.831 | 1.000 | yes (0.530) |
+| LSTM [price only] | +7.46% | -1.83 | 0.966 | 1.000 | yes (0.382) |
+| Ridge [+ macro] | +14.93% | -2.48 | 0.993 | 1.000 | no (0.091) |
+| Boosting regressor [+ macro] | +6.97% | -1.14 | 0.874 | 1.000 | yes (0.382) |
+| Boosting classifier [+ macro] | +11.94% | -1.85 | 0.968 | 1.000 | yes (0.172) |
+| LSTM [+ macro] | +0.00% | +0.00 | 0.500 | 1.000 | yes (0.530) |
+| Ridge [+ NFP] | +16.42% | -2.81 | 0.998 | 1.000 | no (0.034) |
+| Boosting regressor [+ NFP] | +7.96% | -1.31 | 0.904 | 1.000 | yes (0.315) |
+| Boosting classifier [+ NFP] | +12.44% | -2.09 | 0.981 | 1.000 | no (0.064) |
+| LSTM [+ NFP] | +0.50% | -0.15 | 0.560 | 1.000 | yes (0.530) |
+| Ridge [+ FOMC+CPI] | +15.42% | -2.58 | 0.995 | 1.000 | no (0.034) |
+| Boosting regressor [+ FOMC+CPI] | +11.94% | -1.77 | 0.962 | 1.000 | yes (0.139) |
+| Boosting classifier [+ FOMC+CPI] | +12.94% | -2.15 | 0.984 | 1.000 | no (0.045) |
+| LSTM [+ FOMC+CPI] | -4.98% | +1.47 | 0.071 | 1.000 | yes (1.000) |
+| Ridge [+ COT] | +16.42% | -2.83 | 0.998 | 1.000 | no (0.026) |
+| Boosting regressor [+ COT] | +6.97% | -1.12 | 0.868 | 1.000 | yes (0.382) |
+| Boosting classifier [+ COT] | +8.96% | -1.49 | 0.931 | 1.000 | yes (0.220) |
+| LSTM [+ COT] | +1.49% | -0.70 | 0.759 | 1.000 | yes (0.530) |
+
+**Table E3-4. Family V1 (variance forecasts of E6, primary window, QLIKE against the realised variance, benchmark EWMA 0.94).**
+
+| Candidate | Mean loss vs the benchmark (negative = better) | Newey-West t (positive = better) | One-sided p | Holm p | In the model confidence set (p) |
+|---|---|---|---|---|---|
+| GARCH(1,1) (matched) | -0.26% | -0.92 | 0.822 | 1.000 | yes (0.369) |
+| EWMA 0.94 of RV | -0.16% | -0.88 | 0.810 | 1.000 | yes (0.250) |
+| HAR-RV levels | +0.33% | +0.95 | 0.171 | 0.857 | yes (0.369) |
+| HAR-RV logs | +0.40% | +1.45 | 0.074 | 0.442 | yes (0.369) |
+| HAR-RV-X | +0.80% | +1.63 | 0.051 | 0.359 | yes (1.000) |
+| LSTM-RV | -0.94% | -1.37 | 0.914 | 1.000 | yes (0.338) |
+| EWMA 0.94 (shipped, unmatched) | +0.02% | +0.15 | 0.441 | 1.000 | yes (0.311) |
+
+**Reading (written after the results; the protocol was changed only by the disclosed fix of the direction candidates).**
+1. *Nothing survives the correction.* In no family does any candidate beat its benchmark: Hansen's SPA p-values are 0.709 (P1), 0.355 (P2), 0.558 (D), 0.341 (V1) and 0.292 (V2), the reality check gives 0.888 to 0.188 at the smallest, and the StepM set of superior candidates is empty in every family; the block length (5, 10 or 20) changes the SPA p-values by at most 0.16.
+2. *The best-looking variants are not even individually significant.* There are no nominal one-sided rejections at 5% in any family (expected under the global null: 0.8, 0.8, 1.0, 0.35, 0.35). The closest are the LSTM with FOMC and CPI days for direction (one-sided p = 0.071, Holm 1.000) and HAR-RV-X for the variance on the primary window (p = 0.051, Holm 0.359, SPA 0.341).
+3. *The model confidence set separates the bad from the rest, not the LSTM from the benchmark.* For the return forecasts the 90% set keeps 8 of 17 models (no-change, Drift, LSTM [+ COT], LSTM [+ FOMC+CPI], LSTM [+ NFP], LSTM [+ macro], LSTM [price only], Ridge [price only]) and drops all five boosting variants and four of the five ridge variants; with the absolute price error it keeps 7 of 17 and drops all boosting and ridge variants. The LSTM from every input set stays in the set together with no-change, so it cannot be told apart from it. For direction the set keeps 15 of 21. For the variance forecasts it keeps all eight: on the primary window the data cannot separate the volatility models, which is consistent with E6 (HAR-RV-X is significantly better only on the long window).
+4. *What this does not show.* A non-rejection is not evidence of equality: with 449 days the tests have little power against a gain of one or two percent. The families contain only the candidates listed in the protocol (not the momentum rule, the 5- and 20-day horizons, the hourly runs or the static LSTM variants), the families are tested separately (correcting across five families would only lower the threshold), and the long-window comparisons of E6, which are the significant ones, are not covered here because their forecasts are not stored; they carry the Bonferroni level of six comparisons already (an SPA on that window would be the natural follow-up, E3b).
+5. *Deviation from the protocol.* The direction candidates of ridge and the boosting regressor were first assembled from an empty probability column (treated as "down"); a duplicate check found it before family D was tested, the code now uses the sign of the return forecast as the protocol says, and a guard drops degenerate candidates (none were dropped in the final run). P1 and P2 do not use that column and were unaffected; the final run repeated all families.
+
 ### 15.6 Evaluation pitfalls found in this project (the audit angle)
 **Table XI. Evaluation pitfalls.**
 
@@ -2420,7 +2502,7 @@ HAR-RV logs has the lower QLIKE than EWMA 0.94 in 15 of 17 years.
 ### 15.7 Threats to validity and limitations (write these into the paper)
 - **Construct.** Gold futures (`GC=F`, a continuous contract) stand in for spot XAU/USD. The headline MAE is in dollars (it depends on the price level), the models predict log-returns, and the DM test uses squared return errors: say which loss each statement refers to (E1 adds an absolute-error DM and bootstrap intervals).
 - **Internal.** Look-ahead tests cannot prove the absence of leakage. Hyperparameters (window 20, 32 units, dropout 0.2, learning rate, patience) are not tuned inside the walk-forward loop; the repository holds six static-training variants (`daily/results/model_results_lstm_w*.json`: window 20 or 60, horizons 1 and 5, training from 2012) and no other tuning record, so the paper must state which settings were fixed beforehand (question for the owner, §15.15). Seed variance is not reported (E2).
-- **Statistical.** n = 449 (n_eff 88 and 21 at 5 and 20 days); about twenty tests are reported without a multiplicity correction (E3); the DM test assumes forecasts could be compared as such although the models are re-estimated every 7 days (Giacomini-White is the matching framework); the test window is one rising market (55.2% up days); the interval's 89.5% is slightly optimistic (pitfall 11).
+- **Statistical.** n = 449 (n_eff 88 and 21 at 5 and 20 days); the many tests of the project are corrected for the number of candidates only in E3 (Tables E3-1 to E3-4), the other p-values in this section are unadjusted; the DM test assumes forecasts could be compared as such although the models are re-estimated every 7 days (Giacomini-White is the matching framework); the test window is one rising market (55.2% up days); the interval's 89.5% is slightly optimistic (pitfall 11).
 - **External.** One asset, one period, one frequency (plus a side experiment on hourly data); a null here says nothing about other assets, regimes or information sets.
 - **Reproducibility.** TensorFlow training is not bit-reproducible across machines; vendor data can be revised (a continuous futures series can be rewritten); raw data cannot be redistributed; the live log can be overwritten (§12 item 19); the serving model has not been retrained since 2026-10-29.
 - **Ethics.** The work is a student project and not trading advice; no personal data is involved; AI assistance must be disclosed (§15.12).
@@ -2432,7 +2514,7 @@ Each runs in its own results folder (for example `daily/results/paper_*/`) so th
 |---|---|---|---|---|---|
 | E1 | Bootstrap intervals and better DM tests | Is MAE equal to no-change, and is the test appropriate? | Moving-block bootstrap CI of the MAE and RMSE differences; DM on absolute price errors; Harvey-Leybourne-Newbold correction; Giacomini-White | hours | Null stays; CI width shows the power |
 | E2 | Seed variance and ablations | Is the null robust to hyperparameters? | 10 seeds; GRU, MLP and a linear model on the same features; window 5 / 10 / 20 / 60; units 16 / 32 / 64 | a day of compute | Null stays |
-| E3 | Multiplicity correction | Could a "best" variant be luck, and is anything better than no-change after correction? | Hansen SPA and the model confidence set over every model and input set tried (about 30 candidates); the `arch` package has both | 1-2 days | Nothing survives |
+| E3 | Multiplicity correction | Could a "best" variant be luck, and is anything better than no-change after correction? | Hansen SPA and the model confidence set over every model and input set tried (about 30 candidates); the `arch` package has both | done 2026-11-28 (26 s of compute) | **Done, protocol frozen first:** nothing survives: SPA p between 0.29 and 0.71 in five families, StepM sets empty, the model confidence set keeps the benchmark and every LSTM variant (Tables E3-1 to E3-4) |
 | E4 | Long window and power analysis | Does the null hold across regimes? | Walk-forward over about 2010-2026 (retrain every 20 days to cut compute); minimum detectable MAE gain at n = 449 | several days | Null stays; shows low power in 2025-26 |
 | E5 | Multi-asset replication | Is it gold-specific? | Same pipeline on silver, EUR/USD, S&P 500, 10-year yield | several days | Null stays; supports a general audit |
 | E6 | Volatility track (the positive-result candidate) | Is risk predictable when price is not? | Realised volatility from the hourly data; HAR-RV with NFP, FOMC and CPI days against EWMA, GARCH and an LSTM; QLIKE and DM | done 2026-11-24 (452 s of compute) | **Done, protocol frozen first:** positive R² for risk; HAR-RV beats the shipped EWMA on 2010-2026 (p < 0.001) and, not significantly, on the 428-day window; the LSTM does not help (Tables E6-1 to E6-6) |
@@ -2979,7 +3061,7 @@ For the 4-6 page conference paper use Tables I (compact), III, VII and XI (pitfa
 
 ### 15.12 Reproducibility, availability and ethics
 - **Environment (this machine, 2026-11-17).** Python 3.12.5 locally (3.11 on Streamlit Cloud, `.python-version`); TensorFlow 2.21.0, Keras 3.15.1, NumPy 1.26.4, pandas 3.0.2, scikit-learn 1.9.1, SciPy 1.17.1, yfinance 1.7.0. The pins for the dashboard are in `dashboard/requirements.txt`. Hardware and run time of one full walk-forward are not recorded: measure and add them (needed for the paper). Seeds 0-2 per block (`keras.utils.set_random_seed`); no GPU.
-- **Reproduce each table.** Table III-IV: `daily/walk_forward.py` then `daily/regression_metrics.py`; Table V: `daily/build_daily_dataset.py` with the flags listed in the Handoff block, then `walk_forward.py` per folder; Table VI: `daily/walk_forward_horizon.py`; Table VII: `daily/interval_experiment.py`, `daily/lstm_quantile.py`, `daily/interval_vix.py`; Table VIII: `daily/volatility_experiment.py`; Table IX: `hourly/run_full_pipeline.sh`, `hourly/train_models.py`; Table X: `daily/horizon_always_up.py`. The silver data must first be extended to the test window's end (Handoff, "Refreshing the results").
+- **Reproduce each table.** Table III-IV: `daily/walk_forward.py` then `daily/regression_metrics.py`; Table V: `daily/build_daily_dataset.py` with the flags listed in the Handoff block, then `walk_forward.py` per folder; Table VI: `daily/walk_forward_horizon.py`; Table VII: `daily/interval_experiment.py`, `daily/lstm_quantile.py`, `daily/interval_vix.py`; Table VIII: `daily/volatility_experiment.py`; Table IX: `hourly/run_full_pipeline.sh`, `hourly/train_models.py`; Table X: `daily/horizon_always_up.py`. E6: `daily/volatility_har_experiment.py` (needs the hourly raw data); E7: `daily/conformal_experiment.py`; E3: `daily/multiplicity_experiment.py` (needs `pip install arch`, version 9.0.0 was used; run it after E6 because it reads the E6 forecasts). The silver data must first be extended to the test window's end (Handoff, "Refreshing the results").
 - **Code availability.** Public repository https://github.com/aphiwat-data/lstm_dashboard; cite a tagged commit (create the tag `paper-v1` at submission). **Check: the repository has no LICENSE file**, so by default all rights are reserved; choose one (for example MIT or Apache-2.0) before the paper points to it. For a double-blind review use an anonymised mirror and say so.
 - **Data availability.** §15.3. **Live log**: not public; the dashboard shows the last 15 scored forecasts.
 - **AI-assistance disclosure.** IEEE requires AI-generated content in an article (text, figures, images, code) to be disclosed in the acknowledgements, naming the system and the sections concerned; JCSSE asks for full declaration at submission; IEEE Access rejects articles with fabricated content. Draft statement: *The authors used Claude (Anthropic) as a research assistant for code review, drafting and editing of text and checking of references. All numbers were produced by the authors' code and verified against the result files, all references were checked against Crossref, and the authors take full responsibility for the content.* Do not list an AI system as an author.
