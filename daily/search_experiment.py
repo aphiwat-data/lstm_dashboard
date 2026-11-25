@@ -54,6 +54,12 @@ Rules fixed in advance (the code applies them mechanically):
 Everything is reported whatever it shows, the number of forecasters tried is stated next to every claim, and no forecaster, window, benchmark or rule is
 added or changed after the results are seen.
 
+AMENDMENT (2026-11-26, written before the first evaluation was run, after a two-replicate placebo test showed that the 365-day mean is a noisy benchmark that a
+forecaster can beat merely by estimating the mean better; the forecasts do not depend on it and no primary rule, selection or window changes): the report adds, for every
+forecaster and window, the R-squared and Clark-West p against the EXPANDING historical mean (all labelled returns since 2004-08, the Welch-Goyal benchmark) and the
+p-value of the IC (the dashboard's own "predictive power" rule is R-squared against b > 0 and IC p < 0.05). A choice is called STRICT (genuine predictive power) only if
+it is positive by the rule above AND its IC p < 0.05 AND its R-squared against the expanding mean is > 0. These are extra hurdles, not relaxations.
+
 Usage:
   python search_experiment.py prepare                       # S3 prices + Yahoo macro -> data/e2_prices.parquet, data/e2_macro.parquet
   python search_experiment.py list                          # groups and candidate counts
@@ -74,6 +80,7 @@ os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 import numpy as np
 import pandas as pd
 from scipy.stats import norm, spearmanr
+from scipy.stats import t as student_t
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -284,6 +291,9 @@ def run_group(group: str, panel: Panel, out_dir: Path, max_blocks: int | None = 
         import tensorflow as tf
         tf.config.threading.set_intra_op_parallelism_threads(2)
         tf.config.threading.set_inter_op_parallelism_threads(1)
+    if not is_nn:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=1)  # four workers share eight cores; multi-threaded BLAS in each only wastes them
     t0 = time.time()
     mats = {k: panel.X[SETS[k]].to_numpy(float) for k in {sp.fset for sp in specs}}
     for bi in range(done, len(starts)):
@@ -310,6 +320,14 @@ def rolling_mean_benchmark(y: np.ndarray, h: int, starts: list[int], T: int) -> 
     for s in starts:
         hi = s - h
         b[s:min(s + BLOCK, T)] = y[max(0, hi - BENCH_LEN + 1):hi + 1].mean()
+    return b
+
+
+def expanding_mean_benchmark(y: np.ndarray, h: int, starts: list[int], T: int) -> np.ndarray:
+    """Historical mean of Welch and Goyal: the mean of ALL returns whose labels are known at the block's first origin (constant within the block)."""
+    b = np.full(T, np.nan)
+    for s in starts:
+        b[s:min(s + BLOCK, T)] = y[:s - h + 1].mean()
     return b
 
 
@@ -360,10 +378,22 @@ def window_mask(dates: pd.DatetimeIndex, lo: str | None, hi: str | None) -> np.n
     return m
 
 
-def score(y, f, b, close, cl, h: int) -> dict:
-    """All metrics of one forecast series on rows where y, f and b exist."""
+def ic_p_value(r: float, n: int, h: int) -> float:
+    """Two-sided p of a correlation with the effective sample size n / h (the project's rule, hourly/train_models.py)."""
+    if not np.isfinite(r):
+        return float("nan")
+    n_eff = max(n // h, 3)
+    t = r * np.sqrt((n_eff - 2) / max(1 - r * r, 1e-12))
+    return float(2 * (1 - student_t.cdf(abs(t), n_eff - 2)))
+
+
+def score(y, f, b, close, cl, h: int, b2=None) -> dict:
+    """All metrics of one forecast series on rows where y, f and b (and b2, the expanding-mean benchmark, when given) exist."""
     ok = np.isfinite(y) & np.isfinite(f) & np.isfinite(b)
+    if b2 is not None:
+        ok &= np.isfinite(b2)
     y, f, b, close, cl = y[ok], f[ok], b[ok], close[ok], cl[ok]
+    b2 = None if b2 is None else b2[ok]
     n = int(ok.sum())
     if n < 20:
         return {"n": n}
@@ -374,9 +404,13 @@ def score(y, f, b, close, cl, h: int) -> dict:
     t_cw, t_dm = hac_t(cw, lag), hac_t(dm, lag)
     mae, mae0 = float(np.mean(np.abs(close * np.exp(f) - cl))), float(np.mean(np.abs(close - cl)))
     ic = float(spearmanr(f, y)[0]) if np.std(f) > 0 else float("nan")
-    return {"n": n, "r2_vs_b": 1 - sse / sse_b, "r2_vs_zero": 1 - sse / float(np.sum(y**2)), "r2_centred": 1 - sse / float(np.sum((y - y.mean()) ** 2)),
-            "mae_usd": mae, "mae_nochange_usd": mae0, "mae_skill": 1 - mae / mae0 if mae0 > 0 else float("nan"), "ic": ic,
-            "dm_t": t_dm, "dm_p_better": float(1 - norm.cdf(t_dm)), "cw_t": t_cw, "cw_p": float(1 - norm.cdf(t_cw))}
+    out = {"n": n, "r2_vs_b": 1 - sse / sse_b, "r2_vs_zero": 1 - sse / float(np.sum(y**2)), "r2_centred": 1 - sse / float(np.sum((y - y.mean()) ** 2)),
+           "mae_usd": mae, "mae_nochange_usd": mae0, "mae_skill": 1 - mae / mae0 if mae0 > 0 else float("nan"), "ic": ic, "ic_p": ic_p_value(ic, n, h),
+           "dm_t": t_dm, "dm_p_better": float(1 - norm.cdf(t_dm)), "cw_t": t_cw, "cw_p": float(1 - norm.cdf(t_cw))}
+    if b2 is not None:
+        out["r2_vs_expmean"] = 1 - sse / float(np.sum((y - b2) ** 2))
+        out["cw_p_vs_expmean"] = float(1 - norm.cdf(hac_t(2 * (y - b2) * (f - b2), lag)))
+    return out
 
 
 def r2_ci(y, f, b, reps: int = 2000, seed: int = SEED) -> list[float]:
@@ -431,6 +465,7 @@ def evaluate_track(panel: Panel, h: int, out_dir: Path, reps: int = REPS) -> dic
     starts = block_starts(T, panel.first)
     names, F = load_forecasts(out_dir, h, T, dates)
     b = rolling_mean_benchmark(y, h, starts, T)
+    b2 = expanding_mean_benchmark(y, h, starts, T)
     Fs = shrink(F, y, b, h, starts)
     names_all, Fall = names + [n + "~s" for n in names], np.hstack([F, Fs])
     top1, top5, picks = online_select(Fall, y, b, h, starts)
@@ -445,7 +480,7 @@ def evaluate_track(panel: Panel, h: int, out_dir: Path, reps: int = REPS) -> dic
 
     def sc(f, w):
         m = W[w]
-        return score(np.where(m, y, np.nan), np.where(m, f, np.nan), np.where(m, b, np.nan), close, cl, h)
+        return score(np.where(m, y, np.nan), np.where(m, f, np.nan), np.where(m, b, np.nan), close, cl, h, np.where(m, b2, np.nan))
 
     def card(f, ci=True):
         c = {w: sc(f, w) for w in W}
@@ -467,13 +502,16 @@ def evaluate_track(panel: Panel, h: int, out_dir: Path, reps: int = REPS) -> dic
     named = {n: names_all.index(n) for n in NAMED if n in names_all} if h == 1 else {}
     res: dict = {"h": h, "n_base": len(names), "n_total_with_shrunk": len(names_all), "n_origins": int(T), "n_dev": int(dev.sum()), "n_test": int(test.sum()),
                  "n_project": int(proj.sum()), "n_fresh": int(fresh.sum()), "dev_start": str(dates[dev][0].date()), "test_start": str(dates[test][0].date()),
-                 "test_end": str(dates[test][-1].date()), "benchmark_windows": {w: score(np.where(W[w], y, np.nan), np.where(W[w], b, np.nan), np.where(W[w], b, np.nan), close, cl, h) for w in W}}
+                 "test_end": str(dates[test][-1].date()), "benchmark_windows": {w: score(np.where(W[w], y, np.nan), np.where(W[w], b, np.nan), np.where(W[w], b, np.nan), close, cl, h) for w in W},
+                 "reference_forecasters_vs_b": {nm_: {w: sc(f_, w) for w in W} for nm_, f_ in (("expanding mean", b2), ("zero (no change)", np.zeros(T)))}}
     prim = {"P-A dev-selected best": (names_all[best], Fall[:, best]), "P-B online selector (top 1)": ("online top 1", top1)}
     res["primary"] = {}
     for label, (nm, f) in prim.items():
         c = card(f)
         c["name"] = nm
         c["positive"] = bool(c["test"].get("r2_vs_b", -1) > 0 and c["test"].get("cw_p", 1) < PRIMARY_LEVEL)
+        c["strict"] = {"protocol_positive": c["positive"], "ic_p_below_0.05": bool(c["test"].get("ic_p", 1) < 0.05), "r2_vs_expmean_above_0": bool(c["test"].get("r2_vs_expmean", -1) > 0)}
+        c["strict_positive"] = bool(all(c["strict"].values()))
         res["primary"][label] = c
     res["secondary"] = {"online top-5 average": card(top5),
                         "family bests (chosen on DEV)": {n: {**card(Fall[:, k], ci=False), "dev_r2_vs_b": float(dev_r2[k])} for n, k in fam_best.items()}}
@@ -498,10 +536,11 @@ def evaluate_track(panel: Panel, h: int, out_dir: Path, reps: int = REPS) -> dic
     # exploratory: the whole pool on TEST (selected on the evaluation data), with the multiplicity-corrected tests
     rows = []
     for k, n in enumerate(names_all):
-        d_, t_, p_ = (score(np.where(W[w], y, np.nan), np.where(W[w], Fall[:, k], np.nan), np.where(W[w], b, np.nan), close, cl, h) for w in ("dev", "test", "project"))
+        d_, t_, p_ = (score(np.where(W[w], y, np.nan), np.where(W[w], Fall[:, k], np.nan), np.where(W[w], b, np.nan), close, cl, h, np.where(W[w], b2, np.nan)) for w in ("dev", "test", "project"))
         rows.append({"name": n, "family": family_of(n), "shrunk": n.endswith("~s"), "dev_r2_vs_b": d_.get("r2_vs_b"), "test_r2_vs_b": t_.get("r2_vs_b"), "test_r2_vs_zero": t_.get("r2_vs_zero"),
                      "test_r2_centred": t_.get("r2_centred"), "test_cw_p": t_.get("cw_p"), "test_dm_p_better": t_.get("dm_p_better"), "test_mae_skill": t_.get("mae_skill"),
-                     "test_ic": t_.get("ic"), "project_r2_vs_b": p_.get("r2_vs_b"), "project_mae_skill": p_.get("mae_skill")})
+                     "test_ic": t_.get("ic"), "test_ic_p": t_.get("ic_p"), "test_r2_vs_expmean": t_.get("r2_vs_expmean"), "test_cw_p_vs_expmean": t_.get("cw_p_vs_expmean"),
+                     "project_r2_vs_expmean": p_.get("r2_vs_expmean"), "project_r2_vs_b": p_.get("r2_vs_b"), "project_mae_skill": p_.get("mae_skill")})
     board = pd.DataFrame(rows).sort_values("test_r2_vs_b", ascending=False)
     board.to_csv(out_dir / f"e2_leaderboard_h{h}.csv", index=False)
     res["exploratory"] = {"n_positive_test_r2_vs_b": int((board["test_r2_vs_b"] > 0).sum()), "n_candidates": int(len(board)),
@@ -515,7 +554,7 @@ def evaluate_track(panel: Panel, h: int, out_dir: Path, reps: int = REPS) -> dic
     # Clark-West-adjusted gain 2 (y - b) (f - b) (benchmark loss 0, candidate loss minus that gain)
     cw_gain = pd.DataFrame({n: (2 * (y - b) * (Fall[:, k] - b))[tm] for k, n in enumerate(names_all)})
     res["exploratory"]["multiplicity_test_window_cw_adjusted"] = spa_stepm(np.zeros(int(tm.sum())), -cw_gain, reps)
-    cols = {"date": dates[labelled], "y": y[labelled], "b": b[labelled], "close": close[labelled], "next_close": cl[labelled], "dev_best": Fall[labelled, best], "online_top1": top1[labelled], "online_top5": top5[labelled]}
+    cols = {"date": dates[labelled], "y": y[labelled], "b": b[labelled], "b_expanding_mean": b2[labelled], "close": close[labelled], "next_close": cl[labelled], "dev_best": Fall[labelled, best], "online_top1": top1[labelled], "online_top5": top5[labelled]}
     pd.DataFrame(cols).to_csv(out_dir / f"e2_frozen_forecasts_h{h}.csv", index=False)
     res["dev_best_name"], res["online_picks_distinct"] = names_all[best], len({k for _, k in picks})
     return res
@@ -535,7 +574,8 @@ def evaluate(out_dir: Path, reps: int = REPS) -> None:
     t = summary["tracks"].get("h1", {})
     for label, c in t.get("primary", {}).items():
         print(f"{label}: {c['name']} | TEST R2 vs b {c['test'].get('r2_vs_b', float('nan')):+.5f} CW p {c['test'].get('cw_p', float('nan')):.4f} | "
-              f"PROJECT R2 vs b {c['project'].get('r2_vs_b', float('nan')):+.5f} | POSITIVE: {c['positive']}")
+              f"PROJECT R2 vs b {c['project'].get('r2_vs_b', float('nan')):+.5f} | POSITIVE: {c['positive']} | IC p {c['test'].get('ic_p', float('nan')):.3f}, "
+              f"R2 vs expanding mean {c['test'].get('r2_vs_expmean', float('nan')):+.5f} | STRICT: {c['strict_positive']}")
 
 
 def main() -> None:

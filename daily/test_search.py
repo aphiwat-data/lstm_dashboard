@@ -144,6 +144,27 @@ def test_online_selector_finds_the_planted_signal_and_is_causal():
     assert dict(p3)[s] == dict(picks)[s], "the choice at s must not depend on forecasts made at or after s"
 
 
+def test_expanding_mean_benchmark_is_causal_and_scores_report_it():
+    rng = np.random.default_rng(4)
+    T, h, first = 2000, 5, 1200
+    y = rng.normal(0.0003, 0.01, T)
+    starts = se.block_starts(T, first)
+    b2 = se.expanding_mean_benchmark(y, h, starts, T)
+    s = starts[9]
+    assert np.isclose(b2[s], y[:s - h + 1].mean()) and np.isclose(b2[s + 20], b2[s]) and np.isnan(b2[first - 1])
+    y2 = y.copy()
+    y2[s - h + 1:] = 5.0
+    assert np.isclose(se.expanding_mean_benchmark(y2, h, starts, T)[s], b2[s])
+    b = se.rolling_mean_benchmark(y, h, starts, T)
+    f = b2 + rng.normal(0, 0.002, T)
+    close, cl = np.full(T, 100.0), 100 * np.exp(y)
+    sc = se.score(y, f, b, close, cl, h, b2)
+    ok = np.isfinite(b2)
+    assert np.isclose(sc["r2_vs_expmean"], 1 - np.sum((y[ok] - f[ok]) ** 2) / np.sum((y[ok] - b2[ok]) ** 2)) and 0 <= sc["cw_p_vs_expmean"] <= 1
+    assert 0 <= sc["ic_p"] <= 1 and se.ic_p_value(0.0, 400, 1) > 0.99 and se.ic_p_value(0.5, 400, 1) < 1e-10 and np.isnan(se.ic_p_value(float("nan"), 400, 1))
+    assert "r2_vs_expmean" not in se.score(y, f, b, close, cl, h)
+
+
 def test_clark_west_identity_scores_and_null_calibration():
     rng = np.random.default_rng(3)
     y, f, b = rng.normal(0, 0.01, 800), rng.normal(0, 0.01, 800), rng.normal(0, 0.001, 800)
@@ -192,13 +213,38 @@ def test_end_to_end_finds_a_planted_autocorrelation_and_not_a_null():
     real = _end_to_end(ar=0.15)
     assert real["primary"]["P-A dev-selected best"]["positive"] and real["primary"]["P-B online selector (top 1)"]["positive"], real["primary"]
     assert real["primary"]["P-A dev-selected best"]["test"]["r2_vs_b"] > 0.005
+    assert real["primary"]["P-A dev-selected best"]["strict_positive"], real["primary"]["P-A dev-selected best"]["strict"]
+    assert "expanding mean" in real["reference_forecasters_vs_b"] and "test_r2_vs_expmean" in real["exploratory"]["top10_test"][0]
     assert real["exploratory"]["multiplicity_test_window_cw_adjusted"]["spa_p"]["consistent"] < 0.01
     assert real["exploratory"]["multiplicity_test_window"]["spa_p"]["lower"] < 0.10, "the squared-error SPA is conservative for nested models but must lean the right way"
     null = _end_to_end(ar=0.0)
     for k, c in null["primary"].items():
-        assert not c["positive"], f"false positive under the null: {k} {c['test']}"
+        assert not c["positive"] and not c["strict_positive"], f"false positive under the null: {k} {c['test']}"
     assert null["exploratory"]["multiplicity_test_window"]["spa_p"]["consistent"] > 0.01
     assert null["exploratory"]["multiplicity_test_window_cw_adjusted"]["spa_p"]["consistent"] > 0.01
+
+
+def test_placebo_is_unpredictable_but_keeps_the_volatility_clustering():
+    import search_placebo as sp
+
+    rng = np.random.default_rng(5)
+    n = 3000
+    v = np.zeros(n)
+    for t in range(1, n):
+        v[t] = 0.97 * v[t - 1] + 0.15 * rng.normal()
+    sig = 0.008 * np.exp(v)
+    r = np.zeros(n)
+    for t in range(1, n):
+        r[t] = 0.2 * r[t - 1] + sig[t] * rng.normal()                       # the source is autocorrelated and heteroskedastic
+    prices = pd.DataFrame({"date": pd.bdate_range("2004-06-01", periods=n), "close": 400 * np.exp(np.cumsum(r))})
+    pp = sp.placebo_prices(prices, np.random.default_rng(0))
+    r0, r1 = np.diff(np.log(prices["close"])), np.diff(np.log(pp["close"]))
+    ac = lambda x: np.corrcoef(x[:-1], x[1:])[0, 1]  # noqa: E731
+    assert len(pp) == n and (pp["date"] == prices["date"]).all() and pp["close"].iloc[0] == prices["close"].iloc[0]
+    assert ac(r0) > 0.12 and abs(ac(r1)) < 0.06, "the placebo has no return autocorrelation"
+    assert ac(np.abs(r1)) > 0.15 and abs(ac(np.abs(r1)) - ac(np.abs(r0))) < 0.2, "but it keeps the volatility clustering"
+    assert np.allclose(sp.placebo_prices(prices, np.random.default_rng(0))["close"], pp["close"]) and not np.allclose(sp.placebo_prices(prices, np.random.default_rng(1))["close"], pp["close"])
+    assert len(sp.SPECS) == 81 and len({c.name for c in sp.SPECS}) == 81
 
 
 def test_every_candidate_name_is_unique_per_horizon_and_counts_match_the_protocol():
