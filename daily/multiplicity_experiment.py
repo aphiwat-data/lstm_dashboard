@@ -77,10 +77,28 @@ def holm(p: np.ndarray) -> np.ndarray:
     return adj
 
 
+def drop_degenerate(bench: np.ndarray, cands: pd.DataFrame) -> tuple[pd.DataFrame, list]:
+    """A candidate whose loss equals the benchmark's on every day is the benchmark itself, and one equal to an earlier candidate adds nothing; both make the
+    studentised statistics undefined, so they are dropped and listed."""
+    keep, dropped = [], []
+    for c in cands.columns:
+        x = cands[c].to_numpy()
+        if np.allclose(x, bench):
+            dropped.append([c, "identical to the benchmark"])
+            continue
+        twin = next((k for k in keep if np.allclose(x, cands[k].to_numpy())), None)
+        if twin is not None:
+            dropped.append([c, f"identical to {twin}"])
+            continue
+        keep.append(c)
+    return cands[keep], dropped
+
+
 def family_tests(bench: np.ndarray, cands: pd.DataFrame, block: int = BLOCK, reps: int = REPS, seed: int = SEED, with_sensitivity: bool = True) -> dict:
     """White's reality check, Hansen's SPA, StepM and the model confidence set for one family; losses are 'lower is better'."""
     from arch.bootstrap import MCS, SPA, StepM
 
+    cands, dropped = drop_degenerate(bench, cands)
     spa = SPA(bench, cands, block_size=block, reps=reps, bootstrap="stationary", seed=seed, studentize=True)
     spa.compute()
     rc = SPA(bench, cands, block_size=block, reps=reps, bootstrap="stationary", seed=seed, studentize=False)
@@ -91,7 +109,7 @@ def family_tests(bench: np.ndarray, cands: pd.DataFrame, block: int = BLOCK, rep
     allloss.insert(0, "BENCHMARK", bench)
     mcs = MCS(allloss, size=SIZE_MCS, block_size=block, reps=reps, bootstrap="stationary", seed=seed)
     mcs.compute()
-    out = {"k": int(cands.shape[1]), "n": int(len(bench)), "spa_p": {k: float(v) for k, v in spa.pvalues.items()}, "reality_check_p": float(rc.pvalues["upper"]),
+    out = {"k": int(cands.shape[1]), "n": int(len(bench)), "dropped_degenerate": dropped, "spa_p": {k: float(v) for k, v in spa.pvalues.items()}, "reality_check_p": float(rc.pvalues["upper"]),
            "stepm_superior": [str(m) for m in step.superior_models], "mcs_included": [str(m) for m in mcs.included], "mcs_excluded": [str(m) for m in mcs.excluded],
            "mcs_pvalues": {str(k): float(v) for k, v in mcs.pvalues["Pvalue"].items()}}
     if with_sensitivity:
@@ -130,10 +148,20 @@ def build_price_family(sets: dict[str, pd.DataFrame]) -> tuple[dict, pd.DataFram
     for label, p in sets.items():
         for key, name in PRICE_MODELS.items():
             preds[f"{name} [{label}]"] = p[f"pred_ret_{key}"].to_numpy(float)
+    assert all(np.isfinite(v).all() for v in preds.values()), "a return forecast has missing values"
     p1 = pd.DataFrame({k: loss_squared_return(y, v) for k, v in preds.items()})
     p2 = pd.DataFrame({k: loss_absolute_price(close, nxt, v) for k, v in preds.items()})
     bench = {"P1": loss_squared_return(y, np.zeros(len(y))), "P2": loss_absolute_price(close, nxt, np.zeros(len(y)))}
     return bench, p1, p2
+
+
+HEAD_MODELS = {"hist_gb_clf", "lstm"}  # models with a direction head; ridge and the boosting regressor have no probability, their direction is the sign of the return forecast
+
+
+def direction_probability(p: pd.DataFrame, key: str) -> np.ndarray:
+    if key in HEAD_MODELS:
+        return p[f"p_up_{key}"].to_numpy(float)
+    return np.where(p[f"pred_ret_{key}"].to_numpy(float) > 0, 0.999, 0.001)
 
 
 def build_direction_family(sets: dict[str, pd.DataFrame]) -> tuple[np.ndarray, pd.DataFrame]:
@@ -143,7 +171,9 @@ def build_direction_family(sets: dict[str, pd.DataFrame]) -> tuple[np.ndarray, p
     cands = {}
     for label, p in sets.items():
         for key, name in DIRECTION_MODELS.items():
-            cands[f"{name} [{label}]"] = loss_direction(up, p[f"p_up_{key}"].to_numpy(float))
+            pu = direction_probability(p, key)
+            assert np.isfinite(pu).all(), f"{key} [{label}]: direction forecast has missing values"
+            cands[f"{name} [{label}]"] = loss_direction(up, pu)
     return bench, pd.DataFrame(cands)
 
 

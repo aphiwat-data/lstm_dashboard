@@ -70,6 +70,21 @@ def test_family_output_contains_one_row_per_candidate_with_consistent_numbers():
     assert r["expected_rejections_under_null"] == 0.25
 
 
+def test_direction_of_ridge_and_boosting_is_the_sign_of_the_return_forecast_not_a_missing_probability():
+    n = 6
+    p = pd.DataFrame({"pred_ret_ridge": [0.01, -0.01, 0.02, -0.03, 0.0, 0.01], "p_up_ridge": [np.nan] * n, "p_up_lstm": [0.9, 0.1, 0.6, 0.4, 0.7, 0.2], "pred_ret_lstm": [0.0] * n})
+    assert list(me.direction_probability(p, "ridge") > 0.5) == [True, False, True, False, False, True]
+    assert list(me.direction_probability(p, "lstm") > 0.5) == [True, False, True, False, True, False]
+
+
+def test_degenerate_candidates_are_dropped_and_listed_and_do_not_break_the_tests():
+    base, c = _synthetic(k=4, seed=11)
+    c["same_as_benchmark"] = base
+    c["twin"] = c["m0"]
+    r = me.family_tests(base, c, reps=300, with_sensitivity=False)
+    assert r["k"] == 4 and sorted(x[0] for x in r["dropped_degenerate"]) == ["same_as_benchmark", "twin"], r["dropped_degenerate"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
