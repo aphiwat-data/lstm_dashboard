@@ -25,3 +25,7 @@ hourly/package-lock.json
 # OS / editor cruft
 .DS_Store
 .vscode/
+
+# E2 overnight search: raw forecast matrices and logs stay local (the summary JSON and the leaderboards are committed)
+daily/results/paper_e2/forecasts/
+daily/results/paper_e2/logs/
