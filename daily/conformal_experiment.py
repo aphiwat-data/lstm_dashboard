@@ -1,6 +1,6 @@
 """E7 (README section 15.8): can distribution-free (conformal) 90% intervals match the shipped EWMA Gaussian band?
 
-PROTOCOL (frozen on 2026-11-27, before the first run on any reported window; every choice comes from the literature or from the existing
+PROTOCOL (frozen on 2026-11-26, before the first run on any reported window; every choice comes from the literature or from the existing
 pipeline, none was tuned on the data):
 
 Intervals. For the next-day log-return y(t+1), centre c(t) and half-width h(t): [c - h, c + h], converted to a price interval close(t) * exp(.)

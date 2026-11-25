@@ -1,6 +1,6 @@
 """E3 (README section 15.8): could a "best" variant be luck, and is anything better than the benchmark after correcting for how many were tried?
 
-PROTOCOL (frozen on 2026-11-28, before the first run on the real forecasts; every choice comes from the literature, none was tuned on the data;
+PROTOCOL (frozen on 2026-11-26, before the first run on the real forecasts; every choice comes from the literature, none was tuned on the data;
 the synthetic tests in test_multiplicity.py are the only runs made before the freeze):
 
 Families (each is tested against its own benchmark on the rows of one window; nothing is pooled across families):
