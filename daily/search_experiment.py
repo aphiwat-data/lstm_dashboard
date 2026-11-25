@@ -269,7 +269,9 @@ def forecast_nn_block(spec: Spec, X: np.ndarray, y: np.ndarray, s: int, e: int) 
     return np.mean(preds, axis=0)
 
 
-def run_group(group: str, panel: Panel, out_dir: Path, max_blocks: int | None = None) -> Path:
+def run_group(group: str, panel: Panel, out_dir: Path, max_blocks: int | None = None, chunk: int | None = None) -> Path:
+    """Fit one group block by block and write forecasts/GROUP.npz. With `chunk`, stop after that many new blocks (a checkpoint is written and the partial file is returned):
+    TensorFlow leaks about 85 MB per block of recurrent fits, so the launcher calls this repeatedly in fresh short-lived processes."""
     specs = all_groups()[group]
     T = len(panel.dates)
     is_nn = group.startswith("nn_")
@@ -296,14 +298,17 @@ def run_group(group: str, panel: Panel, out_dir: Path, max_blocks: int | None = 
         threadpool_limits(limits=1)  # four workers share eight cores; multi-threaded BLAS in each only wastes them
     t0 = time.time()
     mats = {k: panel.X[SETS[k]].to_numpy(float) for k in {sp.fset for sp in specs}}
-    for bi in range(done, len(starts)):
+    stop = len(starts) if chunk is None else min(len(starts), done + chunk)
+    for bi in range(done, stop):
         s = starts[bi]
         e = min(s + BLOCK, T)
         for k, sp in enumerate(specs):
             F[s:e, k] = (forecast_nn_block if is_nn else forecast_block)(sp, mats[sp.fset], panel.y[sp.h], s, e)
-        if (bi + 1) % 10 == 0 or bi + 1 == len(starts):
+        if (bi + 1) % 10 == 0 or bi + 1 == stop:
             np.savez(part, F=F, done=bi + 1, T=T, names=np.array([s.name for s in specs]))
             print(f"{group}: block {bi + 1}/{len(starts)} ({panel.dates[s].date()}), {time.time() - t0:.0f}s", flush=True)
+    if stop < len(starts):
+        return part
     np.savez_compressed(final, F=F, names=np.array([s.name for s in specs]), dates=panel.dates.values.astype("datetime64[D]"), h=specs[0].h, T=T)
     part.unlink(missing_ok=True)
     return final
@@ -584,6 +589,7 @@ def main() -> None:
     ap.add_argument("--group")
     ap.add_argument("--out-dir", type=Path, default=OUT)
     ap.add_argument("--max-blocks", type=int, default=None)
+    ap.add_argument("--chunk", type=int, default=None, help="stop after this many new blocks (resume by calling again)")
     ap.add_argument("--reps", type=int, default=REPS)
     a = ap.parse_args()
     if a.cmd == "prepare":
@@ -593,7 +599,7 @@ def main() -> None:
             print(f"{g:34s} {len(s):4d}")
         print("total base candidates:", sum(len(s) for s in all_groups().values()))
     elif a.cmd == "forecast":
-        run_group(a.group, load_panel(), a.out_dir, a.max_blocks)
+        run_group(a.group, load_panel(), a.out_dir, a.max_blocks, a.chunk)
     else:
         evaluate(a.out_dir, a.reps)
 

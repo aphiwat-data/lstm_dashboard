@@ -188,6 +188,26 @@ def _small_groups():
     return {"linear_h1": sp}
 
 
+def test_chunked_runs_resume_and_equal_one_run():
+    old = se.all_groups
+    try:
+        se.all_groups = _small_groups
+        p = _panel(n_days=2500)
+        with tempfile.TemporaryDirectory() as d1, tempfile.TemporaryDirectory() as d2:
+            se.run_group("linear_h1", p, Path(d1))
+            calls = 0
+            while not (Path(d2) / "forecasts" / "linear_h1.npz").exists():
+                se.run_group("linear_h1", p, Path(d2), chunk=7)
+                calls += 1
+                assert calls < 40
+            a = np.load(Path(d1) / "forecasts" / "linear_h1.npz")["F"]
+            b = np.load(Path(d2) / "forecasts" / "linear_h1.npz")["F"]
+            assert calls > 3 and np.array_equal(a, b, equal_nan=True), "chunked and one-shot runs must agree exactly"
+            assert not (Path(d2) / "forecasts" / "linear_h1.partial.npz").exists()
+    finally:
+        se.all_groups = old
+
+
 def _end_to_end(ar: float):
     old = (se.DEV, se.TEST_START, se.PROJECT, se.FRESH_START, se.all_groups)
     try:
