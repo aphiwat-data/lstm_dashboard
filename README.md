@@ -49,6 +49,7 @@ better:
 | 90% range | Reliable: the real close stayed inside it on 348 of 389 scored test days (89.5%, goal 90%; Kupiec p = 0.73). It is as wide as a no-change range (\$223 vs \$221), so it tracks market volatility, not model skill |
 | Live record (2026-11-17) | 11 real forecasts scored since 2026-10-28: MAE \$48.49 vs \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything; it grows by one trading day each morning |
 | Risk (E6, 2026-11-24) | Volatility is predictable and its R² is positive: Mincer-Zarnowitz R² 0.19 for the shipped EWMA and 0.29 for HAR-RV with release days (2010-2026); HAR-RV beats the EWMA (QLIKE -0.054, p < 0.001; not significant on 2025-26, p = 0.10); an LSTM does not help. The return R² (-0.011) is unchanged (§15.5) |
+| Conformal intervals (E7, 2026-11-27) | Split conformal and adaptive conformal inference match the shipped 90% band's coverage (ACI 91.0% and 90.5% against 89.5%; 90.0% on 2010-2026) and ACI steadies it over time, but they are wider and score slightly worse, so the shipped band stays (§15.5) |
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
@@ -885,6 +886,7 @@ Longer-horizon p-values are adjusted for overlapping forecasts.
 - **Paper: an IEEE-format paper is the next step (owner, 2026-11-17).** The advisor wants a publication; the owner will work with this README and Claude as research helpers. §15 is the research dossier: the claim the evidence supports, every number with its source file, the method in reproducible detail,
   threats to validity, extra experiments to strengthen the paper, a checked bibliography, an IEEE venue shortlist, a section-by-section writing plan and the rules for working with Claude.
 - **Risk track (E6, done 2026-11-24):** volatility is predictable (positive R²) and HAR-RV on hourly realised variance beats the shipped EWMA over 2010-2026; the price R² stays negative. Results in §15.5, protocol in §15.8; follow-ups: intervals built on the HAR-RV volatility, E3, E7-E8.
+- **Interval track (E7, done 2026-11-27):** conformal and adaptive conformal intervals match the shipped band's coverage but do not beat it on width or interval score; ACI with step 0.02 is the option if a guard against drifting volatility is wanted.
 - **Housekeeping:** detach `AmazonEC2ContainerRegistryFullAccess` from `Auto`, stop the SageMaker notebook instance when idle, and optionally refresh the 449-day window with new data (§12 item 12).
 
 ---
@@ -2035,6 +2037,7 @@ Notes:
 7. The evaluation pitfalls found on the way are quantified (§15.6).
 8. A serverless pipeline has produced and scored live forecasts unattended since 2026-10-30 (11 scored on 2026-11-17; descriptive only).
 9. Risk, unlike price, is predictable (E6, Tables E6-1 to E6-6): the R² of every volatility forecast against the realised variance is positive (the shipped EWMA 0.19, HAR-RV with release-day dummies 0.29 on 2010-2026), and HAR-RV built on hourly realised variance beats the shipped EWMA on the long window (QLIKE -0.054, DM p < 0.001, lower in 15 of 17 years for HAR-RV logs); on the 428-day primary window the same models are better but not significantly (p = 0.10), and an LSTM does not help.
+10. Distribution-free intervals do not beat the shipped band (E7, Tables E7-1 to E7-4; this also completes E8): split conformal and adaptive conformal inference match its coverage (ACI 91.0% and 90.5% against 89.5% on the 389 scored days; 90.0% against 89.4% on 2010-2026) and ACI steadies it over time, but the intervals are wider and the interval score is the same or slightly worse (significantly so for ACI on the long window); no Christoffersen test rejects independence or conditional coverage.
 
 **The evidence does not support (do not write):**
 - That the LSTM forecasts gold prices accurately, beats its baselines or is useful for trading. On this evidence the opposite holds, and no strategy, transaction cost or economic value was tested.
@@ -2043,6 +2046,7 @@ Notes:
 - That one input set is best: FOMC+CPI shows 57.5% accuracy and AUC 0.520, but p against always-up is 0.367, and with five variants and many metrics some small p-values appear by chance.
 - Generality: one asset (COMEX gold futures as a proxy for XAU/USD), one 449-day window, mostly a rising market (55.2% up days).
 - That HAR-RV beats the shipped EWMA with statistical significance on the 2025-2026 window (p = 0.10 for HAR-RV-X; the significant result is the long window), that the LSTM helps volatility forecasts (it does not), or that the volatility result changes the return R² (it does not).
+- That conformal or adaptive conformal intervals are better than the shipped band: they match its coverage and ACI steadies it over time, but they are wider and score slightly worse (E7).
 - That the live forecasts are "pre-registered" or immutable: the log can be overwritten (§12 item 19).
 - That the 89.5% coverage is a clean out-of-sample figure: the decay 0.94 was fixed in advance, but the alternatives were compared on the same window, so it is slightly optimistic.
 
@@ -2101,7 +2105,7 @@ Notes:
 
 **Tests.** *Diebold-Mariano* on the squared **return** errors against the no-change forecast (whose return error is y_t): loss differential d_t = e_t² - y_t², Bartlett-kernel long-run variance with L lags, two-sided normal p-value; L = 24 for the headline p (carried over from the hourly pipeline), L = 0 also reported; no Harvey-Leybourne-Newbold small-sample correction. This is not the loss of the dollar-MAE headline: a DM test on absolute price errors would match MAE better (experiment E1). *Direction*: accuracy of the sign, Wilson 95% interval, exact binomial test against the always-up rate, AUC from the direction head. For h > 1 labels overlap, so n_eff = n / h and the DM variance uses h-dependent lags (max(24, 2h)).
 
-**Interval methods (`daily/regression_metrics.py`, `daily/interval_experiment.py`, `daily/lstm_quantile.py`, `daily/interval_vix.py`).** Shipped band: σ_t² = Σ_k λ^k e²_{t-1-k} / Σ_k λ^k with λ = 0.94 over all past return errors e (known before day t), price interval c_t · exp(ŷ_{t+1} ± 1.645 σ_t); first scored forecast after a 60-day warm-up (449 - 60 = 389 scored days). Alternatives: the 5% and 95% empirical quantiles of all past errors; GARCH(1,1) with Gaussian errors and with filtered historical simulation, refitted every 7 days; an LSTM trained with the pinball loss to output the quantiles directly (2 seeds); σ = exp(a + b ln EWMA + c ln VIX) fitted by Gaussian quasi-maximum-likelihood on the last 1,000 days (with same-day VIX, previous-day VIX or no VIX). Scores: coverage, mean width, interval score (Gneiting-Raftery, α = 0.10: width + (2/α) × distance outside), Kupiec proportion-of-failures test, coverage in each half.
+**Interval methods (`daily/regression_metrics.py`, `daily/interval_experiment.py`, `daily/lstm_quantile.py`, `daily/interval_vix.py`).** Shipped band: σ_t² = Σ_k λ^k e²_{t-1-k} / Σ_k λ^k with λ = 0.94 over all past return errors e (known before day t), price interval c_t · exp(ŷ_{t+1} ± 1.645 σ_t); first scored forecast after a 60-day warm-up (449 - 60 = 389 scored days). Alternatives: the 5% and 95% empirical quantiles of all past errors; GARCH(1,1) with Gaussian errors and with filtered historical simulation, refitted every 7 days; an LSTM trained with the pinball loss to output the quantiles directly (2 seeds); σ = exp(a + b ln EWMA + c ln VIX) fitted by Gaussian quasi-maximum-likelihood on the last 1,000 days (with same-day VIX, previous-day VIX or no VIX). Scores: coverage, mean width, interval score (Gneiting-Raftery, α = 0.10: width + (2/α) × distance outside), Kupiec proportion-of-failures test, coverage in each half. E7 adds split conformal and adaptive conformal inference on the same rows (protocol in §15.8).
 
 **Volatility (`daily/volatility_experiment.py`).** One-day variance forecasts of r_{t+1}² scored with QLIKE = ln σ² + r² / σ² (Patton) and a DM test with HAC lag 5, against EWMA 0.94.
 
@@ -2330,6 +2334,70 @@ HAR-RV logs has the lower QLIKE than EWMA 0.94 in 15 of 17 years.
 7. *Caveats.* The proxy is hourly bid-based realised variance with a settlement boundary chosen on 2006-2007; the DM test has no small-sample correction; the primary window lies inside the long window; the HAR logs and HAR-RV-X forecasts are low on the primary window (mean forecast 0.81 of the mean realised variance) because 2025-2026 variance was higher than in the training windows; HAR-RV needs hourly data, which the daily pipeline does not collect, so using it in the shipped band would be a new data feed.
 8. *Deviations from the protocol.* None in the models or the scoring. The experiment script stopped three times at its consistency check with the shipped EWMA before any model had run (the shipped run lacks the embargo days at the split boundaries and the trading day 2026-04-06, so the two EWMA paths differ by up to 10% in the first rows and up to 3% later); the check was loosened in code each time and no model result was seen before the final run. No exploratory variant was run after the results.
 
+### E7 results (Tables E7-1 to E7-4; 2026-11-27; protocol in §15.8; code `daily/conformal_experiment.py`; files `daily/results/paper_e7/e7_summary.json` and `e7_primary_intervals.csv`)
+*Primary window: 389 scored origins (the rows of Table VII); long window: 4249 origins (2010-01-04 to 2026-11-23, no-change centre). Independence and conditional-coverage columns are Christoffersen tests (this also completes experiment E8). The paired test compares the interval score with the shipped band (primary) or with the Gaussian band of the same centre (long); the Bonferroni level is 0.0056.*
+
+**Table E7-1. Primary window, LSTM centre.**
+
+| Method | Coverage (Wilson 95%) | Kupiec p | Independence p | Cond. coverage p | Mean width \$ (% of price) | Interval score \$ | Score minus shipped band (p) | Coverage 1st / 2nd half | Worst 60-day coverage |
+|---|---|---|---|---|---|---|---|---|---|
+| Gaussian | 89.5% (86.0%-92.1%) | 0.725 | 0.454 | 0.710 | 223 (5.28%) | 317 | +0.0 (1.000) | 88% / 91% | 82% |
+| SCP raw | 88.2% (84.6%-91.0%) | 0.242 | 0.464 | 0.386 | 210 (5.09%) | 327 | +9.4 (0.320) | 88% / 88% | 77% |
+| SCP norm | 93.1% (90.1%-95.2%) | 0.034 | 0.925 | 0.106 | 248 (5.91%) | 322 | +4.7 (0.290) | 94% / 92% | 85% |
+| ACI norm g=0.005 | 91.0% (87.7%-93.5%) | 0.503 | 0.922 | 0.795 | 235 (5.60%) | 320 | +2.4 (0.525) | 91% / 91% | 82% |
+| ACI norm g=0.02 | 90.5% (87.2%-93.0%) | 0.746 | 0.751 | 0.902 | 237 (5.63%) | 322 | +4.8 (0.301) | 90% / 91% | 80% |
+
+**Table E7-2. Primary window, no-change centre.**
+
+| Method | Coverage (Wilson 95%) | Kupiec p | Independence p | Cond. coverage p | Mean width \$ (% of price) | Interval score \$ | Score minus shipped band (p) | Coverage 1st / 2nd half | Worst 60-day coverage |
+|---|---|---|---|---|---|---|---|---|---|
+| Gaussian | 88.7% (85.2%-91.5%) | 0.398 | 0.286 | 0.395 | 221 (5.24%) | 314 | -3.0 (0.322) | 87% / 91% | 82% |
+| SCP raw | 88.4% (84.9%-91.2%) | 0.313 | 0.704 | 0.560 | 214 (5.19%) | 321 | +4.2 (0.655) | 88% / 89% | 77% |
+| SCP norm | 91.3% (88.0%-93.7%) | 0.398 | 0.513 | 0.565 | 239 (5.69%) | 318 | +1.2 (0.778) | 91% / 91% | 83% |
+| ACI norm g=0.005 | 90.5% (87.2%-93.0%) | 0.746 | 0.335 | 0.596 | 232 (5.54%) | 317 | +0.3 (0.939) | 91% / 90% | 83% |
+| ACI norm g=0.02 | 90.2% (86.9%-92.8%) | 0.879 | 0.670 | 0.903 | 232 (5.53%) | 320 | +2.4 (0.618) | 90% / 90% | 82% |
+
+**Table E7-3. Long window (2010-2026), no-change centre.**
+
+| Method | Coverage (Wilson 95%) | Kupiec p | Independence p | Cond. coverage p | Mean width \$ (% of price) | Interval score \$ | Score minus Gaussian (p) | Coverage 1st / 2nd half | Worst 60-day coverage |
+|---|---|---|---|---|---|---|---|---|---|
+| Gaussian | 89.4% (88.5%-90.3%) | 0.222 | 0.159 | 0.176 | 66 (3.36%) | 95 | +0.0 (1.000) | 90% / 89% | 73% |
+| SCP raw | 89.6% (88.6%-90.5%) | 0.358 | 0.117 | 0.191 | 65 (3.35%) | 97 | +1.6 (0.172) | 90% / 89% | 55% |
+| SCP norm | 90.1% (89.2%-91.0%) | 0.762 | 0.096 | 0.240 | 70 (3.51%) | 96 | +0.8 (0.006) | 90% / 90% | 75% |
+| ACI norm g=0.005 | 90.0% (89.1%-90.9%) | 0.996 | 0.094 | 0.246 | 70 (3.55%) | 96 | +1.3 (0.002) | 90% / 90% | 77% |
+| ACI norm g=0.02 | 90.0% (89.0%-90.8%) | 0.955 | 0.088 | 0.232 | 72 (3.62%) | 98 | +2.5 (<0.001) | 90% / 90% | 82% |
+
+**Table E7-4. Coverage by year, long window** (target 90%).
+
+| Year | Days | Gaussian | SCP raw | SCP norm | ACI norm g=0.005 | ACI norm g=0.02 |
+|---|---|---|---|---|---|---|
+| 2010 | 252 | 90.1% | 92.5% | 90.1% | 90.1% | 90.5% |
+| 2011 | 252 | 89.7% | 83.3% | 90.9% | 91.3% | 90.9% |
+| 2012 | 250 | 90.0% | 95.2% | 89.2% | 88.8% | 89.2% |
+| 2013 | 252 | 89.7% | 84.1% | 90.9% | 90.9% | 90.1% |
+| 2014 | 252 | 89.3% | 93.7% | 89.7% | 88.9% | 89.7% |
+| 2015 | 252 | 89.3% | 90.5% | 91.3% | 91.3% | 90.5% |
+| 2016 | 250 | 91.6% | 90.4% | 91.6% | 90.4% | 89.6% |
+| 2017 | 251 | 91.6% | 94.4% | 89.6% | 89.2% | 90.0% |
+| 2018 | 250 | 89.2% | 90.0% | 90.0% | 90.0% | 90.0% |
+| 2019 | 252 | 89.3% | 88.5% | 88.9% | 89.3% | 90.1% |
+| 2020 | 253 | 88.5% | 85.0% | 91.7% | 91.7% | 90.9% |
+| 2021 | 252 | 89.3% | 94.0% | 89.3% | 88.9% | 88.9% |
+| 2022 | 251 | 88.0% | 88.4% | 90.4% | 90.0% | 90.8% |
+| 2023 | 251 | 90.4% | 93.6% | 91.2% | 90.0% | 88.8% |
+| 2024 | 252 | 90.1% | 87.3% | 90.5% | 90.9% | 90.9% |
+| 2025 | 252 | 85.7% | 84.9% | 87.7% | 88.9% | 89.7% |
+| 2026 | 225 | 88.4% | 86.7% | 89.3% | 89.3% | 88.9% |
+
+**Reading (written after the results; the protocol was not changed).**
+1. *Distribution-free intervals reach the coverage of the shipped band.* On the primary window ACI covers 91.0% and 90.5% (Kupiec p = 0.503 and 0.746) against 89.5% for the shipped Gaussian band (p = 0.725); normalised split conformal over-covers (93.1%, Kupiec p = 0.034) and raw split conformal under-covers (88.2%, not significant). On the long window the normalised conformal and ACI bands cover 90.0% to 90.1% (Kupiec p ≥ 0.76) against 89.4% for the Gaussian band (p = 0.222). No Christoffersen test rejects independence or conditional coverage at 5% for any method on any window (smallest p 0.088), although the long-window independence p-values (0.088 to 0.159) hint at mild clustering of misses.
+2. *There is no efficiency gain.* The conformal intervals are wider (5.60% and 5.63% of the price for ACI against 5.28%; 3.55% and 3.62% against 3.36% on the long window) and their interval scores are the same or slightly worse. On the primary window no difference from the shipped band is significant (smallest p = 0.29); on the long window the ACI scores are significantly worse than the Gaussian band's (+1.3, p = 0.002, and +2.5, p < 0.001, on a score near 95) and normalised split conformal is worse by a small amount that does not pass the Bonferroni level (+0.8, p = 0.0062). Closer-to-nominal coverage is paid for with width.
+3. *ACI steadies the coverage over time.* By year, the Gaussian band's coverage ranges from 85.7% to 91.6% (2025: 85.7%), ACI with the step 0.02 from 88.8% to 90.9% (2025: 89.7%); the worst 60-day rolling coverage on the long window is 82% for ACI (step 0.02), 77% (step 0.005), 75% for normalised split conformal, 73% for the Gaussian band and 55% for raw split conformal, whose width cannot follow volatility spikes.
+4. *The centre does not matter.* The LSTM and no-change centres give the same picture (ACI with step 0.005: 91.0% and 90.5% coverage, interval scores 320 and 317), as Table VII already showed for the Gaussian band.
+5. *Verdict.* The shipped EWMA Gaussian band is not beaten by distribution-free alternatives on coverage plus width: conformal and ACI match its coverage, ACI is steadier over time, and the Gaussian band is slightly narrower and scores slightly better. ACI with the step 0.02 is the candidate if a guard against drifting volatility is wanted; it would cost 1% to 3% of the interval score.
+6. *Caveats.* One primary window of 389 days (coverage intervals of about ±3 points); the long window has no LSTM; the calibration window (250 scores) and the ACI steps were fixed in advance, not tuned; the finite-sample ACI guarantee is vacuous for 389 days and conformal validity needs exchangeability, which time series violate; the intervals are symmetric in the return.
+7. *Deviations from the protocol.* None; the experiment was run once, after the protocol was committed.
+
 ### 15.6 Evaluation pitfalls found in this project (the audit angle)
 **Table XI. Evaluation pitfalls.**
 
@@ -2368,8 +2436,8 @@ Each runs in its own results folder (for example `daily/results/paper_*/`) so th
 | E4 | Long window and power analysis | Does the null hold across regimes? | Walk-forward over about 2010-2026 (retrain every 20 days to cut compute); minimum detectable MAE gain at n = 449 | several days | Null stays; shows low power in 2025-26 |
 | E5 | Multi-asset replication | Is it gold-specific? | Same pipeline on silver, EUR/USD, S&P 500, 10-year yield | several days | Null stays; supports a general audit |
 | E6 | Volatility track (the positive-result candidate) | Is risk predictable when price is not? | Realised volatility from the hourly data; HAR-RV with NFP, FOMC and CPI days against EWMA, GARCH and an LSTM; QLIKE and DM | done 2026-11-24 (452 s of compute) | **Done, protocol frozen first:** positive R² for risk; HAR-RV beats the shipped EWMA on 2010-2026 (p < 0.001) and, not significantly, on the 428-day window; the LSTM does not help (Tables E6-1 to E6-6) |
-| E7 | Conformal intervals | Can distribution-free intervals match EWMA? | Split conformal and adaptive conformal inference around the LSTM and no-change centres | 2-3 days | Comparable coverage |
-| E8 | Conditional coverage | Are violations independent? | Christoffersen independence and conditional-coverage tests on the current bands | hours | Mild clustering likely |
+| E7 | Conformal intervals | Can distribution-free intervals match EWMA? | Split conformal and adaptive conformal inference around the LSTM and no-change centres | done 2026-11-27 (4 s of compute) | **Done, protocol frozen first:** comparable coverage (ACI 90.5-91.0% against 89.5%), steadier over time, but wider and slightly worse interval score; the shipped band is not beaten (Tables E7-1 to E7-4) |
+| E8 | Conditional coverage | Are violations independent? | Christoffersen independence and conditional-coverage tests on the current bands | done 2026-11-27 inside E7 | **Done:** no Christoffersen test rejects at 5% (shipped band: independence p = 0.45, conditional coverage p = 0.71; long window independence p 0.09 to 0.16) |
 | E9 | Forecast encompassing | Does the LSTM add anything to no-change? | Mincer-Zarnowitz regression of realised on forecast returns; encompassing test | hours | Slope near 0 |
 | E10 | Live-log hardening | Can the live record be trusted? | S3 versioning with Object Lock or a daily commit of the log; back it up (§12 items 19-20) | hours | Needed before citing the live record |
 | E11 | Frozen protocol | Were choices made before seeing results? | Commit and tag a protocol file before any long-window or multi-asset run | an hour | Credibility |
