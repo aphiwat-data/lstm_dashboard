@@ -16,7 +16,7 @@ from ui import data, header, sidebar, tab_market, tab_reliability, tab_track  # 
 res, preds = data.results()
 reg = data.regression()
 log = data.live_log()
-key = data.headline_key(res, log)  # the cross-asset model once the daily pipeline publishes its forecasts, otherwise the LSTM
+key = data.headline_key(res, log, data.live_forecast())  # the cross-asset model while the daily pipeline publishes its forecasts, otherwise the LSTM
 cur = data.current_forecast(res, key)
 if cur is None:
     st.error("No forecast is available right now. Please try again in a few minutes.", icon=":material/error:")

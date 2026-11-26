@@ -34,11 +34,12 @@ def _stamp(*names: str) -> float:
     return max((((RESULTS / n).stat().st_mtime) for n in names if (RESULTS / n).exists()), default=0.0)
 
 
-def headline_key(res: dict | None, log: pd.DataFrame | None) -> str:
-    """The model whose forecast, numbers and charts the page shows. It becomes the cross-asset model once its results are in the repository AND the daily pipeline has published at
-    least one of its forecasts (the live log has them); until then the page is the LSTM page, so it can never show a stale cross-asset forecast."""
+def headline_key(res: dict | None, log: pd.DataFrame | None, live: dict | None) -> str:
+    """The model whose forecast, numbers and charts the page shows. It is the cross-asset model when its results are in the repository, the live log has its forecasts AND the
+    pipeline's latest run published one ("crossasset" in the live file); otherwise the page is the LSTM page (also on a day when only the cross-asset step failed), so it can
+    never show a stale cross-asset forecast."""
     started = log is not None and LIVE_COLUMNS[HEADLINE][0] in log.columns and bool(log[LIVE_COLUMNS[HEADLINE][0]].notna().any())
-    return HEADLINE if res and HEADLINE in res.get("models", {}) and started else "lstm"
+    return HEADLINE if res and HEADLINE in res.get("models", {}) and started and (live or {}).get("crossasset") else "lstm"
 
 
 # ------------------------------------------------------------------------------------------------------------------ live pipeline (S3)
