@@ -1,0 +1,15 @@
+{
+  "as_of_date": "2026-11-25",
+  "latest_close": 3535.8,
+  "predicted_return": 0.002155335857873359,
+  "predicted_next_close": 3543.43,
+  "p_up": 0.5427356920587082,
+  "interval_90_close": [
+    3434.97,
+    3655.31
+  ],
+  "generated_at": "2026-11-26T03:00:08+00:00",
+  "model_version": "202610291014",
+  "model_trained_through": "2026-10-27",
+  "interval_method": "Gaussian, sigma = EWMA(lambda 0.94) of past errors, z = 1.645"
+}

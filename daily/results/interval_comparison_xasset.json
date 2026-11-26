@@ -1,0 +1,67 @@
+[
+ {
+  "method": "EWMA Gaussian, lambda 0.94 (current)",
+  "n": 389,
+  "coverage": 0.8946015424164524,
+  "mean_width_usd": 220.7104481216818,
+  "mean_width_pct": 5.240917189289701,
+  "interval_score_usd": 313.69607157084914,
+  "kupiec_p": 0.7247332700112954,
+  "cov_first_half": 0.8762886597938144,
+  "cov_second_half": 0.9128205128205128,
+  "score_diff_vs_ewma": 0.0,
+  "score_diff_p": 1.0
+ },
+ {
+  "method": "Empirical quantiles, all past errors",
+  "n": 389,
+  "coverage": 0.8560411311053985,
+  "mean_width_usd": 198.84274138647987,
+  "mean_width_pct": 4.796731143378118,
+  "interval_score_usd": 329.5513564622314,
+  "kupiec_p": 0.006318348363612336,
+  "cov_first_half": 0.8608247422680413,
+  "cov_second_half": 0.8512820512820513,
+  "score_diff_vs_ewma": 15.85528489138228,
+  "score_diff_p": 0.17435363196472453
+ },
+ {
+  "method": "GARCH(1,1), Gaussian",
+  "n": 389,
+  "coverage": 0.8611825192802056,
+  "mean_width_usd": 202.18909780741456,
+  "mean_width_pct": 4.781251331923741,
+  "interval_score_usd": 320.0789649796199,
+  "kupiec_p": 0.015281332433639494,
+  "cov_first_half": 0.8298969072164949,
+  "cov_second_half": 0.8923076923076924,
+  "score_diff_vs_ewma": 6.382893408770787,
+  "score_diff_p": 0.1513273654185865
+ },
+ {
+  "method": "GARCH(1,1), filtered historical sim.",
+  "n": 389,
+  "coverage": 0.8534704370179949,
+  "mean_width_usd": 199.8337190782731,
+  "mean_width_pct": 4.731765690040062,
+  "interval_score_usd": 319.4462352580616,
+  "kupiec_p": 0.0039496536719519915,
+  "cov_first_half": 0.8298969072164949,
+  "cov_second_half": 0.8769230769230769,
+  "score_diff_vs_ewma": 5.750163687212495,
+  "score_diff_p": 0.2224497976550952
+ },
+ {
+  "method": "No-change centre, EWMA (reference)",
+  "n": 389,
+  "coverage": 0.8868894601542416,
+  "mean_width_usd": 220.99953353818535,
+  "mean_width_pct": 5.244762708949784,
+  "interval_score_usd": 314.1417893234844,
+  "kupiec_p": 0.3975085053153724,
+  "cov_first_half": 0.865979381443299,
+  "cov_second_half": 0.9076923076923077,
+  "score_diff_vs_ewma": 0.44571775263520885,
+  "score_diff_p": 0.8137009585845749
+ }
+]

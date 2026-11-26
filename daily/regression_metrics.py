@@ -28,8 +28,8 @@ from scipy.stats import spearmanr
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hourly"))
 from train_models import dm_pvalue, ic_pvalue, r2_returns  # noqa: E402  (same definitions as the published walk-forward results)
 
-MODELS = ("drift", "ridge", "hist_gb_reg", "lstm")  # the models that output a return (hence price) forecast
-LABELS = {"drift": "Rolling drift", "ridge": "Ridge", "hist_gb_reg": "HistGB regressor", "lstm": "LSTM (walk-forward)"}
+MODELS = ("drift", "ridge", "hist_gb_reg", "lstm", "xasset")  # the models that output a return (hence price) forecast; "xasset" (the cross-asset model, README section 15.5) only when its column exists
+LABELS = {"drift": "Rolling drift", "ridge": "Ridge", "hist_gb_reg": "HistGB regressor", "lstm": "LSTM (walk-forward)", "xasset": "Cross-asset model"}
 Z90 = 1.6448536269514722  # two-sided 90% normal quantile
 EWMA_LAMBDA = 0.94  # RiskMetrics' standard daily decay; fixed in advance, not tuned on the test window
 WARMUP_DAYS = 60  # past errors required before the first band is scored
@@ -115,6 +115,8 @@ def compute(preds: pd.DataFrame) -> dict:
         "models": {},
     }
     for name in MODELS:
+        if f"pred_ret_{name}" not in preds:
+            continue
         pred = preds[f"pred_ret_{name}"].to_numpy(float)
         m = point_metrics(close, nxt, y, pred, drift)
         p_up = preds[f"p_up_{name}"] if f"p_up_{name}" in preds else None
@@ -125,6 +127,10 @@ def compute(preds: pd.DataFrame) -> dict:
     iv: dict = {"nominal": 0.90, "warmup_days": WARMUP_DAYS}
     for key, method, kw in (("lstm_ewma_gaussian", "ewma_gaussian", {}), ("lstm_empirical_expanding", "empirical", {})):
         iv[key] = interval_metrics(close, y, *rolling_bands(pred, errors, method, **kw))
+    if "pred_ret_xasset" in preds:  # the same two bands around the cross-asset forecast, from its own errors
+        px = preds["pred_ret_xasset"].to_numpy(float)
+        for key, method in (("xasset_ewma_gaussian", "ewma_gaussian"), ("xasset_empirical_expanding", "empirical")):
+            iv[key] = interval_metrics(close, y, *rolling_bands(px, y - px, method))
     iv["no_change_ewma_gaussian"] = interval_metrics(close, y, *rolling_bands(zero, y, "ewma_gaussian"))
     iv["sensitivity"] = [
         {"method": f"empirical quantiles, last {w} errors" if w else "empirical quantiles, all past errors",
