@@ -2,6 +2,7 @@
 
   python deploy.py plan        # show what would be created
   python deploy.py apply       # create or update everything (safe to repeat)
+  python deploy.py code        # only replace the function's code (and seed the cross-asset objects below when missing); no IAM, schedule or alarm calls
   python deploy.py teardown    # delete what apply created (not the S3 data)
 
 Creates: Lambda role (least-privilege inline policy), the function, the EventBridge Scheduler schedule (daily 03:00 UTC = 10:00 Thailand) with its own
@@ -25,8 +26,9 @@ REGION, BUCKET = "ap-southeast-2", "gold-lstm-forecast"
 FN = "gold-lstm-forecast-daily-refresh"
 ROLE, SCHED_ROLE, SCHEDULE, TOPIC = f"{FN}-role", f"{FN}-scheduler-role", FN, "gold-lstm-forecast-alerts"
 LAYER = "arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python312:32"  # AWS-managed: pandas, numpy, pyarrow
-FILES = {"lambda_function.py": HERE / "lambda_function.py", "serving.py": DAILY / "serving.py", "build_daily_dataset.py": DAILY / "build_daily_dataset.py"}
+FILES = {"lambda_function.py": HERE / "lambda_function.py", "serving.py": DAILY / "serving.py", "build_daily_dataset.py": DAILY / "build_daily_dataset.py", "crossasset.py": DAILY / "crossasset.py"}
 MODEL_SRC, MODEL_KEY = DAILY / "serving_artifacts" / "serving_model.npz", "model/serving/serving_model.npz"
+XASSET_SEEDS = {DAILY / "serving_artifacts" / "crossasset_model.npz": "model/serving/crossasset_model.npz", DAILY / "serving_artifacts" / "macro_history.csv": "model/serving/macro_history.csv"}  # python export_crossasset_model.py
 
 iam, lam, s3 = (boto3.client(n, region_name=REGION) for n in ("iam", "lambda", "s3"))
 sch, sns, cw, sts = (boto3.client(n, region_name=REGION) for n in ("scheduler", "sns", "cloudwatch", "sts"))
@@ -38,6 +40,25 @@ def build_zip() -> bytes:
         for name, path in FILES.items():
             z.write(path, name)
     return buf.getvalue()
+
+
+def seed_xasset() -> None:
+    """Upload the cross-asset model's error history and the macro history once; an existing object is left untouched (it is the Lambda's input, not an output)."""
+    for src, key in XASSET_SEEDS.items():
+        try:
+            s3.head_object(Bucket=BUCKET, Key=key)
+            print("already at", f"s3://{BUCKET}/{key}", "(left untouched)")
+        except ClientError:
+            s3.upload_file(str(src), BUCKET, key)
+            print("seeded", src.name, "->", f"s3://{BUCKET}/{key}")
+
+
+def update_code() -> None:
+    """Replace only the function's code: the smallest possible change to the live pipeline (configuration, role, schedule and alarms stay as they are)."""
+    seed_xasset()
+    lam.update_function_code(FunctionName=FN, ZipFile=build_zip())
+    lam.get_waiter("function_updated").wait(FunctionName=FN)
+    print("function code updated:", FN, [str(k) for k in FILES])
 
 
 def ensure_role(name: str, trust: str, policy: str, policy_name: str) -> str:
@@ -59,6 +80,7 @@ def apply() -> None:
     except ClientError:
         s3.upload_file(str(MODEL_SRC), BUCKET, MODEL_KEY)
         print("seeded model ->", f"s3://{BUCKET}/{MODEL_KEY}")
+    seed_xasset()
     role_arn = ensure_role(ROLE, "iam_trust_policy.json", (HERE / "iam_permissions_policy.json").read_text(), "pipeline-least-privilege")
     sched_arn = ensure_role(SCHED_ROLE, "scheduler_trust_policy.json", (HERE / "scheduler_permissions_policy.json").read_text(), "invoke-only-this-lambda")
     code, cfg = build_zip(), dict(Runtime="python3.12", Handler="lambda_function.lambda_handler", Timeout=120, MemorySize=1024, Layers=[LAYER],
@@ -120,9 +142,13 @@ if __name__ == "__main__":
     if cmd == "plan":
         print(f"function {FN} (python3.12, layer {LAYER.split(':')[-2]}:{LAYER.split(':')[-1]}), zip = {len(build_zip()) / 1024:.0f} KB with {list(FILES)}")
         print(f"model {MODEL_SRC.name} ({MODEL_SRC.stat().st_size / 1024:.0f} KB) -> s3://{BUCKET}/{MODEL_KEY}")
+        for src, key in XASSET_SEEDS.items():
+            print(f"cross-asset input {src.name} ({src.stat().st_size / 1024:.0f} KB) -> s3://{BUCKET}/{key} (only when missing)")
         print(f"roles {ROLE}, {SCHED_ROLE}; schedule cron(0 3 * * ? *) UTC; topic {TOPIC}; 2 alarms")
     elif cmd == "apply":
         apply()
+    elif cmd == "code":
+        update_code()
     elif cmd == "teardown":
         teardown()
     else:

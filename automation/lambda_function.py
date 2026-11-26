@@ -8,6 +8,9 @@ EventBridge Scheduler (daily) -> this function:
      -> next-day forecast with a 90% band (EWMA of past errors)
   5. upsert the forecast log (live track record: each past forecast is scored once its next close is known) and write latest_forecast.json
   6. emit CloudWatch metrics (embedded metric format) and a run-log row
+Since 2026-11-26 the same run also makes the cross-asset forecast (crossasset.py, README section 15.5): it fetches the latest daily closes of DXY, silver, the S&P 500, the 10-year yield
+and TIP, appends them to its own log, refits the ridge on the last 1,000 labelled days and adds the forecast to latest_forecast.json (key "crossasset") and to new columns x_* of the forecast
+log. That step is optional and isolated: if it fails for any reason the LSTM forecast is still published and the failure is written to the run log.
 The previous price-level/TFLite version is kept as lambda_function_v1_price_level.py.old.
 """
 from __future__ import annotations
@@ -25,6 +28,7 @@ import boto3
 import numpy as np
 import pandas as pd
 
+import crossasset
 import serving
 
 logger = logging.getLogger()
@@ -39,12 +43,18 @@ RUN_LOG_KEY = "bronze/streaming/automation_log.csv"
 FORECAST_KEY = "gold/xauusd_daily/predictions/latest_forecast.json"
 FORECAST_LOG_KEY = "gold/xauusd_daily/predictions/forecast_log.csv"
 DQ_KEY = "gold/xauusd_daily/predictions/dq_report.json"
+MACRO_HISTORY_KEY = "model/serving/macro_history.csv"                      # read-only: the five macro series up to the first cross-asset run (uploaded once)
+MACRO_STREAM_KEY = "bronze/streaming/macro_daily_incremental.csv"          # this function's append-only log of newer macro bars
+XMODEL_KEY = "model/serving/crossasset_model.npz"                          # read-only: the model's past walk-forward errors, which size the first bands
+INPUTS_KEY = "gold/xauusd_daily/predictions/crossasset_inputs.csv"          # the last 130 days of the six inputs, for the dashboard's "What the model looks at"
+X_COLS = ["x_predicted_return", "x_predicted_next_close", "x_lo_90", "x_hi_90", "x_log_error", "x_inside_90", "x_model_version"]
 OHLCV = ["date", "open", "high", "low", "close", "volume"]
 MAX_GAP_DAYS, EXTREME_LOGRET, CRITICAL_LOGRET = 5, 0.07, 0.15
 TICKER = "GC%3DF"
 
 s3 = boto3.client("s3", region_name=REGION)
 _model_cache: dict = {}
+_xmodel_cache: dict = {}
 
 
 # --------------------------------------------------------------------------------------------------------------------- ingest
@@ -135,6 +145,57 @@ def data_quality(prices: pd.DataFrame, new_rows: pd.DataFrame, now_utc: datetime
     return {"checked_at": now_utc.isoformat(timespec="seconds"), "checks": checks, "critical": critical, "warnings": warnings, "passed": not critical}
 
 
+# ------------------------------------------------------------------------------------------------------------------------ cross-asset
+def load_macro() -> pd.DataFrame:
+    """The five macro series: the uploaded history plus this function's own log of newer bars (the history wins for the days it covers)."""
+    hist = _read_csv(MACRO_HISTORY_KEY, parse_dates=["date"])
+    if hist is None:
+        raise RuntimeError(f"{MACRO_HISTORY_KEY} is missing")
+    stream = _read_csv(MACRO_STREAM_KEY, parse_dates=["date"])
+    cols = ["date"] + crossasset.MACRO_COLS
+    macro = hist[cols] if stream is None or not len(stream) else pd.concat([hist[cols], stream[cols][stream["date"] > hist["date"].max()]], ignore_index=True)
+    return macro.drop_duplicates("date", keep="last").sort_values("date").set_index("date")
+
+
+def append_macro_stream(new_rows: pd.DataFrame) -> None:
+    """Idempotent append keyed by date, like the gold log."""
+    existing = _read_csv(MACRO_STREAM_KEY, parse_dates=["date"])
+    add = new_rows[crossasset.MACRO_COLS].rename_axis("date").reset_index().assign(fetched_at=datetime.now(timezone.utc).isoformat())
+    merged = add if existing is None else pd.concat([existing, add], ignore_index=True)
+    _put_csv(MACRO_STREAM_KEY, merged.drop_duplicates("date", keep="last").sort_values("date").reset_index(drop=True))
+
+
+def load_xmodel() -> dict:
+    obj = s3.get_object(Bucket=S3_BUCKET, Key=XMODEL_KEY)
+    etag = obj.get("ETag", "")
+    if _xmodel_cache.get("etag") != etag or "model" not in _xmodel_cache:
+        _xmodel_cache["model"] = {k: v for k, v in np.load(BytesIO(obj["Body"].read()), allow_pickle=False).items()}
+        _xmodel_cache["etag"] = etag
+    return _xmodel_cache["model"]
+
+
+def cross_asset_point(prices: pd.DataFrame, log: pd.DataFrame | None, now_utc: datetime) -> tuple[dict, np.ndarray]:
+    """Fetch the newest macro closes (appended to the stream log), refit and forecast. Returns (forecast, the model's past errors, oldest first)."""
+    macro = load_macro()
+    behind = max((pd.Timestamp(now_utc.date()) - macro.index.max()).days, 0)
+    recent = crossasset.fetch_recent_macro(chart_range(behind), now_utc)
+    new = recent[recent.index > macro.index.max()].dropna(how="all")
+    if len(new):
+        append_macro_stream(new)
+        macro = pd.concat([macro, new[crossasset.MACRO_COLS]]).sort_index()
+        macro = macro[~macro.index.duplicated(keep="last")]
+    base = np.asarray(load_xmodel()["errors"], float)
+    live = log["x_log_error"].dropna().to_numpy(float) if log is not None and "x_log_error" in log else np.empty(0)
+    errors = np.r_[base, live]
+    close = prices.set_index("date")["close"]
+    forecast = crossasset.forecast_latest(close, macro, errors)
+    try:  # for the page: exactly the inputs the model saw; a failure here must not discard the forecast
+        _put_csv(INPUTS_KEY, crossasset.macro_features(close, macro).tail(130).rename_axis("date").reset_index())
+    except Exception:  # noqa: BLE001
+        logger.warning("could not write the inputs file", exc_info=True)
+    return forecast, errors
+
+
 # --------------------------------------------------------------------------------------------------------------- model + log
 def load_model() -> dict:
     """Weights are cached across warm invocations but re-read as soon as the weekly retrain replaces the object (ETag check)."""
@@ -146,16 +207,23 @@ def load_model() -> dict:
     return _model_cache["model"]
 
 
-def update_forecast_log(forecast: dict, prices: pd.DataFrame, model_version: str) -> tuple[pd.DataFrame, np.ndarray]:
-    """Upsert today's forecast and score every earlier one whose next close is now known. Returns (log, realised errors in date order)."""
+def update_forecast_log(forecast: dict, prices: pd.DataFrame, model_version: str, xfc: dict | None = None, x_version: str = "") -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    """Upsert today's forecast (and the cross-asset one in the x_* columns) and score every earlier one whose next close is now known.
+    Returns (log, realised LSTM errors in date order, realised cross-asset errors in date order)."""
     log = _read_csv(FORECAST_LOG_KEY, parse_dates=["as_of_date"])
-    cols = ["as_of_date", "latest_close", "predicted_return", "predicted_next_close", "p_up", "lo_90", "hi_90", "model_version", "next_date", "actual_next_close", "log_error", "inside_90"]
+    cols = ["as_of_date", "latest_close", "predicted_return", "predicted_next_close", "p_up", "lo_90", "hi_90", "model_version", "next_date", "actual_next_close", "log_error", "inside_90"] + X_COLS
     log = pd.DataFrame(columns=cols) if log is None else log
+    for c in X_COLS:  # a log written before the cross-asset model gets the new columns, old rows stay empty
+        if c not in log.columns:
+            log[c] = np.nan
     row = {"as_of_date": pd.Timestamp(forecast["as_of_date"]), "latest_close": forecast["latest_close"], "predicted_return": forecast["predicted_return"],
            "predicted_next_close": forecast["predicted_next_close"], "p_up": forecast["p_up"], "lo_90": forecast["interval_90_close"][0],
            "hi_90": forecast["interval_90_close"][1], "model_version": model_version}
+    if xfc is not None:
+        row.update(x_predicted_return=xfc["predicted_return"], x_predicted_next_close=xfc["predicted_next_close"], x_lo_90=xfc["interval_90_close"][0],
+                   x_hi_90=xfc["interval_90_close"][1], x_model_version=x_version)
     log = pd.concat([log[log["as_of_date"] != row["as_of_date"]], pd.DataFrame([row])], ignore_index=True).sort_values("as_of_date").reset_index(drop=True)
-    log = log.astype({"next_date": "object", "inside_90": "object", "model_version": "object"})  # an all-empty CSV column is read back as float
+    log = log.astype({"next_date": "object", "inside_90": "object", "model_version": "object", "x_inside_90": "object", "x_model_version": "object"})  # an all-empty CSV column is read back as float
     log["as_of_date"] = pd.to_datetime(log["as_of_date"])
     close = prices.set_index("date")["close"]
     for i, r in log.iterrows():
@@ -166,8 +234,10 @@ def update_forecast_log(forecast: dict, prices: pd.DataFrame, model_version: str
                 log.at[i, "next_date"], log.at[i, "actual_next_close"] = str(later.index[0].date()), act
                 log.at[i, "log_error"] = float(np.log(act / r["latest_close"]) - r["predicted_return"])
                 log.at[i, "inside_90"] = bool(r["lo_90"] <= act <= r["hi_90"])
-    errors = log["log_error"].dropna().to_numpy(float)
-    return log, errors
+                if pd.notna(r.get("x_predicted_return")):
+                    log.at[i, "x_log_error"] = float(np.log(act / r["latest_close"]) - r["x_predicted_return"])
+                    log.at[i, "x_inside_90"] = bool(r["x_lo_90"] <= act <= r["x_hi_90"])
+    return log, log["log_error"].dropna().to_numpy(float), log["x_log_error"].dropna().to_numpy(float)
 
 
 def emit_metrics(**values: float) -> None:
@@ -203,23 +273,39 @@ def lambda_handler(event=None, context=None):
         rows = serving.latest_feature_rows(prices.tail(400))
         base_errors = model["errors"]
         forecast = serving.forecast(model, rows, base_errors)
-        log, live_errors = update_forecast_log(forecast, prices, str(model["model_version"]))
+        xfc, x_errors0, x_failure = None, np.empty(0), ""  # the cross-asset forecast is optional: nothing in this block may stop the LSTM forecast
+        try:
+            xfc, x_errors0 = cross_asset_point(prices, _read_csv(FORECAST_LOG_KEY, parse_dates=["as_of_date"]), now_utc)
+            if xfc["as_of_date"] != forecast["as_of_date"]:
+                raise RuntimeError(f"cross-asset as_of {xfc['as_of_date']} differs from the LSTM's {forecast['as_of_date']}")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("cross-asset step failed")
+            xfc, x_failure = None, f"{type(exc).__name__}: {str(exc)[:160]}"
+        x_version = f"ridge{int(crossasset.ALPHA)}-L{crossasset.TRAIN_LEN}-{xfc['trained_through']}" if xfc else ""
+        log, live_errors, x_live_errors = update_forecast_log(forecast, prices, str(model["model_version"]), xfc, x_version)
         forecast["interval_90_close"] = serving.band(np.r_[base_errors, live_errors], forecast["latest_close"], forecast["predicted_return"])
         log.loc[log["as_of_date"] == pd.Timestamp(forecast["as_of_date"]), ["lo_90", "hi_90"]] = forecast["interval_90_close"]
+        if xfc is not None:  # the newest realised errors (yesterday's forecast, scored just now) size today's band, as for the LSTM
+            xfc["interval_90_close"] = serving.band(np.r_[np.asarray(load_xmodel()["errors"], float), x_live_errors], xfc["latest_close"], xfc["predicted_return"])
+            log.loc[log["as_of_date"] == pd.Timestamp(forecast["as_of_date"]), ["x_lo_90", "x_hi_90"]] = xfc["interval_90_close"]
+            xfc.update(generated_at=now_utc.isoformat(timespec="seconds"), model_version=x_version, model_trained_through=xfc["trained_through"],
+                       interval_method=f"Gaussian, sigma = EWMA(lambda {serving.EWMA_LAMBDA}) of past errors, z = {serving.Z90:.3f}", model=crossasset.MODEL_NAME)
+        forecast["crossasset"] = xfc
         forecast.update(generated_at=now_utc.isoformat(timespec="seconds"), model_version=str(model["model_version"]), model_trained_through=str(model["trained_through"]),
                         interval_method=f"Gaussian, sigma = EWMA(lambda {serving.EWMA_LAMBDA}) of past errors, z = {serving.Z90:.3f}")
         s3.put_object(Bucket=S3_BUCKET, Key=FORECAST_KEY, Body=json.dumps(forecast, indent=2).encode("utf-8"))
         _put_csv(FORECAST_LOG_KEY, log)
         scored = log.dropna(subset=["inside_90"])
         outcome = "forecast_updated" if len(new_rows) else "no_new_data"
-        append_run_log(outcome, f"as_of={forecast['as_of_date']} new_rows={len(new_rows)} warnings={dq['warnings']}")
-        emit_metrics(NewRows=len(new_rows), DQWarnings=len(dq["warnings"]), Failure=0, ForecastsScored=len(scored), RunSeconds=round(time.time() - t0, 2))
-        return {"outcome": outcome, "as_of": forecast["as_of_date"], "forecast": forecast["predicted_next_close"], "interval_90": forecast["interval_90_close"], "dq_warnings": dq["warnings"]}
+        append_run_log(outcome, f"as_of={forecast['as_of_date']} new_rows={len(new_rows)} warnings={dq['warnings']} " + (f"x={xfc['predicted_next_close']}" if xfc else f"x_failed={x_failure}"))
+        emit_metrics(NewRows=len(new_rows), DQWarnings=len(dq["warnings"]), Failure=0, XFailure=int(xfc is None), ForecastsScored=len(scored), RunSeconds=round(time.time() - t0, 2))
+        return {"outcome": outcome, "as_of": forecast["as_of_date"], "forecast": forecast["predicted_next_close"], "interval_90": forecast["interval_90_close"], "dq_warnings": dq["warnings"],
+                "crossasset": None if xfc is None else {"forecast": xfc["predicted_next_close"], "interval_90": xfc["interval_90_close"]}, "crossasset_failure": x_failure}
     except Exception as exc:  # noqa: BLE001 - record the failure, then let Lambda mark the invocation as failed
         logger.exception("run failed")
         try:
             append_run_log("failed", str(exc)[:300])
         except Exception:  # noqa: BLE001
             pass
-        emit_metrics(NewRows=0, DQWarnings=0, Failure=1, ForecastsScored=0, RunSeconds=round(time.time() - t0, 2))
+        emit_metrics(NewRows=0, DQWarnings=0, Failure=1, XFailure=0, ForecastsScored=0, RunSeconds=round(time.time() - t0, 2))
         raise
