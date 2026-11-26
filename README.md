@@ -51,10 +51,11 @@ better:
 | Risk (E6, 2026-11-24) | Volatility is predictable and its R² is positive: Mincer-Zarnowitz R² 0.19 for the shipped EWMA and 0.29 for HAR-RV with release days (2010-2026); HAR-RV beats the EWMA (QLIKE -0.054, p < 0.001; not significant on 2025-26, p = 0.10); an LSTM does not help. The return R² (-0.011) is unchanged (§15.5) |
 | Conformal intervals (E7, 2026-11-26) | Split conformal and adaptive conformal inference match the shipped 90% band's coverage (ACI 91.0% and 90.5% against 89.5%; 90.0% on 2010-2026) and ACI steadies it over time, but they are wider and score slightly worse, so the shipped band stays (§15.5) |
 | Multiple testing (E3, 2026-11-26) | Nothing survives a correction for the number of candidates: Hansen's SPA p = 0.709 (returns), 0.558 (direction), 0.341 (variance), StepM sets empty, no nominal rejection in any family; the model confidence set keeps no-change and every LSTM variant and drops ridge and boosting (§15.5) |
+| Search for a positive R² (E2, 2026-11-26) | A frozen overnight search (207 forecasters at h = 1, 414 with the shrunk versions, 12 LSTM/GRU configurations, DEV 2011-2019 chooses, TEST 2020-2026 confirms; Tables E2-1 to E2-9 in §15.5) found one small, real positive: the forecaster chosen on DEV, a ridge on the same-day returns of gold, DXY, silver, the S&P 500, the 10-year yield and TIP, has out-of-sample R² +0.53% against the rolling mean on TEST (1,736 days; Clark-West p < 0.001, IC +0.098, +0.41% against the expanding mean) and +0.25% on the dashboard's window; the dollar error gain is nil (MAE +0.02%) and 36-55% of the covariance it explains is the move of gold between the settlement and the 17:00 ET close, which is already known when the forecast is made (non-synchronous closes): a property of the target's timing, not a trading edge. Nothing else is robust: price-only inputs, trend, reversal, calendar, 24 LSTM/GRU forecasters, 5- and 20-day horizons. A placebo (E2b) shows the weaker protocol rule fires in 25% of null runs and the strict rule in 0 of 40 |
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
-So far the write-up is a well-instrumented negative result. **The project is open to new approaches**: the old proposal and its ~70% target are superseded
+So far the write-up is a well-instrumented negative result, with one small exception found by the overnight search of 2026-11-26 (E2): same-day cross-asset returns predict the next settlement return (R² about +0.5%), largely because the closes are not simultaneous; the LSTM's own R² on the dashboard stays at -0.011. **The project is open to new approaches**: the old proposal and its ~70% target are superseded
 and the advisor allows trying anything. The feature searches in Phase 9 were null (evidence, not a prohibition); judge new ideas with the
 regression-first metrics and the same causal protocol.
 
@@ -1948,6 +1949,7 @@ that discipline matters most), and teardown instructions are all in
 21. **Alarms.** No CloudWatch alarms or SNS topic; the IAM user `Auto` lacks the permissions and the owner chose not to widen it. A failed run is visible only as a gap in the live log and in the Lambda's CloudWatch logs.
 22. **Absorb the streaming log into Silver** (item 10) and refresh the 449-day window once Silver is current; the live record already runs past the window's end (2026-10-23).
 23. **Paper (IEEE format; owner, 2026-11-17).** The research dossier is §15; the extra experiments that would strengthen the paper are listed there (§15.8).
+24. **E2 follow-ups (2026-11-26; optional, each needs its own frozen protocol).** (a) Redo the winner on a target without the stale settlement (spot at 17:00 ET to the next settlement, or hourly spot to spot, from the Dukascopy files that run to 2026-09-25) to see whether any information beyond the timing effect remains (E2d found t = +2.64 on TEST and +0.58 on DEV); (b) a power analysis by injecting a known predictable component into the placebo series; (c) a placebo for the recurrent models; (d) if the same-day cross-asset forecast is ever shown on the dashboard, the daily Lambda must fetch DXY, silver, the S&P 500, the 10-year yield and TIP (today it fetches gold only), and the page must carry the timing caveat; the shipped LSTM and its R² (-0.011) are unchanged.
 
 ---
 
@@ -2031,7 +2033,7 @@ Notes:
 
 **The evidence supports (may be written, with the numbers and sources given):**
 1. On 449 walk-forward test days (2025-01-09 to 2026-10-23) the LSTM's MAE is \$46.83 against \$46.63 for no-change (Diebold-Mariano p = 0.385 with 24 lags, 0.400 with none): no evidence of skill (Table III).
-2. On returns there is no skill either: out-of-sample R² -0.011 against the rolling mean, Spearman IC +0.006 (p = 0.90) (Table III).
+2. On returns there is no skill either: out-of-sample R² -0.011 against the rolling mean, Spearman IC +0.006 (p = 0.90) (Table III); this is the shipped LSTM on price-only inputs (for same-day cross-asset inputs see claim 12).
 3. Direction accuracy is 51.9% (Wilson 95% CI 47.3-56.5%), below the always-up rate of 55.2% (p = 0.155), AUC 0.463; the model says "up" on 88% of days (Table IV).
 4. The null holds for five input sets (Table V), for 5- and 20-day horizons (Table VI) and for hourly data (Phases 5-6).
 5. The shipped band (forecast ± 1.645 × an exponentially weighted average of past errors, decay 0.94, fixed in advance) covers 89.5% of the 389 scored days (Kupiec p = 0.725); empirical quantiles of all past errors, GARCH(1,1) and filtered historical simulation under-cover (85.3-85.9%, Kupiec p ≤ 0.010) and an LSTM trained on the quantiles is far too narrow (63.5%) (Table VII). Centring the same band on the no-change forecast instead of the LSTM gives the same coverage and an interval score that is no worse (314 against 317, p = 0.32): the interval's quality comes from the volatility model, not from the LSTM.
@@ -2041,6 +2043,8 @@ Notes:
 9. Risk, unlike price, is predictable (E6, Tables E6-1 to E6-6): the R² of every volatility forecast against the realised variance is positive (the shipped EWMA 0.19, HAR-RV with release-day dummies 0.29 on 2010-2026), and HAR-RV built on hourly realised variance beats the shipped EWMA on the long window (QLIKE -0.054, DM p < 0.001, lower in 15 of 17 years for HAR-RV logs); on the 428-day primary window the same models are better but not significantly (p = 0.10), and an LSTM does not help.
 10. Distribution-free intervals do not beat the shipped band (E7, Tables E7-1 to E7-4; this also completes E8): split conformal and adaptive conformal inference match its coverage (ACI 91.0% and 90.5% against 89.5% on the 389 scored days; 90.0% against 89.4% on 2010-2026) and ACI steadies it over time, but the intervals are wider and the interval score is the same or slightly worse (significantly so for ACI on the long window); no Christoffersen test rejects independence or conditional coverage.
 11. The null survives a correction for the number of candidates tried (E3, Tables E3-1 to E3-4): no candidate beats its benchmark in any of five families (Hansen's SPA p = 0.709, 0.355, 0.558, 0.341, 0.292; the StepM set of superior candidates is empty), no candidate is even nominally significant, and the 90% model confidence set keeps the no-change benchmark and every LSTM variant while dropping ridge and boosting.
+12. A frozen, wide search finds one small positive for the next settlement return (E2, Tables E2-1 to E2-9): the forecaster chosen on 2011-2019 (ridge on the same-day returns of gold, DXY, silver, the S&P 500, the 10-year yield and TIP) has out-of-sample R² +0.53% against the rolling mean on 2020-2026 (1,736 days; Clark-West p < 0.001; IC +0.098, p < 0.001; +0.41% against the expanding mean) and +0.25% on the dashboard's window, and the named hypothesis "non-synchronous closes" (ridge 1000, expanding window) has +1.28% (Holm p < 0.001). The gain in dollar error is nil (MAE +0.02% against no-change), the bootstrap interval of the R² contains zero, and a post-hoc decomposition (E2d) attributes 36-55% of the covariance between forecast and target to the move of gold between the 13:30 ET settlement and the 17:00 ET close, which is known when the forecast is made: write it as a timing (stale-settlement) effect of the target, not as a forecast of unpriced news and not as a trading edge.
+13. Nothing else survives in that search: price-only inputs, trend, short-term reversal, volatility state, calendar inputs, 24 LSTM/GRU forecasters (median TEST R² -0.09%) and the 5- and 20-day horizons (E2, Tables E2-3, E2-4 and E2-7); and a placebo calibration (E2b, Table E2-8) shows that the weaker protocol rule is called "positive" in 25% of unpredictable series for the DEV-selected forecaster (the strict rule: 0 of 40) and that the best forecaster on the evaluation window has R² +0.41% on average and a Clark-West p below 0.05 in 87.5% of unpredictable series, so no leaderboard read off an evaluation window may be quoted.
 
 **The evidence does not support (do not write):**
 - That the LSTM forecasts gold prices accurately, beats its baselines or is useful for trading. On this evidence the opposite holds, and no strategy, transaction cost or economic value was tested.
@@ -2051,6 +2055,8 @@ Notes:
 - That HAR-RV beats the shipped EWMA with statistical significance on the 2025-2026 window (p = 0.10 for HAR-RV-X; the significant result is the long window), that the LSTM helps volatility forecasts (it does not), or that the volatility result changes the return R² (it does not).
 - That conformal or adaptive conformal intervals are better than the shipped band: they match its coverage and ACI steadies it over time, but they are wider and score slightly worse (E7).
 - That any single model or input set beats its benchmark after accounting for how many were tried (E3: SPA p between 0.29 and 0.71), or that HAR-RV-X is better than the EWMA on the 2025-2026 window once seven candidates are considered (SPA p = 0.34); E3 shows no evidence of an effect, not that an effect is absent.
+- That the E2 winner predicts price changes the market has not already priced, or that the LSTM predicts anything: 36-55% of the covariance between the winner's forecast and the target comes from gold's own move after the settlement (E2d), a spot forecaster that knows the 17:00 ET price scores R² +8.0% against the same benchmark, the residual information is not stable (t = +2.64 on TEST, +0.58 on DEV), the dollar error does not improve and no trading rule or cost was tested; the shipped LSTM's R² is still -0.011.
+- That the E2 pool as a whole beats its benchmark after a correction (SPA p = 0.77 and 0.43; reality-check p = 0.87 and 0.019; StepM empty), or that any forecaster's rank on the TEST window means anything (the placebo's best-on-TEST forecaster has R² +0.41% and p < 0.05 in 87.5% of runs).
 - That the live forecasts are "pre-registered" or immutable: the log can be overwritten (§12 item 19).
 - That the 89.5% coverage is a clean out-of-sample figure: the decay 0.94 was fixed in advance, but the alternatives were compared on the same window, so it is slightly optimistic.
 
@@ -2480,6 +2486,135 @@ HAR-RV logs has the lower QLIKE than EWMA 0.94 in 15 of 17 years.
 4. *What this does not show.* A non-rejection is not evidence of equality: with 449 days the tests have little power against a gain of one or two percent. The families contain only the candidates listed in the protocol (not the momentum rule, the 5- and 20-day horizons, the hourly runs or the static LSTM variants), the families are tested separately (correcting across five families would only lower the threshold), and the long-window comparisons of E6, which are the significant ones, are not covered here because their forecasts are not stored; they carry the Bonferroni level of six comparisons already (an SPA on that window would be the natural follow-up, E3b).
 5. *Deviation from the protocol.* The direction candidates of ridge and the boosting regressor were first assembled from an empty probability column (treated as "down"); a duplicate check found it before family D was tested, the code now uses the sign of the return forecast as the protocol says, and a guard drops degenerate candidates (none were dropped in the final run). P1 and P2 do not use that column and were unaffected; the final run repeated all families.
 
+### E2 results (Tables E2-1 to E2-9; 2026-11-26; protocol and amendment in §15.8; code `daily/search_experiment.py`, `daily/search_placebo.py`, `daily/mechanism_check.py`; files in `daily/results/paper_e2/`: `e2_summary.json`, `e2_leaderboard_h1.csv` (and h5, h20), `e2_frozen_forecasts_h1.csv` (and h5, h20), `e2b_placebo.json` and `.csv`, `e2d_mechanism.json`)
+
+*Everything below was produced by the frozen protocol unless it is marked post hoc; the 17 raw forecast files (4 MB, `daily/results/paper_e2/forecasts/`) are committed so that `python daily/search_experiment.py evaluate` reproduces every table without retraining (TensorFlow training is not bit-reproducible); `daily/run_e2_overnight.sh` regenerates them.* The run took about 4.5 hours of wall-clock time on an 8 GB laptop (04:02 to 08:39 on 2026-11-26, including a restart after a memory problem, see the disclosures).
+
+**Table E2-1. Design.**
+
+| Item | Value |
+|---|---|
+| Forecasters at h = 1 | 207 base (162 linear, 24 boosting, 9 extra trees, 12 LSTM/GRU), 414 with the shrunk versions, plus two online selectors |
+| Forecasters at h = 5 and 20 | 36 base, 72 with the shrunk versions, each |
+| Data | GC=F daily closes 2004-08-26 to 2026-11-24 and the six cross-asset series; 5,592 rows; first origin 2010-01-04 |
+| DEV (choices allowed) | origins 2011-01-03 to 2019-12-31, n = 2,261 |
+| TEST (confirmation) | origins 2020-01-02 to 2026-11-23, n = 1,736 |
+| PROJECT (the dashboard's window, inside TEST) | origins 2025-01-09 to 2026-10-23, n = 451 (449 in the shipped run, which lacks two days) |
+| FRESH (never used before) | origins after 2026-10-23, n = 21 (descriptive only) |
+
+**Table E2-2. The primary tests at h = 1 (R² and Clark-West p are against the rolling 365-day mean b; each primary test is one-sided at 0.025).**
+
+| Choice | DEV R² | TEST R² [95% bootstrap interval] | Clark-West p | R² vs no-change | R² vs expanding mean | IC (p) | MAE gain vs no-change | PROJECT R² [95% interval] | Positive by the rule | STRICT |
+|---|---|---|---|---|---|---|---|---|---|---|
+| P-A: chosen on DEV, Ridge α=100, same-day cross-asset (X), last 1,000 d | +1.05% | +0.53% [-1.15%, +2.29%] | <0.001 | +0.54% | +0.41% | +0.098 (<0.001) | +0.02% | +0.25% [-1.22%, +1.56%] | yes | yes |
+| P-B: online selector, top 1 | -1.67% | -0.13% [-1.91%, +1.60%] | <0.001 | -0.12% | -0.25% | +0.069 (0.004) | +0.10% | +0.52% [-1.93%, +2.76%] | no | no |
+| secondary: online top-5 average | +0.09% | +0.34% [-1.10%, +1.83%] | 0.002 | +0.36% | +0.23% | +0.070 (0.004) | +0.01% | +0.24% [-2.12%, +2.34%] | n/a | n/a |
+
+**Table E2-3. Secondary tests: the best forecaster of each family chosen on DEV (Holm over the family bests) and the six named hypotheses fixed before the run (ridge, alpha 1000, expanding window; Holm over six).**
+
+| Forecaster | DEV R² vs b | TEST R² vs b | TEST Clark-West p (Holm) | TEST R² vs expanding mean | TEST IC (p) | PROJECT R² vs b |
+|---|---|---|---|---|---|---|
+| Ridge α=100, same-day cross-asset (X), last 1,000 d | +1.05% | +0.53% | <0.001 (0.001) | +0.41% | +0.098 (<0.001) | +0.25% |
+| Ridge α=1000, same-day cross-asset (X), last 1,000 d, shrunk | +0.94% | +0.85% | <0.001 (0.002) | +0.73% | +0.076 (0.001) | +0.20% |
+| Elastic net α=0.02, same-day cross-asset (X), last 1,000 d | +1.03% | +0.35% | <0.001 (0.001) | +0.24% | +0.096 (<0.001) | +0.26% |
+| Elastic net α=0.02, same-day cross-asset (X), last 1,000 d, shrunk | +0.91% | +0.91% | <0.001 (0.002) | +0.79% | +0.100 (<0.001) | +0.31% |
+| PLS 1 comp., same-day cross-asset (X), last 1,000 d | +0.83% | -0.21% | 0.001 (0.009) | -0.32% | +0.058 (0.017) | +0.05% |
+| PLS 1 comp., same-day cross-asset (X), last 1,000 d, shrunk | +0.76% | +0.60% | 0.002 (0.010) | +0.48% | +0.063 (0.009) | +0.19% |
+| Boosting (strong), same-day cross-asset (X), expanding window | +0.90% | +1.00% | <0.001 (0.001) | +0.88% | +0.094 (<0.001) | +0.04% |
+| Boosting (strong), same-day cross-asset (X), expanding window, shrunk | +0.86% | +0.93% | <0.001 (0.001) | +0.82% | +0.097 (<0.001) | +0.13% |
+| Extra trees, price + macro, expanding window | +0.48% | +0.69% | 0.003 (0.014) | +0.57% | +0.050 (0.037) | +0.46% |
+| Extra trees, price + macro, expanding window, shrunk | +0.29% | +0.62% | 0.004 (0.014) | +0.50% | +0.058 (0.016) | +0.44% |
+| LSTM w20 u32, same-day cross-asset (X), last 1,000 d | +0.56% | +0.22% | 0.021 (0.043) | +0.11% | +0.004 (0.877) | +0.76% |
+| LSTM w20 u32, same-day cross-asset (X), last 1,000 d, shrunk | +0.55% | +0.27% | 0.022 (0.043) | +0.15% | +0.010 (0.663) | +0.61% |
+| named X: same-day cross-asset returns (non-synchronous closes) | +0.67% | +1.28% | <0.001 (<0.001) | +1.16% | +0.090 (<0.001) | +0.21% |
+| named T: trend | -0.22% | +0.07% | 0.115 (0.345) | -0.04% | -0.032 (0.178) | +0.03% |
+| named R: short-term reversal | -0.19% | +0.05% | 0.150 (0.345) | -0.07% | -0.042 (0.082) | -0.02% |
+| named V: volatility state | -0.19% | +0.18% | 0.078 (0.313) | +0.06% | +0.045 (0.059) | +0.27% |
+| named K: calendar | -0.48% | -0.17% | 0.324 (0.345) | -0.28% | -0.006 (0.801) | -0.17% |
+| named A: all inputs | -0.38% | +0.48% | 0.002 (0.012) | +0.36% | +0.054 (0.024) | -0.12% |
+
+**Table E2-4. The recurrent networks (12 configurations, 5 seeds each; 'shrunk' is the same forecast shrunk towards b). Sorted by the dashboard's window.**
+
+| LSTM/GRU configuration | TEST R² vs b | TEST Clark-West p | TEST IC (p) | PROJECT R² vs b | shrunk: TEST R² | shrunk: PROJECT R² |
+|---|---|---|---|---|---|---|
+| LSTM w20 u32, same-day cross-asset (X), last 1,000 d | +0.22% | 0.021 | +0.004 (0.877) | +0.76% | +0.27% | +0.61% |
+| LSTM w60 u32, price, last 1,000 d | -0.29% | 0.157 | -0.022 (0.365) | +0.48% | +0.06% | +0.25% |
+| LSTM w20 u32, all inputs, last 365 d | -0.81% | 0.073 | +0.022 (0.365) | +0.47% | +0.10% | +0.30% |
+| LSTM w20 u32, price, last 1,000 d | -0.33% | 0.165 | -0.023 (0.333) | +0.44% | +0.06% | +0.22% |
+| LSTM w20 u32, all inputs, last 1,000 d | -0.48% | 0.180 | -0.003 (0.911) | +0.10% | +0.03% | +0.18% |
+| LSTM w10 u32, price, last 365 d | -1.06% | 0.227 | +0.016 (0.518) | -0.08% | -0.06% | +0.18% |
+| GRU w20 u32, all inputs, last 1,000 d | -1.05% | 0.253 | +0.014 (0.554) | -0.13% | -0.02% | +0.12% |
+| LSTM w20 u32, price, last 365 d | -1.08% | 0.231 | +0.013 (0.587) | -0.38% | -0.03% | +0.10% |
+| LSTM w5 u32, price, last 365 d | -1.07% | 0.256 | +0.012 (0.606) | -0.58% | -0.07% | +0.03% |
+| LSTM w20 u64, price, last 365 d | -1.45% | 0.464 | -0.019 (0.425) | -1.40% | -0.03% | -0.04% |
+| LSTM w20 u16, price, last 365 d | -1.59% | 0.785 | -0.012 (0.631) | -1.67% | -0.09% | -0.10% |
+| GRU w20 u32, price, last 365 d | -2.44% | 0.568 | +0.005 (0.847) | -2.47% | -0.09% | -0.08% |
+
+**Table E2-5. R² against b of P-A by calendar year (a year is noisy: about 250 days).**
+
+| 2011 | 2012 | 2013 | 2014 | 2015 | 2016 | 2017 | 2018 | 2019 | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 | 2026 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| -0.9% | +1.2% | +1.0% | +0.5% | +2.6% | +4.2% | +3.7% | +1.0% | -2.3% | +1.1% | +5.4% | -4.3% | -0.4% | +2.7% | -0.8% | +0.6% |
+
+**Table E2-6. Multiple testing over the whole pool (exploratory: the pool is judged on the TEST window).**
+
+| Gain used | SPA p (lower / consistent / upper) | Reality-check p | StepM superior set | Candidates (after dropping those equal to b) |
+|---|---|---|---|---|
+| squared-error gain over b | 0.339 / 0.765 / 0.792 | 0.873 | 0 | 389 (25 dropped) |
+| Clark-West-adjusted gain | 0.013 / 0.431 / 0.432 | 0.019 | 0 | 389 (25 dropped) |
+
+168 of 414 forecasters have a positive TEST R² against b and 88 have a Clark-West p below 0.05 (about 21 expected by chance if none had skill, but the forecasters are strongly correlated). The ten best on TEST (selected on the evaluation data, so optimistic): Ridge α=100, same-day cross-asset (X), expanding window +1.36%; Boosting (project), all inputs, expanding window, shrunk +1.30%; Elastic net α=0.02, same-day cross-asset (X), expanding window +1.29%; Ridge α=1000, same-day cross-asset (X), expanding window +1.28%; Ridge α=100, same-day cross-asset (X), expanding window, shrunk +1.20%; Ridge α=1000, same-day cross-asset (X), expanding window, shrunk +1.20%; Elastic net α=0.02, same-day cross-asset (X), expanding window, shrunk +1.13%; Boosting (strong), same-day cross-asset (X), expanding window +1.00%; Ridge α=100, same-day cross-asset (X), last 1,000 d, shrunk +0.97%; Boosting (project), price + macro, expanding window, shrunk +0.93%.
+
+**Table E2-7. The multi-horizon tracks (primary tests at h = 5 and 20; R² against the rolling mean of h-day returns).**
+
+| Track | Choice | DEV R² | TEST R² [95% interval] | Clark-West p | R² vs expanding mean | IC (p) | Forecasters with Clark-West p < 0.05 | SPA p (consistent, Clark-West-adjusted) |
+|---|---|---|---|---|---|---|---|---|
+| h = 5 | P-A: Ridge α=10000, trend (T), last 365 d, shrunk | -0.08% | +0.01% [-0.44%, +0.45%] | 0.387 | -0.50% | +0.060 (0.269) | 5 of 72 | 0.184 |
+| h = 5 | P-B: online selector, top 1 | -2.92% | -2.92% [-7.86%, +1.83%] | 0.218 | -3.45% | +0.022 (0.678) | 5 of 72 | 0.184 |
+| h = 20 | P-A: Ridge α=10000, price, last 365 d | +0.43% | -0.67% [-1.70%, +0.39%] | 0.780 | -3.86% | +0.043 (0.695) | 0 of 72 | 0.424 |
+| h = 20 | P-B: online selector, top 1 | -5.04% | -5.75% [-10.65%, -1.10%] | 0.745 | -9.11% | -0.073 (0.507) | 0 of 72 | 0.424 |
+
+**Table E2-8. The placebo calibration (E2b): the same pipeline on 40 series whose returns are unpredictable by construction (81 forecasters, 162 with the shrunk versions).**
+
+| Statistic over 40 replicates | P-A (chosen on DEV) | P-B (online selector) |
+|---|---|---|
+| called positive by the rule (nominal 2.5%) | 25.0% | 2.5% |
+| called STRICT | 0.0% | 0.0% |
+| share with TEST R² vs b above 0 | 62.5% | 5.0% |
+| mean TEST R² vs b (quartiles) | +0.02% [-0.09%, +0.08%, +0.23%] | -0.95% [-1.38%, -0.88%, -0.45%] |
+| IC p below 0.05 | 10.0% | 7.5% |
+| best forecaster on TEST (selected on the evaluation data): mean TEST R² (quartiles) | +0.41% [+0.29%, +0.36%, +0.45%] | |
+| best forecaster on TEST: share with Clark-West p below 0.05 | 87.5% | |
+
+**Table E2-9. Mechanism check (E2d, post hoc and descriptive): what the positive R² of the winner is made of, on the origins with hourly data (TEST n = 1,640; DEV n = 2,246).** The target y is split into r_post, the spot return between 14:00 and 17:00 ET on day t (after the 13:30 ET settlement, before the forecast is made), and r_rest = y - r_post.
+
+| Quantity | TEST: P-A | TEST: named X | DEV: P-A | DEV: named X |
+|---|---|---|---|---|
+| share of the target's variance that is r_post | 7.2% | 7.2% | 8.8% | 8.8% |
+| correlation of the target with r_post | +0.284 | +0.284 | +0.395 | +0.395 |
+| correlation of the forecast with the target y | +0.109 | +0.112 | +0.100 | +0.082 |
+| correlation of the forecast with r_post (already happened) | +0.147 | +0.231 | +0.218 | +0.202 |
+| correlation of the forecast with r_rest (still to come) | +0.072 (Spearman p <0.001) | +0.053 (Spearman p 0.053) | +0.038 (Spearman p 0.370) | +0.024 (Spearman p 0.838) |
+| share of cov(forecast, y) that comes from r_post | 36% | 55% | 65% | 73% |
+| Clark-West p, target y / target r_rest | <0.001 / 0.002 | <0.001 / 0.013 | <0.001 / 0.037 | 0.001 / 0.027 |
+| R² vs b, target y / target r_rest | +0.78% / -0.78% | +1.41% / +0.01% | +1.09% / -0.68% | +0.66% / -0.05% |
+| R² of 'no change from the 17:00 ET spot' vs b (a fair yardstick) | +7.97% | +7.97% | +14.78% | +14.78% |
+| R² of the forecast against that yardstick | -7.81% | -7.13% | -16.07% | -16.57% |
+| t of the forecast in y ~ r_post + forecast (Newey-West) | +2.64 | +1.62 | +0.58 | +0.10 |
+
+Same-day macro returns (DXY, silver, S&P 500, TIP, 10-year yield) explain 6.5% of r_post on TEST (n = 1,640; t-statistics: DXY -4.5, silver -2.4, S&P 500 +1.6, TIP +4.2, 10-year yield +0.4).
+
+**Reading (written after the results; the protocol was amended once, before the evaluation, to add hurdles; the mechanism check is post hoc).**
+
+1. *The pre-specified rule is met by P-A.* The forecaster chosen only from 2011-2019 (ridge, alpha 100, the last 1,000 days, on gold's own return and the same-day returns of DXY, silver, the S&P 500, the 10-year yield and TIP) has a TEST R² of +0.53% against the rolling 365-day mean (Clark-West p <0.001), +0.54% against no-change and +0.41% against the expanding mean, Spearman IC +0.098 (p <0.001), and +0.25% on the dashboard's window; it is STRICT-positive. In the placebo the STRICT call was never made (0 of 40; the one-sided 95% upper bound for its false-positive rate is 7.2%), whereas the weaker call by the protocol rule alone was made for 25% of the null replicates, so only the STRICT call is evidence. The online selector (P-B) is not positive (R² -0.13%): its forecasts carry information (Clark-West p <0.001, IC +0.069) but switching among 414 forecasters adds noise, which costs about 1% of R² on average in the placebo.
+2. *It is one hypothesis, not four hundred.* The best forecaster chosen on DEV in five of the six families (ridge, elastic net, PLS, boosting and the recurrent family) uses the X inputs (extra trees picks price + macro); the named X hypothesis (ridge 1000, expanding window), fixed before the run, has TEST R² +1.28% and Clark-West p <0.001 (Holm over six <0.001); the trend, reversal, volatility-state and calendar inputs are not significant (Holm p of at least 0.31); the all-input set, which contains X, is significant (+0.48%, Holm 0.012).
+3. *The effect is small and the intervals are wide.* R² of +0.5% to +1.3% and IC of about 0.1. The dollar error hardly moves (MAE gain against no-change +0.02% for P-A). The bootstrap 95% interval of the R² against b contains zero on TEST ([-1.15%, +2.29%]) and on the dashboard's window ([-1.22%, +1.56%]); the Clark-West test, which is built for forecasts that nest their benchmark, rejects; both are reported. P-A's R² is positive in 11 of 16 calendar years (Table E2-5; range -4.3% to +5.4%), so it is not the result of one year.
+4. *Mechanism (E2d, post hoc): a large part of it is timing.* The gold price in this data is the COMEX settlement at 13:30 ET, while the X inputs close later (the S&P 500 and TIP at 16:00 ET, DXY and the yield about 17:00 ET). The part of the target that happens between 14:00 and 17:00 ET (r_post) is 7.2% of the target's variance and is already known when a forecast is made after the close. The winner's forecasts correlate more with that already-known part (+0.147) than with the part still to come (+0.072); 36% (P-A) to 55% (named X) of the covariance between forecast and target on TEST, and 65% to 73% on DEV, comes from it; same-day macro returns explain 6.5% of r_post. A forecaster that simply knows the 17:00 ET spot price has R² +7.97% against b on the same days (+14.78% on DEV), and the winner's R² against that fairer yardstick is -7.81%. What is left after taking r_post into account is weak and not stable: the forecast adds to r_post with t = +2.64 on TEST for P-A (+1.62 for the named X) but +0.58 and +0.10 on DEV. So the positive R² is mainly a property of the timing of the target (a stale-settlement effect), not evidence that future moves of the gold market can be predicted from public daily data, and no trading claim follows.
+5. *What did not work.* Price-only inputs, including trend, reversal and volatility state, show nothing, and no LSTM or GRU variant is positive in a robust way (Table E2-4: 24 recurrent forecasters, median TEST R² -0.09%; the best, the LSTM on the X inputs, has TEST R² +0.22% with Clark-West p 0.021 but IC +0.004 (p 0.877); the LSTM with a 1,000-day window and price-only inputs, the closest relative of the shipped model, scores +0.44% on the dashboard's window but -0.33% on TEST). At 5 and 20 days nothing is significant (P-A TEST R² +0.01% and -0.67%; 5 of 72 and 0 of 72 forecasters have a Clark-West p below 0.05, 3.6 expected by chance).
+6. *Multiple testing.* Judged on the TEST window, the pool as a whole does not pass a correction for its 389 distinct forecasters: SPA p = 0.765 (squared-error gain) and 0.431 (Clark-West-adjusted gain), reality-check p = 0.873 and 0.019, StepM set empty. This does not contradict item 1: the confirmatory tests involve one forecaster chosen on earlier data (P-A) and six named ones, whereas the pool test makes 389 correlated forecasters, most of them noise, compete on TEST (and the studentised SPA is also sensitive to forecasters with almost no variance). A leaderboard read off the evaluation window cannot be quoted: in the placebo the best forecaster on TEST has R² +0.41% on average and a Clark-West p below 0.05 in 87.5% of the replicates, against +1.36% (p <0.001) for the real best.
+7. *What this changes for the project.* The shipped LSTM is unchanged (R² -0.011 on the dashboard); E2 does not make it a good forecaster. A forecast that uses same-day macro closes would need DXY, the S&P 500, the 10-year yield, TIP and silver in the daily Lambda (today it fetches gold only) and would have to be shown with the timing caveat of item 4. A fair statement for the paper: next-day COMEX gold settlement returns are weakly predictable (R² about 0.5%) from same-day cross-asset returns, largely because the settlement precedes the other closes; price-only inputs, trend, reversal, calendar inputs and LSTM or GRU models add nothing robust.
+8. *Disclosures.* (a) The first launch (04:00) assembled no jobs (the BSD `xargs -I` limit) and produced nothing. (b) The recurrent fits leaked memory (about 85 MB per block; four workers reached 2.7 GB each and the 8 GB machine thrashed); the run was stopped at 04:35, the checkpoints (20 to 30 blocks per group) were kept, and the groups were completed in 6-block chunks in fresh processes; one chunk died with a segmentation fault (TensorFlow, exit code 139) and was repeated from its checkpoint; TensorFlow compute threads were set to one and boosting to four threads (speed only). None of this changes a forecast, but TensorFlow training is not bit-reproducible. (c) The amendment (expanding mean, IC, STRICT) was written before the evaluation but after a two-replicate placebo test; it only adds hurdles. (d) E2d was written after the results (post hoc). (e) The refit interval is 21 origins, not the dashboard's 7. (f) The data were fetched on 2026-11-26 (prices to 2026-11-24, macro to 2026-11-25). (g) The benchmark b is the 365-day mean as on the dashboard; the expanding mean is hardly better (R² against b +0.12% on TEST, Clark-West p 0.110), so a weak benchmark did not drive the result. (h) Before the evaluation only structure checks were printed from a dry run on the linear forecasts (no performance numbers) and a sanity check of the first finished recurrent group (coverage, scale, correlation 0.41 with the shipped LSTM's forecasts).
+
 ### 15.6 Evaluation pitfalls found in this project (the audit angle)
 **Table XI. Evaluation pitfalls.**
 
@@ -2513,9 +2648,9 @@ Each runs in its own results folder (for example `daily/results/paper_*/`) so th
 | ID | Experiment | Reviewer question it answers | Design | Effort | Expectation |
 |---|---|---|---|---|---|
 | E1 | Bootstrap intervals and better DM tests | Is MAE equal to no-change, and is the test appropriate? | Moving-block bootstrap CI of the MAE and RMSE differences; DM on absolute price errors; Harvey-Leybourne-Newbold correction; Giacomini-White | hours | Null stays; CI width shows the power |
-| E2 | Seed variance, ablations and an exhaustive search for a positive R² | Is the null robust to hyperparameters, features and model families, and does any forecaster reach a positive out-of-sample R² once it is chosen only from earlier data and the number tried is counted? | 207 forecasters at h = 1 (ridge, elastic net, PLS, boosting, extra trees, 12 LSTM / GRU configurations with 5 seeds; 9 feature sets; 3 training lengths), their shrunk versions and two online selectors, plus h = 5 and 20; DEV 2011-2019 chooses, TEST 2020-2026 confirms (protocol below) | an overnight run | **Running since 2026-11-26** (protocol frozen first; results below when done) |
+| E2 | Seed variance, ablations and an exhaustive search for a positive R² | Is the null robust to hyperparameters, features and model families, and does any forecaster reach a positive out-of-sample R² once it is chosen only from earlier data and the number tried is counted? | 207 forecasters at h = 1 (ridge, elastic net, PLS, boosting, extra trees, 12 LSTM / GRU configurations with 5 seeds; 9 feature sets; 3 training lengths), their shrunk versions and two online selectors, plus h = 5 and 20; DEV 2011-2019 chooses, TEST 2020-2026 confirms (protocol below) | an overnight run (4.6 hours of wall-clock time) | **Done 2026-11-26, protocol frozen first (Tables E2-1 to E2-9, E2b placebo, E2d mechanism check):** one small positive that passes the strict test, ridge on the same-day returns of gold, DXY, silver, the S&P 500, the 10-year yield and TIP: TEST R² +0.53% against the rolling mean (Clark-West p < 0.001, IC +0.098), +0.25% on the dashboard's window; about half of what it explains is the post-settlement move of gold itself (non-synchronous closes), so it is a timing effect, not a trading edge; price-only inputs, trend, reversal, calendar inputs, LSTM/GRU variants and the 5- and 20-day horizons show nothing robust; the pool does not survive a correction judged on TEST |
 | E3 | Multiplicity correction | Could a "best" variant be luck, and is anything better than no-change after correction? | Hansen SPA and the model confidence set over every model and input set tried (about 30 candidates); the `arch` package has both | done 2026-11-26 (26 s of compute) | **Done, protocol frozen first:** nothing survives: SPA p between 0.29 and 0.71 in five families, StepM sets empty, the model confidence set keeps the benchmark and every LSTM variant (Tables E3-1 to E3-4) |
-| E4 | Long window and power analysis | Does the null hold across regimes? | Walk-forward over about 2010-2026 (retrain every 20 days to cut compute); minimum detectable MAE gain at n = 449 | several days | Null stays; shows low power in 2025-26 |
+| E4 | Long window and power analysis | Does the null hold across regimes? | Walk-forward over about 2010-2026 (retrain every 20 days to cut compute); minimum detectable MAE gain at n = 449 | several days | Null stays; shows low power in 2025-26. Partly done inside E2 (2010-2026 walk-forward at h = 1, 5 and 20; Tables E2-1 to E2-9); no separate power analysis yet |
 | E5 | Multi-asset replication | Is it gold-specific? | Same pipeline on silver, EUR/USD, S&P 500, 10-year yield | several days | Null stays; supports a general audit |
 | E6 | Volatility track (the positive-result candidate) | Is risk predictable when price is not? | Realised volatility from the hourly data; HAR-RV with NFP, FOMC and CPI days against EWMA, GARCH and an LSTM; QLIKE and DM | done 2026-11-24 (452 s of compute) | **Done, protocol frozen first:** positive R² for risk; HAR-RV beats the shipped EWMA on 2010-2026 (p < 0.001) and, not significantly, on the 428-day window; the LSTM does not help (Tables E6-1 to E6-6) |
 | E7 | Conformal intervals | Can distribution-free intervals match EWMA? | Split conformal and adaptive conformal inference around the LSTM and no-change centres | done 2026-11-26 (4 s of compute) | **Done, protocol frozen first:** comparable coverage (ACI 90.5-91.0% against 89.5%), steadier over time, but wider and slightly worse interval score; the shipped band is not beaten (Tables E7-1 to E7-4) |
@@ -2523,7 +2658,7 @@ Each runs in its own results folder (for example `daily/results/paper_*/`) so th
 | E9 | Forecast encompassing | Does the LSTM add anything to no-change? | Mincer-Zarnowitz regression of realised on forecast returns; encompassing test | hours | Slope near 0 |
 | E10 | Live-log hardening | Can the live record be trusted? | S3 versioning with Object Lock or a daily commit of the log; back it up (§12 items 19-20) | hours | Needed before citing the live record |
 | E11 | Frozen protocol | Were choices made before seeing results? | Commit and tag a protocol file before any long-window or multi-asset run | an hour | Credibility |
-| E12 | Search log | How many variants were tried? | Count every model, input set, horizon and interval method tried (needed for E3 and for deflated claims) | an hour | About 30 |
+| E12 | Search log | How many variants were tried? | Count every model, input set, horizon and interval method tried (needed for E3 and for deflated claims) | an hour | About 30 before E2; E2 adds 279 base forecasters (558 with the shrunk versions), 2 online selectors per horizon, 6 named hypotheses, 40 placebo replicates of 81 forecasters, and 3 post-hoc decompositions (E2d) |
 
 **E6 protocol (frozen 2026-11-24 and committed before the first run on any reported window; code `daily/volatility_har_experiment.py`, tests `daily/test_volatility_har.py`, results in `daily/results/paper_e6/`).**
 - *Question:* is next-day gold risk better forecast by realised volatility from hourly data (HAR-RV, with scheduled-release days) than by the shipped EWMA of daily squared returns, and does an LSTM add anything?
@@ -3123,6 +3258,7 @@ For the 4-6 page conference paper use Tables I (compact), III, VII and XI (pitfa
 7. **Live record.** Harden the log (E10) before citing it, or describe it only as a demonstration? *Open.*
 8. **Compute budget** for E2, E4-E6 (CPU only so far). *Open.*
 9. **Advisor's expectation** of the venue tier and the deadline. *Open.*
+10. **How to present the E2 finding (2026-11-26).** The only positive result is small and mostly a timing effect (§15.5, Table E2-9). Options: (a) a secondary result in the "predictable risk, unpredictable price" angle, with the stale-settlement explanation and no trading claim; (b) first redo it on a target without the stale settlement (§12 item 24a) and report whatever remains; (c) leave it out. The owner asked for a positive R² "whatever it takes"; the honest answer is that a positive exists under the pre-registered rule but is not evidence of forecasting skill. *Open: owner and advisor.*
 
 ### 15.16 Pre-submission checklist
 - [ ] Every number traced to a file (rule 2); tables generated by script; figures regenerated from the result files.

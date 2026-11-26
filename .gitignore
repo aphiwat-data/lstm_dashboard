@@ -26,6 +26,6 @@ hourly/package-lock.json
 .DS_Store
 .vscode/
 
-# E2 overnight search: raw forecast matrices and logs stay local (the summary JSON and the leaderboards are committed)
-daily/results/paper_e2/forecasts/
+# E2 overnight search: logs and unfinished checkpoints stay local (the forecasts, the summary JSON and the leaderboards are committed)
+daily/results/paper_e2/forecasts/*.partial.npz
 daily/results/paper_e2/logs/
