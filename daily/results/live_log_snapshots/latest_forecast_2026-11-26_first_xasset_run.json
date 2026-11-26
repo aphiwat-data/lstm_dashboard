@@ -1,0 +1,42 @@
+{
+  "as_of_date": "2026-11-25",
+  "latest_close": 3535.8,
+  "predicted_return": 0.002155335857873359,
+  "predicted_next_close": 3543.43,
+  "p_up": 0.5427356920587082,
+  "interval_90_close": [
+    3434.97,
+    3655.31
+  ],
+  "crossasset": {
+    "as_of_date": "2026-11-25",
+    "latest_close": 3535.8,
+    "predicted_return": 0.001681021820068079,
+    "predicted_next_close": 3541.75,
+    "interval_90_close": [
+      3472.28,
+      3612.61
+    ],
+    "n_train": 1000,
+    "trained_through": "2026-11-25",
+    "inputs": {
+      "f_ret_1": -0.007354487041395075,
+      "f_dxy_ret_1": -0.0012626859496958076,
+      "f_silver_ret_1": 0.010008624131093047,
+      "f_spx_ret_1": -0.0019946877402521324,
+      "f_yield10y_chg_1": -0.055999755859375,
+      "f_tip_ret_1": 0.004400016295948994
+    },
+    "alpha": 100.0,
+    "train_len": 1000,
+    "generated_at": "2026-11-26T15:20:49+00:00",
+    "model_version": "ridge100-L1000-2026-11-25",
+    "model_trained_through": "2026-11-25",
+    "interval_method": "Gaussian, sigma = EWMA(lambda 0.94) of past errors, z = 1.645",
+    "model": "Cross-asset model"
+  },
+  "generated_at": "2026-11-26T15:20:49+00:00",
+  "model_version": "202610291014",
+  "model_trained_through": "2026-10-27",
+  "interval_method": "Gaussian, sigma = EWMA(lambda 0.94) of past errors, z = 1.645"
+}
