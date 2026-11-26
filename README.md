@@ -8,7 +8,7 @@ still pending. It merges the written thesis proposal (`Next_day_Gold_
 Prices_Forcasting_With_LSTM.pdf`) with what the pipeline *actually* does
 today, and calls out every place the two disagree. Read this fully before
 making changes. If you are picking the project up, start with the
-**[Handoff](#handoff-where-things-stand-2026-11-17)** block below.
+**[Handoff](#handoff-where-things-stand-2026-11-26)** block below.
 
 For the full chronological story of every AWS/code error hit and how it
 was fixed (useful for "what problems did you encounter" in the defense),
@@ -20,8 +20,8 @@ see **[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)**.
 > **[Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned)** first; the corrected numbers are in §8.0.
 
 **Contents.**
-1. [Handoff](#handoff-where-things-stand-2026-11-17): the current result, the live pipeline, how to run and refresh things, traps and open items.
-2. [Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned): Phases 1-13 (the dashboard's final form is Phase 13 plus its appendix [Content removed from the dashboard](#content-removed-from-the-dashboard-november-17-2026)),
+1. [Handoff](#handoff-where-things-stand-2026-11-26): the current result, the live pipeline, how to run and refresh things, traps and open items.
+2. [Project Journey](#project-journey-what-we-tried-what-broke-what-we-learned): Phases 1-14 (the dashboard's final layout is Phase 13 plus its appendix [Content removed from the dashboard](#content-removed-from-the-dashboard-november-17-2026); Phase 14 puts the cross-asset model on it),
    then [lessons learned](#lessons-learned), [where things live](#where-things-live) and [status and next steps](#status-and-next-steps) (including the publication plan).
 3. Reference sections: §0 front matter, [§1 repository structure](#1-repository-structure), §2-§3 proposal and deviations, [§4 AWS state](#4-aws-account-state-actual-as-of-now), §5-§6 data architecture and notebooks, §7 risks,
    [§8 results](#8-model-evaluation--results-interpretation-37-write-up), §9 literature, [§10 dashboard](#10-streamlit-dashboard-deployed-on-streamlit-community-cloud), [§11 daily automation](#11-daily-automation-pipeline-lambda--eventbridge-scheduler),
@@ -29,7 +29,7 @@ see **[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md)**.
 
 ---
 
-## Handoff: where things stand (2026-11-17)
+## Handoff: where things stand (2026-11-26)
 
 Read this block first if you are picking the project up (a new contributor or another coding agent); everything below it is the
 detailed record.
@@ -37,6 +37,19 @@ detailed record.
 **Links.** Code: https://github.com/aphiwat-data/lstm_dashboard (public, branch `main`). Live dashboard:
 https://lstmdashboard-v6sere4oaulpge5dj9bq5p.streamlit.app (Streamlit Community Cloud redeploys from `main` within about a minute
 of a push). The thesis documents (Word/PDF, including Chapter 3) are kept outside this repo.
+
+**Read this first (2026-11-26, evening).** The repository holds the **cross-asset model** (Phase 14) and a dashboard that switches to it **by itself, once the daily pipeline publishes it**. The public page is still the LSTM page,
+because the one remaining step, **replacing the Lambda's code, has not been run** (it writes to the live AWS pipeline and the Claude session's safety system blocked it). To finish, from the repo root:
+
+```bash
+python3 automation/deploy.py code
+```
+
+```bash
+python3 -c "import boto3; print(boto3.client('lambda', region_name='ap-southeast-2').invoke(FunctionName='gold-lstm-forecast-daily-refresh')['Payload'].read().decode())"
+```
+
+The first uploads the two model inputs to S3 (only if missing) and replaces only the function's code; the second runs the pipeline at once instead of waiting for 10:00 (a good result has `"crossasset": {...}`, not `null`; if it is `null`, `crossasset_failure` says why and the LSTM forecast is unaffected). The page then switches within about five minutes. Rollback: `git checkout 2300d77 -- automation/lambda_function.py` and `python3 automation/deploy.py code`.
 
 **The result.** On the 449-day walk-forward test window (2025-01-09 to 2026-10-23) the LSTM is level with a no-change forecast, not
 better:
@@ -47,7 +60,8 @@ better:
 | Fit on returns | R² -0.014 (a constant zero-return forecast scores -0.003); IC +0.006 (p = 0.90) |
 | Direction (secondary) | 51.9% vs always-up 55.2% (p = 0.155), AUC 0.463; the model says "up" on about 88% of days |
 | 90% range | Reliable: the real close stayed inside it on 348 of 389 scored test days (89.5%, goal 90%; Kupiec p = 0.73). It is as wide as a no-change range (\$223 vs \$221), so it tracks market volatility, not model skill |
-| Live record (2026-11-17) | 11 real forecasts scored since 2026-10-28: MAE \$48.49 vs \$48.21 for the simple guess; 9 of 11 inside the 90% range. Far too few days to conclude anything; it grows by one trading day each morning |
+| Cross-asset model, same 449 days | The E2 winner (ridge on the day's moves in gold, the dollar, silver, stocks, the 10-year yield and TIP; §15.5): MAE \$46.49 (simple guess \$46.63, LSTM \$46.83), R² against the rolling mean +0.0033 (LSTM -0.0113), IC +0.077 (p = 0.10), Diebold-Mariano p = 0.54, 90% range 89.5%. **Positive but not significant on 449 days**; the significant evidence is E2's 1,736 days, and about half of it is a timing effect (below) |
+| Live record (2026-11-26, LSTM forecasts) | 18 real forecasts scored since 2026-10-28: MAE \$62.19 vs \$60.82 for the simple guess; 14 of 18 inside the 90% range. Too few days to conclude anything; it grows by one trading day each morning. The cross-asset model's own live record starts when the pipeline is updated |
 | Risk (E6, 2026-11-24) | Volatility is predictable and its R² is positive: Mincer-Zarnowitz R² 0.19 for the shipped EWMA and 0.29 for HAR-RV with release days (2010-2026); HAR-RV beats the EWMA (QLIKE -0.054, p < 0.001; not significant on 2025-26, p = 0.10); an LSTM does not help. The return R² (-0.011) is unchanged (§15.5) |
 | Conformal intervals (E7, 2026-11-26) | Split conformal and adaptive conformal inference match the shipped 90% band's coverage (ACI 91.0% and 90.5% against 89.5%; 90.0% on 2010-2026) and ACI steadies it over time, but they are wider and score slightly worse, so the shipped band stays (§15.5) |
 | Multiple testing (E3, 2026-11-26) | Nothing survives a correction for the number of candidates: Hansen's SPA p = 0.709 (returns), 0.558 (direction), 0.341 (variance), StepM sets empty, no nominal rejection in any family; the model confidence set keeps no-change and every LSTM variant and drops ridge and boosting (§15.5) |
@@ -55,7 +69,7 @@ better:
 | Extra features | Macro, NFP, FOMC+CPI and COT (daily and hourly) are all null; best daily variant FOMC+CPI 57.5%, AUC 0.520, p = 0.37 |
 | The ~70% target | Not reachable on this evidence; ~70% sign accuracy on daily returns would need a predicted-vs-actual correlation near 0.59 |
 
-So far the write-up is a well-instrumented negative result, with one small exception found by the overnight search of 2026-11-26 (E2): same-day cross-asset returns predict the next settlement return (R² about +0.5%), largely because the closes are not simultaneous; the LSTM's own R² on the dashboard stays at -0.011. **The project is open to new approaches**: the old proposal and its ~70% target are superseded
+So far the write-up is a well-instrumented negative result, with one small exception found by the overnight search of 2026-11-26 (E2): same-day cross-asset returns predict the next settlement return (R² about +0.5%), largely because the closes are not simultaneous; the LSTM's own R² on the dashboard stays at -0.011 until the page switches to the cross-asset model (R² +0.003 on the same days). **The project is open to new approaches**: the old proposal and its ~70% target are superseded
 and the advisor allows trying anything. The feature searches in Phase 9 were null (evidence, not a prohibition); judge new ideas with the
 regression-first metrics and the same causal protocol.
 
@@ -64,7 +78,7 @@ with price error (MAE, RMSE, % error, R², IC) against the "tomorrow = today" ba
 secondary check (it is how the proposal phrased the ~70% target, and it exposes the model's majority-class behaviour). The dashboard
 leads with price error and, since 17 Nov, no longer shows direction accuracy at all (its former side check is kept under "Content removed from the dashboard" in Phase 13); Chapter 3 did the same (price accuracy first, direction as a secondary table).
 
-**Dashboard (final form, 2026-11-17; the owner closed the dashboard work that day).** `dashboard/app.py` is a 40-line entry point; the page lives in `dashboard/ui/` (`data.py` cached loaders, `header.py`, `sidebar.py`, `cards.py` metric cards,
+**Dashboard (final layout 2026-11-17; model-aware since 2026-11-26).** `dashboard/app.py` is a 40-line entry point; the page lives in `dashboard/ui/` (`data.py` cached loaders, `header.py`, `sidebar.py`, `cards.py` metric cards,
 one `tab_*.py` per section, `theme.py` colours and the shared chart style, `logic.py` the price verdict and the chip colour). It does not import TensorFlow (requirements: streamlit, boto3, pandas, numpy, plotly, pyarrow), so a page
 loads in about a second. Every number in the prose is read from the result files, so a results refresh needs no dashboard edit. Theme and font are in `.streamlit/config.toml` (one light theme, on purpose).
 The page, top to bottom: a **header** (the title with a freshness badge; three lines under it: what the model forecasts, that live forecasts are saved before the day and scored against the real close, and the senior-project disclaimer; the forecast card with
@@ -73,12 +87,14 @@ each card showing only a label and a number), then a **navigation bar of three s
 *Actual market data* (price history, volatility, daily changes, the model's inputs) and *How reliable?* (the evidence rows, average miss by model, range reliability by method). The sidebar holds the credits. The details are in §10 ("Current dashboard").
 Step by step the owner removed the briefing, notes, chips, verdict boxes, the side-check and statistics expanders, many tooltips and the whole *About the project* section; everything removed is kept in "Content removed from the dashboard" (Phase 13)
 and `AGENTS.md` lists the rules so that it stays removed.
+**Two states since 2026-11-26** (chosen by `ui/data.headline_key`): while the live log has no cross-asset forecast the page is exactly the LSTM page described here (what is public now, checked element by element against the previous deployment); once the daily pipeline publishes one, the whole page
+becomes the cross-asset model's page (description line, forecast and range, accuracy cards with R² +0.003, backtest, a *Cross-asset / LSTM* switch on the live record, the comparison charts, the inputs it reads); details in §10.
 
 **Live pipeline (since 2026-10-29; Phase 11, §11).** An EventBridge schedule (`cron(0 3 * * ? *)`, 03:00 UTC = 10:00 Thailand, ENABLED) invokes the Lambda `gold-lstm-forecast-daily-refresh` (python3.12, 1 GB, about 1.5 s per run) in `ap-southeast-2`.
 Each morning it appends the newest settled Yahoo bar to `bronze/streaming/xauusd_daily_incremental.csv`, runs data-quality checks, makes the forecast with a numpy LSTM and its 90% EWMA range (`gold/xauusd_daily/predictions/latest_forecast.json`)
-and scores every earlier forecast whose next close is now known (`forecast_log.csv`, the live record). Status on 2026-11-17: the 10:00 run worked (latest forecast, made from the 2026-11-16 close: \$3,858.67, range \$3,776.27 to \$3,942.87);
-12 forecasts are logged, 11 scored, 9 of 11 inside the range, MAE \$48.49 against \$48.21 for the simple guess. **Open:** (1) the serving model (`model/serving/serving_model.npz`) was last written on 2026-10-29, so the weekly
-`python3 automation/retrain.py` (run by hand; needs TensorFlow and AWS credentials) is two retrains behind; (2) `forecast_log.csv` is an ordinary S3 object and the Lambda replaces the row of the same as-of date on a re-run, so the live record is not tamper-proof
+and scores every earlier forecast whose next close is now known (`forecast_log.csv`, the live record). Status on 2026-11-26: the 10:00 run worked (latest forecast, made from the 2026-11-25 close: \$3,543.43, range \$3,434.97 to \$3,655.31);
+19 forecasts are logged, 18 scored, 14 of 18 inside the range, MAE \$62.19 against \$60.82 for the simple guess (a copy of the log and of the latest forecast, taken before any change, is in `daily/results/live_log_snapshots/`). The code in `automation/lambda_function.py` already has the cross-asset step of Phase 14, **not deployed yet**. **Open:** (1) the serving model (`model/serving/serving_model.npz`) was last written on 2026-10-29, so the weekly
+`python3 automation/retrain.py` (run by hand; needs TensorFlow and AWS credentials) has not been run for four weeks (the cross-asset model needs no such step: the Lambda refits it every day); (2) `forecast_log.csv` is an ordinary S3 object and the Lambda replaces the row of the same as-of date on a re-run, so the live record is not tamper-proof
 (for a paper add S3 versioning with Object Lock, or a daily git commit of the log; the *Live record* tooltip on the page still says nothing can be edited afterwards); (3) no CloudWatch alarms or SNS topic (the IAM user `Auto` lacks the permission and the owner chose not to widen it);
 (4) `AmazonEC2ContainerRegistryFullAccess` is still attached to `Auto` although nothing uses it. See §12 items 18-22.
 
@@ -136,8 +152,20 @@ python3 build_daily_dataset.py --out-dir data/processed
 python3 walk_forward.py --data data/processed/xauusd_d1_features.parquet --latest data/processed/xauusd_d1_latest_features.parquet --out-dir results
 python3 horizon_always_up.py                       # the Phase 8 horizon table
 python3 test_regression_metrics.py                 # metric tests; test_serving.py (numpy LSTM equals Keras) and ../automation/test_lambda_function.py run the same way
-cd ../automation && python3 deploy.py plan         # the daily Lambda and its schedule: plan / apply / teardown (idempotent)
+cd ../automation && python3 deploy.py plan         # the daily Lambda and its schedule: plan / apply / code / teardown (idempotent)
+python3 deploy.py code                             # replace only the Lambda's code (and upload the two cross-asset inputs when missing)
 python3 retrain.py                                 # weekly: retrain the serving model and upload it (needs TensorFlow and AWS credentials)
+```
+
+The cross-asset model (Phase 14; the E2 inputs are fetched with `search_experiment.py prepare`, which needs AWS read access and Yahoo):
+
+```bash
+cd daily
+python3 search_experiment.py prepare               # data/e2_prices.parquet and data/e2_macro.parquet (kept out of git)
+python3 add_crossasset_model.py                    # append the model to results/ from the committed E2 forecasts; the old values stay byte for byte
+python3 interval_xasset.py                         # its comparison of range methods
+python3 export_crossasset_model.py                 # the two serving inputs (the error history is committed, the macro history is not)
+python3 test_crossasset.py                         # the numpy model equals sklearn and reproduces the E2 winner exactly
 ```
 
 The feature-search folders are the same walk-forward run on a differently built dataset (one `--out-dir` per variant):
@@ -155,7 +183,7 @@ Hourly: `hourly/run_full_pipeline.sh` (needs Node for `dukascopy-node`; run `npm
 **Refreshing the results** (§12 item 12; last done 2026-10-27 with data through 2026-10-26). (1) Extend the silver data: the S3 Silver table is still at 2026-09-21 (the Lambda keeps newer bars in `bronze/streaming/xauusd_daily_incremental.csv` and nothing absorbs them into Silver yet),
 so build a local parquet with the same columns and pass it to `--silver`. (2) Delete or repoint `daily/data/macro_cache.parquet` and `cot_cache.parquet` first: `fetch_macro` and `fetch_cot` return a cache as-is without checking its end date, so a stale cache silently
 forward-fills old values. (3) Re-run the main walk-forward **and all four variants on the same rows**, keep the previous outputs in a dated `daily/results/snapshot_*` folder (only `snapshot_2026-09-18/` exists so far; copy the current outputs into a new one before overwriting)
-and update the README numbers. The dashboard reads the result files by itself (cache keyed on file mtime) and its prose is generated, so it needs no edit; the README tables are typed by hand. The Word files are no longer maintained. A long-window run for a paper belongs in its own
+and update the README numbers. The dashboard reads the result files by itself (cache keyed on file mtime) and its prose is generated, so it needs no edit; the README tables are typed by hand. After a refresh also re-run `add_crossasset_model.py` and `interval_xasset.py`; the cross-asset column comes from the committed E2 forecasts (origins up to 2026-11-23), so a window that ends later first needs the E2 linear group re-run on fresh data. The Word files are no longer maintained. A long-window run for a paper belongs in its own
 results folder, so that the dashboard's 449-day window stays consistent.
 
 **Paper (IEEE; the next step since 2026-11-17).** The research dossier is §15: what the evidence supports and does not support, every number with its source file, the method in reproducible detail, threats to validity, extra experiments (E1-E12), a checked bibliography with BibTeX (39 references, DOIs verified 2026-11-17), an IEEE venue shortlist (JCSSE 2027 second round on 22 Jan 2027, hosted by the owner's school; IEEE Access, rolling), a section-by-section writing plan and the rules for working with Claude (§15.13). Read §15.0 and §15.13 before drafting anything.
@@ -168,6 +196,7 @@ results folder, so that the dashboard's 449-day window stays consistent.
   installs a newer Streamlit than local development used (1.66 vs 1.56), so check every layout change at 1280, 1024, 900, 760 and
   390 px and on the live URL after the push (§10, lessons).
 - The owner pushes small commits straight to `main`. Every push redeploys the public app, so a broken `app.py` is public at once.
+- The Lambda is changed with `python3 automation/deploy.py code` (code only; roles, schedule and alarms untouched). Back up `forecast_log.csv` first (§12 item 20) and keep every new forecast step optional and isolated, so it can never stop the one that already works.
 - Checking a second Streamlit version means proving which version ran: print `streamlit.__version__` first (a broken scratch venv silently ran 1.56 for days). Streamlit 1.66's `AppTest.from_file` resolves a relative path against the calling file, so give it the absolute path of
   `dashboard/app.py`; prime `st.session_state["section"]` to test each navigation section.
 - The owner decides every visible element of the page and writes the rules down in `AGENTS.md`: never delete a chart or section unless the owner asks for that exact removal, and put removed content into this README (see "Content removed from the dashboard").
@@ -842,6 +871,32 @@ Longer-horizon p-values are adjusted for overlapping forecasts.
 
 **Footer.** Two buttons, "Source code" (https://github.com/aphiwat-data/lstm_dashboard) and "Full write-up (README)" (https://github.com/aphiwat-data/lstm_dashboard/blob/main/README.md), and the line: "Made only for a Computer Engineering senior project, not trading advice · Prices: Yahoo Finance (GC=F)".
 
+### Phase 14: the cross-asset model and a dashboard that switches to it (November 26, 2026)
+
+**Why.** The owner asked for a positive R² ("whatever it takes"), then to finish the dashboard with it and update this README. The frozen search E2 (§15.5) had found one honest positive: a **ridge regression (alpha 100) on the last 1,000 labelled days of six same-day moves**: gold, the dollar index (DXY), silver, the S&P 500, the 10-year Treasury yield and inflation-linked bonds (TIP). This phase puts that model next to the LSTM, in the results, the live pipeline and the dashboard, without changing anything that already worked.
+
+**The model and its results.** `daily/crossasset.py` (numpy and pandas only) holds the six inputs, the ridge, the 90% band and the Yahoo fetch; the Lambda, the results script and the tests share it. The tests show it equals scikit-learn's scaler plus ridge and reproduces the E2 winner's forecast exactly at the block starts. `daily/add_crossasset_model.py` appends the model to the main run's 449 rows (E2's committed forecasts, refit every 21 days) **leaving every older value byte for byte**; `interval_xasset.py` compares range methods around it.
+
+| 449 test days (2025-01-09 to 2026-10-23) | Cross-asset model | LSTM | Simple guess |
+|---|---|---|---|
+| MAE (\$) | 46.49 | 46.83 | 46.63 |
+| RMSE (\$) | 68.82 | 69.45 | 68.94 |
+| MAPE | 1.139% | 1.147% | 1.143% |
+| R² against the rolling mean (the dashboard's R²) | +0.0033 | -0.0113 | -0.0006 |
+| Spearman IC (p) | +0.077 (0.10) | +0.006 (0.90) | n/a |
+| Diebold-Mariano p against the simple guess (24 lags) | 0.54 | 0.38 | n/a |
+| 90% range: coverage on 389 days, mean width (\$) | 89.5%, 221 | 89.5%, 223 | 88.7%, 221 |
+
+Other range methods around the new forecast cover less: empirical quantiles of all past errors 85.6% (Kupiec p = 0.006), GARCH(1,1) Gaussian 86.1% (p = 0.015) and with filtered historical simulation 85.3% (p = 0.004); the EWMA band stays (89.5%, p = 0.73).
+
+**How to read these numbers.** The R² is positive but small and **not significant on 449 days** (IC p = 0.10, DM p = 0.54): the page's own rule calls it "No predictive power". The evidence that it is more than luck is E2's longer test (R² +0.53% on 1,736 days, Clark-West p < 0.001, strict rule passed), and the mechanism check E2d attributes **36-55% of what it explains to gold's own move between the 13:30 ET settlement and the 17:00 ET close**, which is already known when the forecast is made. It is a property of the timing of the target, not a trading edge; the page says so in its "How to read this" popover.
+
+**The live pipeline (code written, not deployed).** The Lambda gained an **optional, isolated step**: read the macro history (`model/serving/macro_history.csv`) and its own log of newer bars (`bronze/streaming/macro_daily_incremental.csv`), fetch the five series from Yahoo (in parallel, three attempts, at most about 35 s), refit the ridge on the last 1,000 labelled days, publish it under `"crossasset"` in `latest_forecast.json`, write it to new columns `x_*` of `forecast_log.csv` (scored like the LSTM's), write the last 130 days of inputs (`crossasset_inputs.csv`) for the page and emit the metric `XFailure`. If anything in that block fails, the LSTM forecast is published exactly as before and the failure goes to the run log (a test shows the LSTM numbers are identical either way). A log written before this change gets the new columns and its old rows are not touched. `deploy.py code` replaces only the function's code and uploads the two inputs once (`crossasset_model.npz`, the model's 449 past errors that size the first bands, is committed; the macro history is vendor data and is not). The daily refit differs from E2's 21-day refit; the backtest on the page keeps E2's forecasts.
+
+**The dashboard.** `ui/data.headline_key` picks the page's model: the cross-asset model once its results exist **and** the live log has at least one of its forecasts, otherwise the LSTM. In the LSTM state the page is identical to the previous deployment (compared element by element on Streamlit 1.56 and 1.66.1, then on the live URL); a simulated cross-asset state and an unreachable S3 were also tested. In the cross-asset state: the first line under the title says what the model reads; the forecast, range, accuracy cards (R² +0.003, its tooltip adds the longer test), backtest (the tooltip says "retrained every 21 trading days on the last 1,000 days"), evidence rows and the two comparison charts are the new model's (the average-miss chart adds the LSTM, ridge and boosting as "price only"); the live record gets a *Cross-asset / LSTM* switch so the LSTM's record stays visible; *Actual market data* adds "What the model looks at" (the six moves, last 60 days) and keeps the LSTM's panel as "What the LSTM looks at"; "How to read this" gains the *Inputs* bullet with the timing caveat. Nothing was removed.
+
+**Deploying it (pending).** The attempt from the Claude session was blocked by its safety system because it writes to the live AWS pipeline; the two commands are in the Handoff block. Before it, the live log and latest forecast were copied to `daily/results/live_log_snapshots/`, the live function's code (16 KB zip) was saved outside the repo, and the previous code is in git (commit `2300d77`) for rollback.
+
 ### Lessons learned
 1. Predict stationary quantities (returns) from scale-free inputs; a price-level model breaks when prices leave the training range.
 2. Every metric needs its trivial baseline: "always up" for direction (not 50%), "no change" for price. Report intervals, and
@@ -867,23 +922,25 @@ Longer-horizon p-values are adjusted for overlapping forecasts.
 16. Say what is live and what is replayed. "Every forecast is saved before the day" is true only of the live forecasts; the replayed (backtest) forecasts were not saved beforehand.
 17. Give every manual step of an unattended system an owner and a reminder: the weekly retrain was documented but never scheduled, and the serving model is weeks old.
 18. An audit trail that can be overwritten is not an audit trail: the live log needs versioning or an external timestamp before it is cited as evidence.
+19. Add to a live system by addition and isolation: the new forecast runs in its own try block, the old one stays byte for byte, and the page switches only when the new data exist, so a half-finished deployment cannot show a broken page.
+20. To prove a change to a page is invisible until intended, render the deployed version and the new one against the same data and compare element by element (this caught a re-serialised CSV changing the old numbers in the last digit).
 
 ### Where things live
 | Path | What |
 |---|---|
-| `notebooks/`, `automation/` | Original pipeline (notebooks 01-06, the price-level model, superseded) and the live daily pipeline: `lambda_function.py` (deployed 2026-10-29), `deploy.py`, `retrain.py`, the IAM policies and the tests |
-| `daily/` | Corrected daily dataset builder, causality tests, walk-forward evaluation, regression-first metrics (`regression_metrics.py`), multi-day walk-forward (`walk_forward_horizon.py`), the interval experiments (`interval_experiment.py`, `lstm_quantile.py`, `interval_vix.py`), the volatility comparison (`volatility_experiment.py`) and the serving core of the live pipeline (`serving.py`, `export_serving_model.py`, `serving_artifacts/`). `results/` (the main price-only run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
+| `notebooks/`, `automation/` | Original pipeline (notebooks 01-06, the price-level model, superseded) and the live daily pipeline: `lambda_function.py` (the deployed version is that of 2026-10-29; the repository's adds the cross-asset step), `deploy.py` (plan, apply, code, teardown), `retrain.py`, the IAM policies and the tests |
+| `daily/` | Corrected daily dataset builder, causality tests, walk-forward evaluation, regression-first metrics (`regression_metrics.py`), multi-day walk-forward (`walk_forward_horizon.py`), the interval experiments (`interval_experiment.py`, `lstm_quantile.py`, `interval_vix.py`), the volatility comparison (`volatility_experiment.py`) and the serving core of the live pipeline (`serving.py`, `export_serving_model.py`, `serving_artifacts/`), the cross-asset model (`crossasset.py`, `add_crossasset_model.py`, `interval_xasset.py`, `export_crossasset_model.py`) and the paper experiments (E6 `volatility_har_experiment.py`, E7 `conformal_experiment.py`, E3 `multiplicity_experiment.py`, E2 `search_experiment.py` with `run_e2_overnight.sh`, E2b `search_placebo.py`, E2d `mechanism_check.py`; results in `results/paper_e*/`). `results/` (the main run) feeds the dashboard; `results/with_macro/`, `with_macro_calendar/`, `with_macro_calendar_full/` and `with_cot/` are the Phase 9 feature-search runs on the same rows; `results/snapshot_2026-09-18/` keeps the earlier 424-day outputs of all five |
 | `hourly/` | Hourly experiments: downloader, builder, tests, baselines, models, bid-vs-mid check and the cross-asset test (`results/with_aux_mid/`); `results/summary_hourly_findings.png` is the one-page summary |
 | `dashboard/app.py`, `dashboard/ui/` | Streamlit app (deployed on Streamlit Community Cloud from `main`): `app.py` is the entry point, `ui/` the header, sidebar, metric cards, one module per section (three sections), cached data loaders and the chart style; `dashboard/assets/` holds the MFU and ADT logos and `.streamlit/config.toml` the theme |
 | `docs/TROUBLESHOOTING.md` | Chronological error log for the original pipeline |
 | `AGENTS.md` | Rules for any coding agent: public-repo privacy, metric policy, one results window, the owner's dashboard rules, research rules for the paper |
-| S3 bucket `gold-lstm-forecast` (`ap-southeast-2`), not in git | `bronze/`, `silver/`, `gold/` (data, features, the live pipeline's predictions) and `model/serving/serving_model.npz` (the live model) |
+| S3 bucket `gold-lstm-forecast` (`ap-southeast-2`), not in git | `bronze/`, `silver/`, `gold/` (data, features, the live pipeline's predictions) and `model/serving/` (`serving_model.npz`, the live LSTM; after the Phase 14 deployment also `crossasset_model.npz` and `macro_history.csv`) |
 
 ### Status and next steps
-*As of 2026-11-17.* See the **Handoff** block at the top and §12 for the tracked open items. In short:
-- **Modelling: closed as a negative result.** Every lever tried (models, five feature sets, horizons, daily and hourly data, interval methods) is level with the simple guess on price error; the honest write-up is a well-instrumented negative result with a reliable 90% range.
-- **Dashboard: finished (owner, 17 Nov).** The final structure is in §10 and the rules that keep it that way are in `AGENTS.md`.
-- **Live pipeline: running unattended since 2026-10-30** (11 forecasts scored by 2026-11-17). To do: run `python3 automation/retrain.py` (the model was last written on 2026-10-29), make the live log tamper-proof if it will be cited (S3 versioning with Object Lock, or a daily git commit of the log)
+*As of 2026-11-26.* See the **Handoff** block at the top and §12 for the tracked open items. In short:
+- **Modelling: a negative result with one small, caveated positive.** On price-only inputs every lever tried (models, horizons, daily and hourly data, interval methods) is level with the simple guess; the E2 search found that same-day cross-asset moves predict the next settlement a little (R² about +0.5% on 2020-2026, +0.3% on the dashboard's window), largely because the closes are not simultaneous. The 90% range is reliable.
+- **Dashboard: switches to the cross-asset model once the pipeline is updated** (Phase 14; the layout is the owner's final one of 17 Nov, the rules are in `AGENTS.md`).
+- **Live pipeline: running unattended since 2026-10-30** (18 LSTM forecasts scored by 2026-11-26). To do: **deploy the cross-asset step** (Handoff), run `python3 automation/retrain.py` (the LSTM was last retrained on 2026-10-29), make the live log tamper-proof if it will be cited (S3 versioning with Object Lock, or a daily git commit of the log)
   and correct the *Live record* tooltip, which still says nothing can be edited afterwards.
 - **Paper: an IEEE-format paper is the next step (owner, 2026-11-17).** The advisor wants a publication; the owner will work with this README and Claude as research helpers. §15 is the research dossier: the claim the evidence supports, every number with its source file, the method in reproducible detail,
   threats to validity, extra experiments to strengthen the paper, a checked bibliography, an IEEE venue shortlist, a section-by-section writing plan and the rules for working with Claude.
@@ -961,8 +1018,14 @@ lstm_dashboard/
 │   ├── walk_forward_horizon.py  ← price 5 / 20 trading days ahead vs. no-change (results/horizon_h5, horizon_h20)
 │   ├── interval_experiment.py, lstm_quantile.py, interval_vix.py   ← 90% interval method comparison and the VIX test
 │   ├── volatility_experiment.py ← volatility forecast comparison (EWMA, GARCH, VIX; QLIKE) → volatility_forecast.csv, volatility_comparison.json
+│   ├── crossasset.py, test_crossasset.py   ← the cross-asset model shared by the Lambda and the scripts (Phase 14)
+│   ├── add_crossasset_model.py, interval_xasset.py, export_crossasset_model.py   ← its results, range comparison and serving inputs
+│   ├── volatility_har_experiment.py, conformal_experiment.py, multiplicity_experiment.py   ← paper experiments E6, E7, E3 (with their tests)
+│   ├── search_experiment.py, search_placebo.py, mechanism_check.py, run_e2_overnight.sh, run_e2_group.sh   ← the E2 search, placebo and mechanism check (with their tests)
+│   ├── serving_artifacts/       ← serving_model.npz (LSTM), crossasset_model.npz (committed); macro_history.csv is written locally and not committed
 │   ├── requirements.txt
-│   └── results/                 ← main run (449-day window): walk_forward_results.json, wf_predictions.csv, regression_metrics.json, latest_forecast.json, interval_comparison.json, interval_vix.json, volatility_forecast.csv, volatility_comparison.json (read by the dashboard)
+│   └── results/                 ← main run (449-day window): walk_forward_results.json, wf_predictions.csv, regression_metrics.json, latest_forecast.json, interval_comparison.json, interval_comparison_xasset.json, interval_vix.json, volatility_forecast.csv, volatility_comparison.json (read by the dashboard)
+│       ├── paper_e2/, paper_e3/, paper_e6/, paper_e7/   ← results of the paper experiments (§15.5); live_log_snapshots/ keeps copies of the live log
 │       ├── with_macro/, with_macro_calendar/, with_macro_calendar_full/, with_cot/   ← Phase 9 feature-search runs on the same rows
 │       ├── snapshot_2026-09-18/ ← the earlier 424-day outputs of all five runs
 │       └── model_results_lstm_w*.json   ← static-training variants (not re-run in the October refresh)
@@ -1074,6 +1137,7 @@ here.
   (`cron(0 3 * * ? *)` UTC = 10:00 Thailand, ENABLED), two roles (`gold-lstm-forecast-daily-refresh-role` for the function and `gold-lstm-forecast-daily-refresh-scheduler-role` for the schedule; the least-privilege policies are in `automation/`)
   and CloudWatch metrics in the namespace `GoldLSTM`. S3 prefixes it uses: `bronze/streaming/` (append-only bar log), `gold/xauusd_daily/predictions/` (`latest_forecast.json`, `forecast_log.csv`, `dq_report.json`) and
   `model/serving/serving_model.npz` (last written 2026-10-29). No CloudWatch alarms or SNS topic exist (`Auto` lacks the permissions). Cost: far inside the free tier.
+  After the Phase 14 deployment (pending) the pipeline also reads `model/serving/macro_history.csv` and `model/serving/crossasset_model.npz` and writes `bronze/streaming/macro_daily_incremental.csv` and `gold/xauusd_daily/predictions/crossasset_inputs.csv`, all inside the role's existing permissions; it adds the CloudWatch metric `XFailure`.
 - **Compute actually used**: SageMaker classic **Notebook Instance** — see
   Deviation #1 in §3 for why this differs from the proposal's stated
   SageMaker Studio / `ml.m5.2xlarge`.
@@ -1633,6 +1697,11 @@ brief:
 - **What was removed, and where it went.** The header briefing, the metric notes and chips, the verdict pill and the verdict box, the side-check and all-statistics expanders, the evidence and chart-title tooltips, the *About the project* section (pipeline steps, "What we tried", method, glossary, links) and the old
   Method/Data-explorer tabs: all documented in Phase 13 ("Content removed from the dashboard"), with the numbers rebuilt from the result files.
 
+### Cross-asset state (2026-11-26, Phase 14)
+- **When.** `ui/data.headline_key(res, log)` returns the cross-asset model once `daily/results` has its results and the live log has at least one `x_predicted_next_close`; until the Lambda is updated the page stays exactly as described above.
+- **What changes.** Header: first line "A model that reads the dollar, stocks and interest rates forecasts ...", the forecast and 90% range from the `crossasset` block of `latest_forecast.json` (fallback: `latest_forecast_xasset` in `walk_forward_results.json`), accuracy cards from `models.xasset` (R² +0.003, whose tooltip adds the longer test read from `paper_e2/e2_summary.json`), a fourth bullet "Inputs" with the timing caveat in "How to read this". Backtest: E2's forecasts, tooltip "retrained every 21 trading days on the last 1,000 days". Live record: a *Cross-asset / LSTM* switch at the right of the title (the LSTM record is kept). *Actual market data*: "What the model looks at" (the six moves, last 60 days, from `crossasset_inputs.csv`; hidden when the file is missing) and "What the LSTM looks at". *How reliable?*: rows and charts for the new model, `interval_comparison_xasset.json`, and the average-miss chart with the LSTM (purple), ridge and boosting as price only.
+- **Tests.** AppTest for every section on Streamlit 1.56 and 1.66.1 in three states (live as deployed, simulated cross-asset data, S3 unreachable); the deployed state compared element by element with the previous page (no difference).
+
 **Hosting decision.** Streamlit Community Cloud is free. The real AWS cost risk in this project is compute left running continuously
 (not S3 reads or occasional inference), so the dashboard is deliberately not deployed to always-on AWS compute.
 
@@ -1768,6 +1837,8 @@ this data volume; no compute cost from running the dashboard).
 ---
 
 ## 11. Daily Automation Pipeline (Lambda + EventBridge Scheduler)
+
+**Cross-asset step (2026-11-26, Phase 14): written and tested, not deployed.** After the LSTM forecast, an isolated block reads the macro history and the macro log, fetches DXY, silver, the S&P 500, the 10-year yield and TIP, appends new bars to `bronze/streaming/macro_daily_incremental.csv`, refits the ridge, publishes `latest_forecast.json["crossasset"]`, fills the `x_*` columns of the forecast log (and scores them), writes `crossasset_inputs.csv` and the metric `XFailure`; any failure leaves the LSTM forecast unchanged. Deploy: `python3 automation/deploy.py code` (Handoff).
 
 **Current status (2026-11-17): running.** Deployed on 2026-10-29 and unattended since 2026-10-30; the EventBridge schedule is `cron(0 3 * * ? *)` UTC = 10:00 Thailand since 2026-11-04. The latest run (2026-11-17, 03:00 UTC) produced the forecast made from the 2026-11-16 close; the live log holds 12 forecasts, 11 of them scored.
 Open: the weekly retrain (`automation/retrain.py`) has not been run since 2026-10-29, the log is not tamper-proof and there are no alarms (Handoff; §12 items 18-22). Where the original v1 text below disagrees (08:00 Thailand, a TFLite container, `convert_and_export.py` plus `deploy.sh`),
@@ -1945,11 +2016,12 @@ that discipline matters most), and teardown instructions are all in
 18. **Weekly retrain of the serving model.** `python3 automation/retrain.py` (needs TensorFlow and AWS credentials, so it runs on a machine of the owner's, not in Lambda). The model object was last written on 2026-10-29 and nothing schedules the retrain, so every live forecast since comes from that model.
 19. **Make the live record tamper-proof if it will be cited.** `forecast_log.csv` is an ordinary S3 object and the Lambda replaces the row of the same as-of date on a re-run, so edits are possible and invisible. Options: S3 bucket versioning with Object Lock, or a daily commit of the log to git.
     Until then do not call the live forecasts pre-registered. The *Live record* tooltip on the page ("nothing can be edited afterwards") overstates this and should be reworded.
-20. **Back up `forecast_log.csv`** (one copy outside the bucket) before anything is changed.
+20. ~~**Back up `forecast_log.csv`** (one copy outside the bucket) before anything is changed.~~ **Done 2026-11-26** before the Phase 14 change: `daily/results/live_log_snapshots/` (19 rows, 18 scored); repeat before any later change.
 21. **Alarms.** No CloudWatch alarms or SNS topic; the IAM user `Auto` lacks the permissions and the owner chose not to widen it. A failed run is visible only as a gap in the live log and in the Lambda's CloudWatch logs.
 22. **Absorb the streaming log into Silver** (item 10) and refresh the 449-day window once Silver is current; the live record already runs past the window's end (2026-10-23).
 23. **Paper (IEEE format; owner, 2026-11-17).** The research dossier is §15; the extra experiments that would strengthen the paper are listed there (§15.8).
-24. **E2 follow-ups (2026-11-26; optional, each needs its own frozen protocol).** (a) Redo the winner on a target without the stale settlement (spot at 17:00 ET to the next settlement, or hourly spot to spot, from the Dukascopy files that run to 2026-09-25) to see whether any information beyond the timing effect remains (E2d found t = +2.64 on TEST and +0.58 on DEV); (b) a power analysis by injecting a known predictable component into the placebo series; (c) a placebo for the recurrent models; (d) if the same-day cross-asset forecast is ever shown on the dashboard, the daily Lambda must fetch DXY, silver, the S&P 500, the 10-year yield and TIP (today it fetches gold only), and the page must carry the timing caveat; the shipped LSTM and its R² (-0.011) are unchanged.
+24. **E2 follow-ups (2026-11-26; optional, each needs its own frozen protocol).** (a) Redo the winner on a target without the stale settlement (spot at 17:00 ET to the next settlement, or hourly spot to spot, from the Dukascopy files that run to 2026-09-25) to see whether any information beyond the timing effect remains (E2d found t = +2.64 on TEST and +0.58 on DEV); (b) a power analysis by injecting a known predictable component into the placebo series; (c) a placebo for the recurrent models; (d) ~~if the same-day cross-asset forecast is ever shown on the dashboard, the daily Lambda must fetch the five series and the page must carry the timing caveat~~ done in code in Phase 14 (deployment pending, item 25); the shipped LSTM and its R² (-0.011) are unchanged.
+25. **Deploy the cross-asset step (owner).** Run the two commands in the Handoff block, check `"crossasset"` is not null and that the page shows the new model within a few minutes; afterwards update the Handoff status, README §10-§11 and `AGENTS.md` if anything differs. The first live records of the new model start that day.
 
 ---
 
@@ -2045,6 +2117,7 @@ Notes:
 11. The null survives a correction for the number of candidates tried (E3, Tables E3-1 to E3-4): no candidate beats its benchmark in any of five families (Hansen's SPA p = 0.709, 0.355, 0.558, 0.341, 0.292; the StepM set of superior candidates is empty), no candidate is even nominally significant, and the 90% model confidence set keeps the no-change benchmark and every LSTM variant while dropping ridge and boosting.
 12. A frozen, wide search finds one small positive for the next settlement return (E2, Tables E2-1 to E2-9): the forecaster chosen on 2011-2019 (ridge on the same-day returns of gold, DXY, silver, the S&P 500, the 10-year yield and TIP) has out-of-sample R² +0.53% against the rolling mean on 2020-2026 (1,736 days; Clark-West p < 0.001; IC +0.098, p < 0.001; +0.41% against the expanding mean) and +0.25% on the dashboard's window, and the named hypothesis "non-synchronous closes" (ridge 1000, expanding window) has +1.28% (Holm p < 0.001). The gain in dollar error is nil (MAE +0.02% against no-change), the bootstrap interval of the R² contains zero, and a post-hoc decomposition (E2d) attributes 36-55% of the covariance between forecast and target to the move of gold between the 13:30 ET settlement and the 17:00 ET close, which is known when the forecast is made: write it as a timing (stale-settlement) effect of the target, not as a forecast of unpriced news and not as a trading edge.
 13. Nothing else survives in that search: price-only inputs, trend, short-term reversal, volatility state, calendar inputs, 24 LSTM/GRU forecasters (median TEST R² -0.09%) and the 5- and 20-day horizons (E2, Tables E2-3, E2-4 and E2-7); and a placebo calibration (E2b, Table E2-8) shows that the weaker protocol rule is called "positive" in 25% of unpredictable series for the DEV-selected forecaster (the strict rule: 0 of 40) and that the best forecaster on the evaluation window has R² +0.41% on average and a Clark-West p below 0.05 in 87.5% of unpredictable series, so no leaderboard read off an evaluation window may be quoted.
+14. On the dashboard's own 449-day window the E2 winner (the "cross-asset model", Phase 14) has MAE \$46.49 against \$46.63 for no-change and \$46.83 for the LSTM, out-of-sample R² +0.0033 against the rolling mean and IC +0.077 (p = 0.10): positive but **not significant on that window**; quote it only together with claim 12 and its timing explanation.
 
 **The evidence does not support (do not write):**
 - That the LSTM forecasts gold prices accurately, beats its baselines or is useful for trading. On this evidence the opposite holds, and no strategy, transaction cost or economic value was tested.
@@ -2089,7 +2162,7 @@ Notes:
 | Train / validation / test rows | 4,835 / 247 / 449 (embargo 5 bars; up-day share 52.6% / 57.9% / 55.2%) |
 | Invalid OHLC rows | 347 (6.2%; by year 2004 33%, 2005 26%, 2006 34%, 2007 28%, 2008 17%, 2009 4%, 2010 2%, 2011 8%); features use the close only |
 | Zero-volume share | 2.8% (volume is not used) |
-| Extreme one-day moves (|log return| above 7%) | 2006-06-13 (-7.6%); 2008-09-17 (+8.6%); 2009-03-19 (+7.5%); 2013-04-15 (-9.8%); 2026-01-30 (-11.4%) |
+| Extreme one-day moves (\|log return\| above 7%) | 2006-06-13 (-7.6%); 2008-09-17 (+8.6%); 2009-03-19 (+7.5%); 2013-04-15 (-9.8%); 2026-01-30 (-11.4%) |
 
 **Sources.**
 - **Daily gold**: COMEX gold futures, continuous contract `GC=F`, from Yahoo Finance (`yfinance`), 2004-06-01 onwards; the live pipeline appends settled bars from the Yahoo chart endpoint each morning. It is a futures series (roll effects, settlement at the COMEX close), a proxy for spot XAU/USD: the paper must say so. The cleaned history is in S3 (`silver/xauusd_daily_clean.parquet`, last row 2026-09-21) and newer bars are in `bronze/streaming/xauusd_daily_incremental.csv`. Every feature is computed from the close alone because open, high and low are unreliable before 2012.
@@ -2614,6 +2687,8 @@ Same-day macro returns (DXY, silver, S&P 500, TIP, 10-year yield) explain 6.5% o
 6. *Multiple testing.* Judged on the TEST window, the pool as a whole does not pass a correction for its 389 distinct forecasters: SPA p = 0.765 (squared-error gain) and 0.431 (Clark-West-adjusted gain), reality-check p = 0.873 and 0.019, StepM set empty. This does not contradict item 1: the confirmatory tests involve one forecaster chosen on earlier data (P-A) and six named ones, whereas the pool test makes 389 correlated forecasters, most of them noise, compete on TEST (and the studentised SPA is also sensitive to forecasters with almost no variance). A leaderboard read off the evaluation window cannot be quoted: in the placebo the best forecaster on TEST has R² +0.41% on average and a Clark-West p below 0.05 in 87.5% of the replicates, against +1.36% (p <0.001) for the real best.
 7. *What this changes for the project.* The shipped LSTM is unchanged (R² -0.011 on the dashboard); E2 does not make it a good forecaster. A forecast that uses same-day macro closes would need DXY, the S&P 500, the 10-year yield, TIP and silver in the daily Lambda (today it fetches gold only) and would have to be shown with the timing caveat of item 4. A fair statement for the paper: next-day COMEX gold settlement returns are weakly predictable (R² about 0.5%) from same-day cross-asset returns, largely because the settlement precedes the other closes; price-only inputs, trend, reversal, calendar inputs and LSTM or GRU models add nothing robust.
 8. *Disclosures.* (a) The first launch (04:00) assembled no jobs (the BSD `xargs -I` limit) and produced nothing. (b) The recurrent fits leaked memory (about 85 MB per block; four workers reached 2.7 GB each and the 8 GB machine thrashed); the run was stopped at 04:35, the checkpoints (20 to 30 blocks per group) were kept, and the groups were completed in 6-block chunks in fresh processes; one chunk died with a segmentation fault (TensorFlow, exit code 139) and was repeated from its checkpoint; TensorFlow compute threads were set to one and boosting to four threads (speed only). None of this changes a forecast, but TensorFlow training is not bit-reproducible. (c) The amendment (expanding mean, IC, STRICT) was written before the evaluation but after a two-replicate placebo test; it only adds hurdles. (d) E2d was written after the results (post hoc). (e) The refit interval is 21 origins, not the dashboard's 7. (f) The data were fetched on 2026-11-26 (prices to 2026-11-24, macro to 2026-11-25). (g) The benchmark b is the 365-day mean as on the dashboard; the expanding mean is hardly better (R² against b +0.12% on TEST, Clark-West p 0.110), so a weak benchmark did not drive the result. (h) Before the evaluation only structure checks were printed from a dry run on the linear forecasts (no performance numbers) and a sanity check of the first finished recurrent group (coverage, scale, correlation 0.41 with the shipped LSTM's forecasts).
+
+**Update (2026-11-26, evening):** item 7 was acted on: the model is in the results, the Lambda code and the dashboard (Phase 14); only the Lambda deployment is pending.
 
 ### 15.6 Evaluation pitfalls found in this project (the audit angle)
 **Table XI. Evaluation pitfalls.**
@@ -3259,7 +3334,7 @@ For the 4-6 page conference paper use Tables I (compact), III, VII and XI (pitfa
 7. **Live record.** Harden the log (E10) before citing it, or describe it only as a demonstration? *Open.*
 8. **Compute budget** for E2, E4-E6 (CPU only so far). *Open.*
 9. **Advisor's expectation** of the venue tier and the deadline. *Open.*
-10. **How to present the E2 finding (2026-11-26).** The only positive result is small and mostly a timing effect (§15.5, Table E2-9). Options: (a) a secondary result in the "predictable risk, unpredictable price" angle, with the stale-settlement explanation and no trading claim; (b) first redo it on a target without the stale settlement (§12 item 24a) and report whatever remains; (c) leave it out. The owner asked for a positive R² "whatever it takes"; the honest answer is that a positive exists under the pre-registered rule but is not evidence of forecasting skill. *Open: owner and advisor.*
+10. **How to present the E2 finding (2026-11-26).** The only positive result is small and mostly a timing effect (§15.5, Table E2-9). Options: (a) a secondary result in the "predictable risk, unpredictable price" angle, with the stale-settlement explanation and no trading claim; (b) first redo it on a target without the stale settlement (§12 item 24a) and report whatever remains; (c) leave it out. The owner asked for a positive R² "whatever it takes"; the honest answer is that a positive exists under the pre-registered rule but is not evidence of forecasting skill. *Open for the paper: owner and advisor.* Update (2026-11-26): the owner had the model put on the dashboard (Phase 14, deployment pending).
 
 ### 15.16 Pre-submission checklist
 - [ ] Every number traced to a file (rule 2); tables generated by script; figures regenerated from the result files.
