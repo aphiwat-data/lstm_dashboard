@@ -6,6 +6,7 @@ the forecast comes from the daily pipeline on AWS and the evaluation from the re
 
 Layout: the header (the forecast, its chart, the accuracy scorecard) and a navigation bar of three sections in one row. Nothing is shown until a section is clicked, and clicking
 the active one hides it again: forecast vs. actual, actual market data and the reliability tests. What was built and tried is documented in the README.
+While the page shows the cross-asset model, the live record still opens on the LSTM's record (`ui/tab_track.py`).
 """
 import streamlit as st
 
