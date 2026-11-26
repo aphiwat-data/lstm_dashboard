@@ -79,8 +79,8 @@ def _live(log: pd.DataFrame | None, key: str) -> None:
             st.subheader("Live record", width="content", help="Every day the pipeline saves its forecast before the day happens. Once the next close is known the forecast is scored here, and nothing can be edited afterwards.")
             st.badge("Real forecasts", icon=":material/bolt:", color="green")
         pick = key  # one live record while the page is the LSTM's; a switch once the cross-asset model has its own
-        if key != "lstm":
-            pick = st.segmented_control("Model", list(MODELS), format_func=lambda k: MODELS[k]["short"], default=key, key="live_model", label_visibility="collapsed") or key
+        if key != "lstm":  # it opens on the LSTM, whose record is the long one (owner, 26 Nov)
+            pick = st.segmented_control("Model", list(MODELS), format_func=lambda k: MODELS[k]["short"], default="lstm", key="live_model", label_visibility="collapsed") or "lstm"
     mine = live_scores(log, pick)
     scored = mine.dropna(subset=["actual_next_close"]) if mine is not None and len(mine) else None
     if scored is None or scored.empty:
