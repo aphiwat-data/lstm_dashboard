@@ -2496,7 +2496,7 @@ HAR-RV logs has the lower QLIKE than EWMA 0.94 in 15 of 17 years.
 |---|---|
 | Forecasters at h = 1 | 207 base (162 linear, 24 boosting, 9 extra trees, 12 LSTM/GRU), 414 with the shrunk versions, plus two online selectors |
 | Forecasters at h = 5 and 20 | 36 base, 72 with the shrunk versions, each |
-| Data | GC=F daily closes 2004-08-26 to 2026-11-24 and the six cross-asset series; 5,592 rows; first origin 2010-01-04 |
+| Data | GC=F daily closes from 2004-06-01 and the six cross-asset series; 5,592 usable rows (2004-08-26 to 2026-11-24, after the 60-day look-backs); first origin 2010-01-04 |
 | DEV (choices allowed) | origins 2011-01-03 to 2019-12-31, n = 2,261 |
 | TEST (confirmation) | origins 2020-01-02 to 2026-11-23, n = 1,736 |
 | PROJECT (the dashboard's window, inside TEST) | origins 2025-01-09 to 2026-10-23, n = 451 (449 in the shipped run, which lacks two days) |
@@ -3224,6 +3224,7 @@ For the 4-6 page conference paper use Tables I (compact), III, VII and XI (pitfa
 8. **Privacy.** No AWS identifiers or credentials; author names only where the venue allows (double-blind review needs anonymisation, §15.15).
 9. **Disclose AI assistance** as §15.12 says, at the venue's required place.
 10. **End every session** by updating §15.15 (decisions and open questions) and §12; paper drafts, scripts and figures live in `paper/` (create it when writing starts); results and decisions are still recorded in this README only.
+11. **Searches are chosen on earlier data and judged on later data (E2, E2b).** Never quote a leaderboard read off the window it is judged on (in the placebo the best forecaster there shows R² +0.41% and p < 0.05 in 87.5% of runs on pure noise); call a result positive only by the strict rule of §15.8 (R² above 0 against the rolling mean, Clark-West p < 0.025, IC p < 0.05 and R² above 0 against the expanding mean), and say what its gain consists of (E2d: timing of the closes) before saying that it is a forecast.
 
 **Prompt templates.** (a) "Generate Table III in IEEE LaTeX (`booktabs`) from `daily/results/walk_forward_results.json` and `regression_metrics.json`; do not type numbers." (b) "Write the Related Work paragraph on forecast evaluation using only [1], [3]-[7] from §15.9; list each claim and its reference." (c) "Audit this paragraph: list every factual claim, the file or table that supports it, and flag the unsupported ones." (d) "Implement experiment E1 in `daily/` with tests, run it into `daily/results/paper_e1/` and add the result table to §15.5." (e) "Trim the abstract to 150 words without losing a number." (f) "Anonymise the manuscript for double-blind review and list what you removed."
 
