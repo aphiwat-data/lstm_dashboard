@@ -291,11 +291,11 @@ def run_group(group: str, panel: Panel, out_dir: Path, max_blocks: int | None = 
             print(f"{group}: resuming after block {done}", flush=True)
     if is_nn:
         import tensorflow as tf
-        tf.config.threading.set_intra_op_parallelism_threads(2)
+        tf.config.threading.set_intra_op_parallelism_threads(1)  # five workers on eight cores: one compute thread each avoids spinning contention
         tf.config.threading.set_inter_op_parallelism_threads(1)
     if not is_nn:
         from threadpoolctl import threadpool_limits
-        threadpool_limits(limits=1)  # four workers share eight cores; multi-threaded BLAS in each only wastes them
+        threadpool_limits(limits=4 if group == "hgb_h1" else 1)  # five workers share eight cores, so one BLAS thread each; the boosting group is the long pole at the end and may use four
     t0 = time.time()
     mats = {k: panel.X[SETS[k]].to_numpy(float) for k in {sp.fset for sp in specs}}
     stop = len(starts) if chunk is None else min(len(starts), done + chunk)
