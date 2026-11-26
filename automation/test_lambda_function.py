@@ -37,7 +37,7 @@ def _bars(start, periods, seed=0, base=4000.0):
     return pd.DataFrame({"date": pd.bdate_range(start, periods=periods), "open": close, "high": close * 1.003, "low": close * 0.997, "close": close, "volume": 1e5})
 
 
-MACRO_FUTURE = pd.DataFrame()
+MACRO_ALL = pd.DataFrame()
 
 
 def _macro(start, periods, seed=1):
@@ -48,7 +48,7 @@ def _macro(start, periods, seed=1):
 
 
 def _setup(n_silver=600):
-    global MACRO_FUTURE
+    global MACRO_ALL
     allb = _bars("2024-06-03", n_silver + 6)
     silver, future = allb.iloc[:n_silver].copy(), allb.iloc[n_silver:].reset_index(drop=True)
     fake = FakeS3()
@@ -58,9 +58,7 @@ def _setup(n_silver=600):
     mb = BytesIO()
     np.savez(mb, **dict(np.load(HERE.parent / "daily" / "serving_artifacts" / "serving_model.npz")))
     fake.objs[lf.MODEL_KEY] = mb.getvalue()
-    macro_all = _macro("2024-06-03", n_silver + 6)
-    fake.objs[lf.MACRO_HISTORY_KEY] = macro_all.iloc[:n_silver].rename_axis("date").reset_index().to_csv(index=False).encode()
-    MACRO_FUTURE = macro_all.iloc[n_silver:]
+    MACRO_ALL = _macro("2024-06-03", n_silver + 6)  # what Yahoo would return: the whole recent history, up to the last settled day asked for
     xb = BytesIO()
     np.savez(xb, errors=np.random.default_rng(5).normal(0, 0.01, 449), alpha=100.0, train_len=1000)
     fake.objs[lf.XMODEL_KEY] = xb.getvalue()
@@ -72,7 +70,7 @@ def _setup(n_silver=600):
 
 def _run(future_rows, now, macro=None):
     lf.fetch_recent_bars = lambda days_behind=0, now_utc=None: future_rows
-    rows = MACRO_FUTURE.loc[:future_rows["date"].iloc[-1]] if macro is None else macro
+    rows = MACRO_ALL.loc[:future_rows["date"].iloc[-1]] if macro is None else macro
     lf.crossasset.fetch_recent_macro = lambda range_, now_utc=None, **kw: rows
     return lf.lambda_handler({"now": now})
 
@@ -98,7 +96,7 @@ def test_first_run_second_run_is_idempotent_and_third_scores_the_first_forecast(
     assert pd.isna(log.iloc[1]["actual_next_close"])
 
 
-def test_cross_asset_forecast_is_published_logged_scored_and_the_macro_log_is_idempotent():
+def test_cross_asset_forecast_is_published_logged_and_scored_without_duplicates():
     fake, silver, future = _setup()
     now = "2026-01-01T01:00:00+00:00"
     r1 = _run(future.iloc[:3], now)
@@ -107,14 +105,13 @@ def test_cross_asset_forecast_is_published_logged_scored_and_the_macro_log_is_id
     x = pub["crossasset"]
     assert x["as_of_date"] == pub["as_of_date"] and x["model"] == "Cross-asset model" and x["n_train"] >= 250
     assert x["interval_90_close"][0] < x["predicted_next_close"] < x["interval_90_close"][1] and set(x["inputs"]) == set(lf.crossasset.FEATURES)
-    assert len(pd.read_csv(BytesIO(fake.objs[lf.MACRO_STREAM_KEY]))) == 3
     inputs = pd.read_csv(BytesIO(fake.objs[lf.INPUTS_KEY]))
     assert list(inputs.columns) == ["date"] + lf.crossasset.FEATURES and len(inputs) == 130 and inputs["date"].iloc[-1] == pub["as_of_date"]
     assert np.allclose(inputs.iloc[-1][lf.crossasset.FEATURES].to_numpy(float), [x["inputs"][k] for k in lf.crossasset.FEATURES])
     log = pd.read_csv(BytesIO(fake.objs[lf.FORECAST_LOG_KEY]))
     assert all(c in log.columns for c in lf.X_COLS) and np.isclose(log.iloc[0]["x_predicted_next_close"], x["predicted_next_close"]) and log.iloc[0]["x_lo_90"] == x["interval_90_close"][0]
     _run(future.iloc[:3], now)  # the same bars again
-    assert len(pd.read_csv(BytesIO(fake.objs[lf.MACRO_STREAM_KEY]))) == 3 and len(pd.read_csv(BytesIO(fake.objs[lf.FORECAST_LOG_KEY]))) == 1
+    assert len(pd.read_csv(BytesIO(fake.objs[lf.FORECAST_LOG_KEY]))) == 1
     _run(future.iloc[:4], now)  # one more settled day: the first cross-asset forecast is scored
     log = pd.read_csv(BytesIO(fake.objs[lf.FORECAST_LOG_KEY]))
     first = log.iloc[0]
@@ -122,6 +119,14 @@ def test_cross_asset_forecast_is_published_logged_scored_and_the_macro_log_is_id
     assert np.isfinite(log.iloc[1]["x_predicted_return"]) and pd.isna(log.iloc[1]["x_log_error"])
     again = json.loads(fake.objs[lf.FORECAST_KEY])["crossasset"]
     assert again["as_of_date"] == str(future["date"].iloc[3].date()) and again["interval_90_close"] != x["interval_90_close"], "the band is resized with the newest error"
+
+
+def test_a_series_that_does_not_reach_golds_last_day_stops_only_the_cross_asset_forecast():
+    fake, silver, future = _setup()
+    stale = MACRO_ALL.copy()
+    stale.loc[stale.index > future["date"].iloc[2] - pd.Timedelta(days=10), "silver"] = np.nan
+    r = _run(future.iloc[:3], "2026-01-01T01:00:00+00:00", macro=stale.loc[:future["date"].iloc[2]])
+    assert r["crossasset"] is None and "stale inputs" in r["crossasset_failure"] and "silver" in r["crossasset_failure"] and r["outcome"] == "forecast_updated"
 
 
 def test_a_macro_failure_never_blocks_the_lstm_forecast_and_does_not_change_it():

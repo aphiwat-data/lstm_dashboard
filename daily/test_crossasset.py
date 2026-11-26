@@ -54,6 +54,21 @@ def test_parse_chart_labels_bars_with_the_exchange_date_and_drops_gaps_and_dupli
         assert "no result" in str(e)
 
 
+def test_parse_chart_prefers_the_dividend_adjusted_close_and_stale_series_are_refused():
+    p = _payload("America/New_York", ["2026-11-24 14:30", "2026-11-25 14:30"], [106.0, 105.8])
+    p["chart"]["result"][0]["indicators"]["adjclose"] = [{"adjclose": [105.5, 105.8]}]
+    assert list(ca.parse_chart(p)) == [105.5, 105.8]
+    dates = pd.bdate_range("2026-11-02", "2026-11-25")
+    m = pd.DataFrame({c: 1.0 for c in ca.MACRO_COLS}, index=dates)
+    ca.check_fresh(m, pd.Timestamp("2026-11-27"))                                   # a two-day-old series is fine (one market's holiday)
+    m.loc[m.index > "2026-11-18", "yield10y"] = np.nan
+    try:
+        ca.check_fresh(m, pd.Timestamp("2026-11-25"))
+        raise AssertionError("expected a stale-input error")
+    except ValueError as e:
+        assert "stale inputs" in str(e) and "yield10y" in str(e)
+
+
 def test_fetch_recent_macro_retries_and_keeps_only_settled_bars():
     import threading
 

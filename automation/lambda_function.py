@@ -8,9 +8,10 @@ EventBridge Scheduler (daily) -> this function:
      -> next-day forecast with a 90% band (EWMA of past errors)
   5. upsert the forecast log (live track record: each past forecast is scored once its next close is known) and write latest_forecast.json
   6. emit CloudWatch metrics (embedded metric format) and a run-log row
-Since 2026-11-26 the same run also makes the cross-asset forecast (crossasset.py, README section 15.5): it fetches the latest daily closes of DXY, silver, the S&P 500, the 10-year yield
-and TIP, appends them to its own log, refits the ridge on the last 1,000 labelled days and adds the forecast to latest_forecast.json (key "crossasset") and to new columns x_* of the forecast
-log. That step is optional and isolated: if it fails for any reason the LSTM forecast is still published and the failure is written to the run log.
+Since 2026-11-26 the same run also makes the cross-asset forecast (crossasset.py, README section 15.5): it fetches five years of settled daily closes (dividend-adjusted) of DXY, silver,
+the S&P 500, the 10-year yield and TIP from Yahoo, refits the ridge on the last 1,000 labelled days and adds the forecast to latest_forecast.json (key "crossasset") and to new columns x_* of
+the forecast log. That step is optional and isolated: if it fails for any reason (including a series that does not reach gold's last day) the LSTM forecast is still published and the failure
+is written to the run log.
 The previous price-level/TFLite version is kept as lambda_function_v1_price_level.py.old.
 """
 from __future__ import annotations
@@ -43,8 +44,6 @@ RUN_LOG_KEY = "bronze/streaming/automation_log.csv"
 FORECAST_KEY = "gold/xauusd_daily/predictions/latest_forecast.json"
 FORECAST_LOG_KEY = "gold/xauusd_daily/predictions/forecast_log.csv"
 DQ_KEY = "gold/xauusd_daily/predictions/dq_report.json"
-MACRO_HISTORY_KEY = "model/serving/macro_history.csv"                      # read-only: the five macro series up to the first cross-asset run (uploaded once)
-MACRO_STREAM_KEY = "bronze/streaming/macro_daily_incremental.csv"          # this function's append-only log of newer macro bars
 XMODEL_KEY = "model/serving/crossasset_model.npz"                          # read-only: the model's past walk-forward errors, which size the first bands
 INPUTS_KEY = "gold/xauusd_daily/predictions/crossasset_inputs.csv"          # the last 130 days of the six inputs, for the dashboard's "What the model looks at"
 X_COLS = ["x_predicted_return", "x_predicted_next_close", "x_lo_90", "x_hi_90", "x_log_error", "x_inside_90", "x_model_version"]
@@ -146,25 +145,6 @@ def data_quality(prices: pd.DataFrame, new_rows: pd.DataFrame, now_utc: datetime
 
 
 # ------------------------------------------------------------------------------------------------------------------------ cross-asset
-def load_macro() -> pd.DataFrame:
-    """The five macro series: the uploaded history plus this function's own log of newer bars (the history wins for the days it covers)."""
-    hist = _read_csv(MACRO_HISTORY_KEY, parse_dates=["date"])
-    if hist is None:
-        raise RuntimeError(f"{MACRO_HISTORY_KEY} is missing")
-    stream = _read_csv(MACRO_STREAM_KEY, parse_dates=["date"])
-    cols = ["date"] + crossasset.MACRO_COLS
-    macro = hist[cols] if stream is None or not len(stream) else pd.concat([hist[cols], stream[cols][stream["date"] > hist["date"].max()]], ignore_index=True)
-    return macro.drop_duplicates("date", keep="last").sort_values("date").set_index("date")
-
-
-def append_macro_stream(new_rows: pd.DataFrame) -> None:
-    """Idempotent append keyed by date, like the gold log."""
-    existing = _read_csv(MACRO_STREAM_KEY, parse_dates=["date"])
-    add = new_rows[crossasset.MACRO_COLS].rename_axis("date").reset_index().assign(fetched_at=datetime.now(timezone.utc).isoformat())
-    merged = add if existing is None else pd.concat([existing, add], ignore_index=True)
-    _put_csv(MACRO_STREAM_KEY, merged.drop_duplicates("date", keep="last").sort_values("date").reset_index(drop=True))
-
-
 def load_xmodel() -> dict:
     obj = s3.get_object(Bucket=S3_BUCKET, Key=XMODEL_KEY)
     etag = obj.get("ETag", "")
@@ -175,15 +155,9 @@ def load_xmodel() -> dict:
 
 
 def cross_asset_point(prices: pd.DataFrame, log: pd.DataFrame | None, now_utc: datetime) -> tuple[dict, np.ndarray]:
-    """Fetch the newest macro closes (appended to the stream log), refit and forecast. Returns (forecast, the model's past errors, oldest first)."""
-    macro = load_macro()
-    behind = max((pd.Timestamp(now_utc.date()) - macro.index.max()).days, 0)
-    recent = crossasset.fetch_recent_macro(chart_range(behind), now_utc)
-    new = recent[recent.index > macro.index.max()].dropna(how="all")
-    if len(new):
-        append_macro_stream(new)
-        macro = pd.concat([macro, new[crossasset.MACRO_COLS]]).sort_index()
-        macro = macro[~macro.index.duplicated(keep="last")]
+    """Fetch the five series (five years of settled, dividend-adjusted daily closes), refit and forecast. Returns (forecast, the model's past errors, oldest first)."""
+    macro = crossasset.fetch_recent_macro(crossasset.FETCH_RANGE, now_utc)
+    crossasset.check_fresh(macro, prices["date"].max())
     base = np.asarray(load_xmodel()["errors"], float)
     live = log["x_log_error"].dropna().to_numpy(float) if log is not None and "x_log_error" in log else np.empty(0)
     errors = np.r_[base, live]

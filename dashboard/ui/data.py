@@ -176,11 +176,38 @@ def live_scores(log: pd.DataFrame | None, key: str) -> pd.DataFrame | None:
     return d.assign(predicted_next_close=d[fc], lo_90=d[lo], hi_90=d[hi], inside_90=d[ins]) if key != "lstm" else d
 
 
+def replayed(preds: pd.DataFrame | None, key: str) -> pd.DataFrame | None:
+    """The cross-asset forecasts between the end of the backtest and the start of its live record, replayed like the backtest (the committed E2 walk-forward forecasts, then the
+    days up to the first live one from xasset_replay_bridge.csv), with the 90% range sized from the errors known before each day. Source "replay": the header chart shows
+    them, the 449-day backtest does not."""
+    if key != HEADLINE or preds is None:
+        return None
+    files = [_load(name, _stamp(name)) for name in ("paper_e2/e2_frozen_forecasts_h1.csv", "xasset_replay_bridge.csv")]
+    if files[0] is None:
+        return None
+    new = pd.concat([f for f in files if f is not None], ignore_index=True).drop_duplicates("date").sort_values("date")
+    new = new[new["date"] > preds["date"].max()].reset_index(drop=True)
+    if new.empty:
+        return None
+    errors = list((preds["y_ret_next"] - preds[f"pred_ret_{key}"]).to_numpy(float))
+    forecast = new["close"] * np.exp(new["dev_best"])
+    lo, hi = [], []
+    for fc, y, f in zip(forecast, new["y"], new["dev_best"]):
+        e = np.asarray(errors)
+        w = 0.94 ** np.arange(len(e))[::-1]
+        z = 1.6449 * np.sqrt(np.sum(w * e**2) / w.sum())
+        lo.append(fc * np.exp(-z)), hi.append(fc * np.exp(z))
+        errors.append(y - f)
+    for_date = new["date"].shift(-1)
+    for_date.iloc[-1] = new["date"].iloc[-1] + pd.offsets.BDay(1)
+    return pd.DataFrame({"for_date": for_date, "forecast": forecast, "lo": lo, "hi": hi, "actual": new["next_close"], "source": "replay"})
+
+
 def forecast_history(preds: pd.DataFrame | None, log: pd.DataFrame | None, vdf: pd.DataFrame | None, key: str = "lstm") -> pd.DataFrame:
     """Every past forecast of the page's model placed on the day it was FOR, beside the actual close of that day.
 
-    Columns: for_date, forecast, lo, hi (the 90% range, NaN when unknown), actual, miss (actual - forecast) and source ("backtest" or "live").
-    The walk-forward backtest comes first; the live log (forecasts the pipeline saved before the day) wins when both cover a day."""
+    Columns: for_date, forecast, lo, hi (the 90% range, NaN when unknown), actual, miss (actual - forecast) and source ("backtest", "replay" or "live").
+    The walk-forward backtest comes first, then (for the cross-asset model) the later replayed days; the live log (forecasts the pipeline saved before the day) wins when several cover a day."""
     parts = []
     if preds is not None and len(preds):
         fc = preds["meta_close"] * np.exp(preds[f"pred_ret_{key}"])
@@ -190,6 +217,9 @@ def forecast_history(preds: pd.DataFrame | None, log: pd.DataFrame | None, vdf: 
             z = 1.6449 * vdf.set_index("date")["sigma_ewma_pct"].reindex(preds["date"]).to_numpy() / 100
             b["lo"], b["hi"] = fc * np.exp(-z), fc * np.exp(z)
         parts.append(b)
+    extra = replayed(preds, key)
+    if extra is not None:
+        parts.append(extra)
     mine = live_scores(log, key)
     if mine is not None and len(mine):
         s = mine.dropna(subset=["actual_next_close"])

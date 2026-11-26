@@ -28,7 +28,7 @@ ROLE, SCHED_ROLE, SCHEDULE, TOPIC = f"{FN}-role", f"{FN}-scheduler-role", FN, "g
 LAYER = "arn:aws:lambda:ap-southeast-2:336392948345:layer:AWSSDKPandas-Python312:32"  # AWS-managed: pandas, numpy, pyarrow
 FILES = {"lambda_function.py": HERE / "lambda_function.py", "serving.py": DAILY / "serving.py", "build_daily_dataset.py": DAILY / "build_daily_dataset.py", "crossasset.py": DAILY / "crossasset.py"}
 MODEL_SRC, MODEL_KEY = DAILY / "serving_artifacts" / "serving_model.npz", "model/serving/serving_model.npz"
-XASSET_SEEDS = {DAILY / "serving_artifacts" / "crossasset_model.npz": "model/serving/crossasset_model.npz", DAILY / "serving_artifacts" / "macro_history.csv": "model/serving/macro_history.csv"}  # python export_crossasset_model.py
+XASSET_SEEDS = {DAILY / "serving_artifacts" / "crossasset_model.npz": "model/serving/crossasset_model.npz"}  # python export_crossasset_model.py
 
 iam, lam, s3 = (boto3.client(n, region_name=REGION) for n in ("iam", "lambda", "s3"))
 sch, sns, cw, sts = (boto3.client(n, region_name=REGION) for n in ("scheduler", "sns", "cloudwatch", "sts"))
@@ -43,7 +43,7 @@ def build_zip() -> bytes:
 
 
 def seed_xasset() -> None:
-    """Upload the cross-asset model's error history and the macro history once; an existing object is left untouched (it is the Lambda's input, not an output)."""
+    """Upload the cross-asset model's error history once; an existing object is left untouched (it is the Lambda's input, not an output)."""
     for src, key in XASSET_SEEDS.items():
         try:
             s3.head_object(Bucket=BUCKET, Key=key)

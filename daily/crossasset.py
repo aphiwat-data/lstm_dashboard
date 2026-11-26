@@ -33,6 +33,7 @@ LABELS = {"f_ret_1": "Gold", "f_dxy_ret_1": "Dollar index (DXY)", "f_silver_ret_
 TICKERS = {"dxy": "DX-Y.NYB", "silver": "SI=F", "spx": "^GSPC", "yield10y": "^TNX", "tip": "TIP"}
 MACRO_COLS = list(TICKERS)
 ALPHA, TRAIN_LEN, MIN_TRAIN = 100.0, 1000, 250
+FETCH_RANGE, MAX_STALE_DAYS = "5y", 4  # the live pipeline fetches this much history each run (more than TRAIN_LEN days); a series older than this against gold's last day stops the forecast
 MODEL_NAME = "Cross-asset model"
 
 
@@ -71,6 +72,14 @@ def next_day_returns(close: pd.Series) -> pd.Series:
     return np.log(close.shift(-1) / close)
 
 
+def check_fresh(macro: pd.DataFrame, as_of: pd.Timestamp, max_days: int = MAX_STALE_DAYS) -> None:
+    """Every series must reach gold's last day (a few days' slack covers holidays of one market); otherwise a missing bar would silently become a zero move."""
+    late = {c: str(macro[c].last_valid_index().date()) if macro[c].last_valid_index() is not None else None
+            for c in MACRO_COLS if macro[c].last_valid_index() is None or (pd.Timestamp(as_of) - macro[c].last_valid_index()).days > max_days}
+    if late:
+        raise ValueError(f"stale inputs against gold's {pd.Timestamp(as_of).date()}: {late}")
+
+
 def forecast_latest(close: pd.Series, macro: pd.DataFrame, errors: np.ndarray, alpha: float = ALPHA, train_len: int = TRAIN_LEN) -> dict:
     """Tomorrow's forecast from the newest gold bar. The model is refit on the last `train_len` rows whose next-day return is known; `errors` are the realised
     log-return errors of this model so far (oldest first) and size the 90% band (Gaussian, EWMA 0.94, as for every forecast on the page)."""
@@ -94,14 +103,16 @@ def forecast_latest(close: pd.Series, macro: pd.DataFrame, errors: np.ndarray, a
 
 # ------------------------------------------------------------------------------------------------------------------------------- Yahoo chart
 def parse_chart(payload: dict) -> pd.Series:
-    """Daily closes of one ticker from Yahoo's chart JSON, indexed by the date in the EXCHANGE's time zone (what yfinance labels the bar with)."""
+    """Daily closes of one ticker from Yahoo's chart JSON, indexed by the date in the EXCHANGE's time zone (what yfinance labels the bar with). The dividend-adjusted close is
+    used where Yahoo gives one (only the TIP fund pays dividends): it is the basis the search E2 was built on, so an ex-dividend day does not look like a market move."""
     result = payload.get("chart", {}).get("result")
     if not result:
         raise RuntimeError(f"Yahoo chart API returned no result: {payload.get('chart', {}).get('error')}")
     r = result[0]
     tz = ZoneInfo(r.get("meta", {}).get("exchangeTimezoneName") or "UTC")
     stamps = pd.to_datetime(r["timestamp"], unit="s", utc=True).tz_convert(tz)
-    s = pd.Series(r["indicators"]["quote"][0]["close"], index=pd.DatetimeIndex(stamps.tz_localize(None).normalize()), dtype=float)
+    adjusted = (r["indicators"].get("adjclose") or [{}])[0].get("adjclose")
+    s = pd.Series(adjusted if adjusted else r["indicators"]["quote"][0]["close"], index=pd.DatetimeIndex(stamps.tz_localize(None).normalize()), dtype=float)
     return s.dropna()[~s.dropna().index.duplicated(keep="last")].sort_index()
 
 
