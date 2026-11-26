@@ -1,0 +1,39 @@
+{
+  "reps": 40,
+  "forecasters": 81,
+  "pool_with_shrunk": 162,
+  "nominal_rate_per_primary_test": 0.025,
+  "PA_positive_share": 0.25,
+  "PB_positive_share": 0.025,
+  "PA_strict_share": 0.0,
+  "PB_strict_share": 0.0,
+  "PA_r2_vs_expmean_mean": -0.001763301829490016,
+  "PB_r2_vs_expmean_mean": -0.011507558081485552,
+  "PA_ic_p_below_0.05_share": 0.1,
+  "PB_ic_p_below_0.05_share": 0.075,
+  "PA_r2_mean": 0.0002394626283451551,
+  "PA_r2_quartiles": [
+    -0.0009129553627258424,
+    0.0008310602474949635,
+    0.002300812981397865
+  ],
+  "PB_r2_mean": -0.009488001752963465,
+  "PB_r2_quartiles": [
+    -0.013797601107907509,
+    -0.008785373427675491,
+    -0.00450129218862283
+  ],
+  "PA_share_r2_positive": 0.625,
+  "PB_share_r2_positive": 0.05,
+  "PA_cw_p_median": 0.07305772012184031,
+  "PB_cw_p_median": 0.40954816310086806,
+  "best_on_test_r2_mean": 0.004127083719182687,
+  "best_on_test_r2_quartiles": [
+    0.002938100913990105,
+    0.003641266266531329,
+    0.004507405081015381
+  ],
+  "best_on_test_positive_at_0.05_share": 0.875,
+  "best_on_test_cw_p_median": 0.010835720033511576,
+  "pool_share_with_positive_test_r2_mean": 0.38533950617283946
+}
