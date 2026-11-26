@@ -13,13 +13,14 @@ from .theme import COLORS, chart_title, finish
 
 TEST_START = pd.Timestamp("2025-01-09")
 PRICE_WINDOWS = {"1Y": 365, "5Y": 365 * 5, "10Y": 365 * 10, "All": None}
+INPUTS = {"f_ret_1": "Gold", "f_dxy_ret_1": "Dollar", "f_silver_ret_1": "Silver", "f_spx_ret_1": "Stocks (S&P 500)", "f_yield10y_chg_1": "10-year yield", "f_tip_ret_1": "Inflation-linked bonds"}
 INDICATORS = {"f_ret_5": "5-day return", "f_ret_20": "20-day return", "f_vol_20": "20-day volatility", "f_rsi_14": "Momentum (RSI 14)", "f_ma_gap_30": "Gap to 30-day average",
               "f_ma_gap_60": "Gap to 60-day average"}
 
 
 @st.fragment
 def _price(px: pd.DataFrame) -> None:
-    st.subheader("Gold price history", help=f"COMEX gold futures (GC=F), daily close since {px['date'].min().year}. Volume is for context only: it is often missing, so the model uses prices alone.")
+    st.subheader("Gold price history", help=f"COMEX gold futures (GC=F), daily close since {px['date'].min().year}. Volume is for context only: it is often missing, so the model does not use it.")
     window = st.segmented_control("Window", list(PRICE_WINDOWS), default="5Y", key="px_window", label_visibility="collapsed") or "5Y"
     d = px if PRICE_WINDOWS[window] is None else px[px["date"] >= px["date"].max() - pd.Timedelta(days=PRICE_WINDOWS[window])]
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.78, 0.22], vertical_spacing=0.04)
@@ -79,11 +80,33 @@ def _returns(px: pd.DataFrame) -> None:
 
 
 @st.fragment
-def _indicators(px: pd.DataFrame) -> None:
+def _inputs(inputs: pd.DataFrame | None) -> bool:
+    """The six moves the model reads (written by the daily pipeline, so exactly what it saw): one bar per day, the newest one is the day behind today's forecast."""
+    if inputs is None or inputs.empty:
+        return False
+    st.subheader("What the model looks at", help="The model reads only the day's moves in gold, the dollar, silver, stocks, the 10-year yield and inflation-linked bonds (TIP), nothing else. "
+                 "Shown: the last 60 trading days, one bar per day; the orange bar is the newest day, the one behind today's forecast.")
+    key = st.segmented_control("Input", list(INPUTS), format_func=INPUTS.get, default="f_ret_1", key="model_input", label_visibility="collapsed") or "f_ret_1"
+    s = inputs[key].dropna().tail(60)
+    pct = key != "f_yield10y_chg_1"
+    y = s * 100 if pct else s
+    fig = go.Figure(go.Bar(x=s.index, y=y, marker_color=[COLORS["model"]] * (len(s) - 1) + [COLORS["actual"]], marker_line_width=0,
+                           hovertemplate="%{x|%a %d %b %Y}<br>%{y:+.2f}" + ("%" if pct else " points") + "<extra></extra>"))
+    finish(fig, 280, hover="closest")
+    fig.update_yaxes(ticksuffix="%" if pct else " pts")
+    st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+    return True
+
+
+@st.fragment
+def _indicators(px: pd.DataFrame, key_model: str) -> None:
     feats = indicators(px.set_index("date")["close"])
     if feats is None:
         return
-    st.subheader("What the model looks at", help="The model sees only numbers computed from past prices: recent returns, volatility, momentum and distance from moving averages. Shown: the last two years.")
+    if key_model == "lstm":
+        st.subheader("What the model looks at", help="The model sees only numbers computed from past prices: recent returns, volatility, momentum and distance from moving averages. Shown: the last two years.")
+    else:
+        st.subheader("What the LSTM looks at", help="The LSTM, the first model of this project, sees only numbers computed from past gold prices: recent returns, volatility, momentum and distance from moving averages. Shown: the last two years.")
     key = st.segmented_control("Indicator", list(INDICATORS), format_func=INDICATORS.get, default="f_ret_20", key="indicator", label_visibility="collapsed") or "f_ret_20"
     s = feats[key].dropna().tail(504)
     pct = key.startswith(("f_ret", "f_vol", "f_ma"))
@@ -94,7 +117,7 @@ def _indicators(px: pd.DataFrame) -> None:
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
-def render(px: pd.DataFrame | None, cur: dict, vol: tuple | None) -> None:
+def render(px: pd.DataFrame | None, cur: dict, vol: tuple | None, inputs: pd.DataFrame | None = None, model: str = "lstm") -> None:
     if px is None:
         st.info("Price history could not be loaded right now. The forecast and its evaluation above are unaffected.", icon=":material/cloud_off:")
         return
@@ -104,4 +127,6 @@ def render(px: pd.DataFrame | None, cur: dict, vol: tuple | None) -> None:
     st.divider()
     _returns(px)
     st.divider()
-    _indicators(px)
+    if _inputs(inputs):
+        st.divider()
+    _indicators(px, model)

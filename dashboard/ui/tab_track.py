@@ -7,17 +7,19 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from .cards import card_row, metric_card
+from .data import MODELS, live_scores
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "All": None}
 
 
 @st.fragment
-def _backtest(bt: pd.DataFrame, preds: pd.DataFrame) -> None:
+def _backtest(bt: pd.DataFrame, preds: pd.DataFrame, key: str) -> None:
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):  # the title and badge on the left, the window filter at the right end
         with st.container(horizontal=True, vertical_alignment="center", gap="small", width="content"):
-            st.subheader(f"Backtest · {len(preds)} test days", width="content", help="The model is retrained every 7 trading days and judged only on later days, as in real use. Each point is a forecast made the day before, "
-                         "shown on the day it was for. Red bars: the price ended above the forecast; blue bars: below.")
+            m = MODELS[key]
+            st.subheader(f"Backtest · {len(preds)} test days", width="content", help=f"The model is retrained every {m['retrain_days']} trading days on the last {m['train_days']} days and judged only on later days, as in real use. "
+                         "Each point is a forecast made the day before, shown on the day it was for. Red bars: the price ended above the forecast; blue bars: below.")
             st.badge("Simulated on past data", icon=":material/history:", color="gray")
         window = st.segmented_control("Window", list(WINDOWS), default="3M", key="bt_window", label_visibility="collapsed") or "3M"
     q = bt if WINDOWS[window] is None else bt.tail(WINDOWS[window])
@@ -70,11 +72,17 @@ def _live_chart(scored: pd.DataFrame, pending: pd.DataFrame) -> None:
     st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
 
-def _live(log: pd.DataFrame | None) -> None:
-    with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-        st.subheader("Live record", width="content", help="Every day the pipeline saves its forecast before the day happens. Once the next close is known the forecast is scored here, and nothing can be edited afterwards.")
-        st.badge("Real forecasts", icon=":material/bolt:", color="green")
-    scored = log.dropna(subset=["actual_next_close"]) if log is not None and len(log) else None
+@st.fragment
+def _live(log: pd.DataFrame | None, key: str) -> None:
+    with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):  # the title and badge on the left, the model filter at the right end
+        with st.container(horizontal=True, vertical_alignment="center", gap="small", width="content"):
+            st.subheader("Live record", width="content", help="Every day the pipeline saves its forecast before the day happens. Once the next close is known the forecast is scored here, and nothing can be edited afterwards.")
+            st.badge("Real forecasts", icon=":material/bolt:", color="green")
+        pick = key  # one live record while the page is the LSTM's; a switch once the cross-asset model has its own
+        if key != "lstm":
+            pick = st.segmented_control("Model", list(MODELS), format_func=lambda k: MODELS[k]["short"], default=key, key="live_model", label_visibility="collapsed") or key
+    mine = live_scores(log, pick)
+    scored = mine.dropna(subset=["actual_next_close"]) if mine is not None and len(mine) else None
     if scored is None or scored.empty:
         st.info("**Just started.** The first forecast is scored after the next close.", icon=":material/hourglass_top:")
         return
@@ -86,7 +94,7 @@ def _live(log: pd.DataFrame | None) -> None:
                     help="The average miss of the live forecasts so far, in dollars. Lower is better.")
         metric_card("Range reliability", f"{int(inside.sum())} of {len(scored)} days",
                     help=f"{inside.mean():.0%} of the scored days. With so few days this says little yet.")
-    _live_chart(scored.tail(15).reset_index(drop=True), log[log["actual_next_close"].isna()])
+    _live_chart(scored.tail(15).reset_index(drop=True), mine[mine["actual_next_close"].isna()])
     show = scored.tail(15).iloc[::-1].assign(inside=lambda d: d["inside_90"].astype(str).str.lower().eq("true"))
     table = pd.DataFrame({"Forecast made": show["as_of_date"], "Forecast for": pd.to_datetime(show["next_date"]), "Forecast": show["predicted_next_close"],
                           "Actual close": show["actual_next_close"], "Actual − Forecast": (show["actual_next_close"] - show["predicted_next_close"]), "In range?": show["inside"]})
@@ -96,10 +104,10 @@ def _live(log: pd.DataFrame | None) -> None:
         "Actual − Forecast": st.column_config.NumberColumn(format="%+.2f"), "In range?": st.column_config.CheckboxColumn()})
 
 
-def render(preds: pd.DataFrame | None, log: pd.DataFrame | None, fh: pd.DataFrame) -> None:
+def render(preds: pd.DataFrame | None, log: pd.DataFrame | None, fh: pd.DataFrame, key: str) -> None:
     if preds is not None:
-        _backtest(fh[fh["source"] == "backtest"].reset_index(drop=True), preds)
+        _backtest(fh[fh["source"] == "backtest"].reset_index(drop=True), preds, key)
     else:
         st.info("The backtest results are not available in this deployment.")
     st.write("")
-    _live(log)
+    _live(log, key)

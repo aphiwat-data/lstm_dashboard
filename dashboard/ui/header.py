@@ -8,14 +8,17 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from .cards import card_row, metric_card
-from .data import next_trading_day, run_age_hours
+from .data import live_scores, long_window, next_trading_day, run_age_hours
 from .theme import COLORS, ERROR_OVER, ERROR_UNDER, chart_title, finish, panel_title, signed_usd, usd
 
 WINDOWS = {"1M": 22, "3M": 66, "6M": 132, "1Y": 252}
 BAND = "rgba(42,120,214,0.14)"  # the 90% range of past forecasts (the model blue, very light)
-BRIEFING = ("An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range.  \n"
-            "Live forecasts are saved before the day happens, then scored against the real close.  \n"
-            "Made only for a Computer Engineering senior project. This is not trading advice.")  # under the title: three concise lines (owner, 17 Nov); never mention the simple guess
+_REST = ("Live forecasts are saved before the day happens, then scored against the real close.  \n"
+         "Made only for a Computer Engineering senior project. This is not trading advice.")
+BRIEFING = {  # under the title: three concise lines (owner, 17 Nov); never mention the simple guess. The first line says what the page's model reads.
+    "lstm": "An LSTM neural network forecasts the next trading day's gold price (XAU/USD) with a 90% range.  \n" + _REST,
+    "xasset": "A model that reads the dollar, stocks and interest rates forecasts the next trading day's gold price (XAU/USD) with a 90% range.  \n" + _REST,
+}
 
 
 def _age_text(hours: float | None) -> str:
@@ -87,16 +90,17 @@ def _chart(hist: pd.DataFrame, fh: pd.DataFrame, cur: dict) -> None:
     st.plotly_chart(forecast_chart(hist, fh, cur, WINDOWS[window]), width="stretch", config={"displayModeBar": False})
 
 
-def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | None) -> None:
+def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | None, key: str) -> None:
     """The 90% range and how far it can be trusted, as one unit."""
     st.caption("RANGE")
     st.markdown(f"### {usd(lo, 0)} – {usd(hi, 0)}")
     if not reg:
         return
-    e = reg["interval"]["lstm_ewma_gaussian"]
+    e = reg["interval"][f"{key}_ewma_gaussian"]
     live = ""
-    if log is not None and len(log):
-        scored = log.dropna(subset=["actual_next_close"])
+    mine = live_scores(log, key)
+    if mine is not None and len(mine):
+        scored = mine.dropna(subset=["actual_next_close"])
         if len(scored):
             live = f" So far in live use: {int(scored['inside_90'].astype(str).str.lower().eq('true').sum())} of {len(scored)} days."
     ok = abs(e["coverage"] - 0.9) <= 0.02
@@ -104,43 +108,48 @@ def _range_block(lo: float, hi: float, reg: dict | None, log: pd.DataFrame | Non
                 help=f"The range is where the close is expected to land on 9 days out of 10. In testing, the real close stayed inside it on {round(e['coverage'] * e['n'])} of {e['n']} days.{live}")
 
 
-def _how_to_read() -> None:
+def _how_to_read(key: str) -> None:
     with st.popover("How to read this", icon=":material/help:"):
         st.markdown(
             "- **Forecast:** the model's estimate of the next trading day's closing price.\n"
             "- **Range and range reliability:** where the close should land 9 days out of 10, and how often it really did in testing.\n"
             "- **MAE, RMSE, error %:** how far off the forecast was on the test days."
+            + ("\n- **Inputs:** the day's moves in gold, the dollar, silver, stocks and interest rates. Gold's price is its 13:30 New York settlement and the other markets close later, "
+               "so part of the forecast comes from news that arrived after gold's price was set." if key == "xasset" else "")
         )
 
 
-def _scorecard(res: dict, reg: dict | None) -> None:
+def _scorecard(res: dict, reg: dict | None, key: str) -> None:
     """Accuracy on the backtest window, with the technical names (MAE, RMSE, ...) visible; definitions sit in the tooltips. "How to read this" sits at the right end of the title row."""
-    lstm = res["models"]["lstm"]
+    lstm = res["models"][key]
     with st.container(horizontal=True, horizontal_alignment="distribute", vertical_alignment="center"):
         chart_title(f"Accuracy · {res['protocol']['n_test']} backtest days",
                     help=f"The model was tested on {res['protocol']['n_test']} past days. For each day it forecast the close without having seen it, so these numbers show how it would have done in real use.")
-        _how_to_read()
+        _how_to_read(key)
     with card_row():
         metric_card("MAE · average miss", usd(lstm["mae_usd"]),
                     help="The average miss: on a typical day the forecast was about this many dollars away from the real close. Lower is better.")
         metric_card("RMSE", usd(lstm["rmse_usd"]),
                     help="Like the average miss, but big misses count more than small ones, so it shows how bad the worst days were. Lower is better.")
         if reg:
-            m = reg["models"]["lstm"]
+            m = reg["models"][key]
             metric_card("Error % (MAPE)", f"{m['mape_pct']:.2f}%",
                         help="The average miss as a percentage of the price, so it means the same whether gold is cheap or expensive. Lower is better.")
+            longer = long_window() if key == "xasset" else None  # the longer test of the frozen search: the same model on about 1,700 days, where a small gain can be told from chance
+            p_txt = "" if not longer else ("p < 0.001" if longer["p"] < 0.001 else f"p = {longer['p']:.3f}")
+            more = f" Over the longer test of {longer['n']:,} days since {longer['year']} it was {longer['r2']:+.1%} ({p_txt})." if longer else ""
             metric_card("R² (out-of-sample)", f"{m['r2_os_vs_rolling_mean']:+.3f}".replace("-", "−"),
-                        help="Like a test score for catching the daily ups and downs. 1 means every move was predicted; 0 means none was caught, no better than assuming a typical day.")
+                        help="Like a test score for catching the daily ups and downs. 1 means every move was predicted; 0 means none was caught, no better than assuming a typical day." + more)
 
 
-def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None) -> None:
+def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, reg: dict | None, log: pd.DataFrame | None, key: str = "lstm") -> None:
     label, color, icon = freshness(cur)
     trained = cur.get("model_trained_through")
     with st.container(horizontal=True, vertical_alignment="center", gap="small"):
         st.markdown("## Gold Price Forecast")
         st.badge(label, icon=icon, color=color, help="The forecast is refreshed every morning at 10:00 (Thailand time). "
                  f"It uses prices up to {cur['as_of_date']}" + (f"; the model was last trained on data up to {trained}." if trained else "."))
-    st.caption(BRIEFING)
+    st.caption(BRIEFING[key])
 
     fc, last, lo, hi = cur["predicted_next_close"], cur["latest_close"], cur["interval_90_close"][0], cur["interval_90_close"][1]
     change, pct = fc - last, (fc / last - 1) * 100
@@ -155,8 +164,8 @@ def render(cur: dict, hist: pd.DataFrame, fh: pd.DataFrame, res: dict | None, re
                     st.markdown(f"# {usd(fc)}")
                     st.markdown(f":{'green' if up else 'red'}-badge[{'▲' if up else '▼'} {signed_usd(change)} ({pct:+.2f}%)]", help=f"Compared with the last close: {usd(last)} on {as_of:%a} {as_of.day} {as_of:%b}.")
                 with st.container(width="content", border=True):
-                    _range_block(lo, hi, reg, log)
+                    _range_block(lo, hi, reg, log, key)
             st.divider()
         _chart(hist, fh, cur)
     if res is not None:
-        _scorecard(res, reg)
+        _scorecard(res, reg, key)

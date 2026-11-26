@@ -9,7 +9,8 @@ import streamlit as st
 
 COLORS = {
     "actual": "#EB6834",   # orange: the real price series
-    "model": "#2A78D6",    # blue: the LSTM
+    "model": "#2A78D6",    # blue: the model the page is about (the cross-asset model; the LSTM when its results are missing)
+    "lstm": "#8B7FD1",     # soft purple: the LSTM, shown as a comparison in the average-miss chart
     "naive": "#8A8F98",    # gray: the simple guess (repeating the last close)
     "ridge": "#E87BA4",    # magenta
     "hgb": "#EDA100",      # yellow
@@ -29,7 +30,7 @@ def chart_title(text: str, help: str | None = None) -> None:
 
 
 def highlight(text: str, size: int | None = None) -> str:
-    """Plotly label markup that makes a word stand out: bold, in the model's blue (the colour of the LSTM bars), optionally larger. Used for "(this model)", its name and its number."""
+    """Plotly label markup that makes a word stand out: bold, in the model's blue (the colour of this model's bars), optionally larger. Used for "(this model)", its name and its number."""
     return f"<b><span style='color:{COLORS['model']}{f';font-size:{size}px' if size else ''}'>{text}</span></b>"
 
 

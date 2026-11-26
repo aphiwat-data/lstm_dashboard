@@ -15,16 +15,18 @@ from ui import data, header, sidebar, tab_market, tab_reliability, tab_track  # 
 
 res, preds = data.results()
 reg = data.regression()
-cur = data.current_forecast(res)
+log = data.live_log()
+key = data.headline_key(res, log)  # the cross-asset model once the daily pipeline publishes its forecasts, otherwise the LSTM
+cur = data.current_forecast(res, key)
 if cur is None:
     st.error("No forecast is available right now. Please try again in a few minutes.", icon=":material/error:")
     st.stop()
 
-log, vol = data.live_log(), data.volatility()
-fh = data.forecast_history(preds, log, vol[0] if vol else None)
+vol = data.volatility()
+fh = data.forecast_history(preds, log, vol[0] if vol else None, key)
 
 sidebar.render()
-header.render(cur, data.price_history(preds, cur), fh, res, reg, log)
+header.render(cur, data.price_history(preds, cur), fh, res, reg, log, key)
 
 SECTIONS = {"forecast": (":material/compare_arrows:", "Forecast vs. actual"), "market": (":material/candlestick_chart:", "Actual market data"),
             "reliable": (":material/verified:", "How reliable?")}
@@ -33,8 +35,8 @@ st.write("")
 section = st.segmented_control("Sections", list(SECTIONS), format_func=lambda k: f"{SECTIONS[k][0]} **{SECTIONS[k][1]}**", selection_mode="single", default=None, key="section",
                                label_visibility="collapsed", width="stretch")  # the navigation bar: nothing selected at first, so nothing is shown
 if section == "forecast":
-    tab_track.render(preds, log, fh)
+    tab_track.render(preds, log, fh, key)
 elif section == "market":
-    tab_market.render(data.prices(), cur, vol)
+    tab_market.render(data.prices(), cur, vol, data.crossasset_inputs() if key == data.HEADLINE else None, key)
 elif section == "reliable":
-    tab_reliability.render(res, preds, reg, *data.interval_tests())
+    tab_reliability.render(res, preds, reg, *data.interval_tests(key), key)

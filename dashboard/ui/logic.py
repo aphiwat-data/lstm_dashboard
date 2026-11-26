@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 
-def price_verdict(lstm: dict) -> str:
-    """'better' | 'worse' | 'same' for the LSTM's price error against the simple guess of repeating the last close (Diebold-Mariano p < 0.05)."""
-    p, skill = lstm["dm_p_vs_naive"], lstm["mae_skill_vs_naive"]
+def price_verdict(model: dict) -> str:
+    """'better' | 'worse' | 'same' for this model's price error against the simple guess of repeating the last close (Diebold-Mariano p < 0.05)."""
+    p, skill = model["dm_p_vs_naive"], model["mae_skill_vs_naive"]
     return "better" if p < 0.05 and skill > 0 else "worse" if p < 0.05 and skill < 0 else "same"
 
 
